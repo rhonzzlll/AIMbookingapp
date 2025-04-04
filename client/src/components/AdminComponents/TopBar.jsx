@@ -13,7 +13,7 @@ const TopBar = ({ openModal }) => {
       <div className="relative w-72">
         <input
           type="text"
-          placeholder="Search rooms, bookings, or users"
+          placeholder="Search"
           className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           aria-label="Search"
         />
@@ -54,12 +54,7 @@ const TopBar = ({ openModal }) => {
             >
               Profile
             </div>
-            <div
-              className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-              onClick={() => console.log('Settings clicked')}
-            >
-              Settings
-            </div>
+
             <div
               className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
               onClick={() => console.log('Logout clicked')}

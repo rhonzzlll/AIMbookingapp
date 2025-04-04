@@ -3,18 +3,18 @@ import { Link } from 'react-router-dom';
 
 const Sidebar = ({ activeTab, setActiveTab }) => {
   const navItems = [
-    { id: 'dashboard', icon: '📊', text: 'Dashboard', path: '/dashboard' },
-    { id: 'calendar', icon: '📅', text: 'Calendar', path: '/calendar' },
-    { id: 'rooms', icon: '🏢', text: 'Rooms', path: '/rooms' },
-    { id: 'bookings', icon: '📝', text: 'Bookings', path: '/bookings' },
-    { id: 'users', icon: '👥', text: 'Users', path: '/users' },
+    { id: 'dashboard', icon: '📊', text: 'Dashboard', path: '/admin/dashboard' },
+    { id: 'calendar', icon: '📅', text: 'Calendar', path: '/admin/calendar' },
+    { id: 'rooms', icon: '🏢', text: 'Rooms', path: '/admin/rooms' },
+    { id: 'bookings', icon: '📝', text: 'Bookings', path: '/admin/bookings' },
+    { id: 'users', icon: '👥', text: 'Users', path: '/admin/users' },
   ];
 
   return (
     <div className="fixed top-0 left-0 h-screen w-64 bg-gray-800 text-white flex flex-col shadow-lg">
       {/* Sidebar Header */}
       <div className="p-6 border-b border-gray-700">
-        <h1 className="text-2xl font-bold text-center">RoomBooker</h1>
+        <h1 className="text-2xl font-bold text-center">AIM Booking App</h1>
       </div>
 
       {/* Navigation */}

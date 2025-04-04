@@ -81,7 +81,7 @@ const Calendar = () => {
         <div
           key={day}
           className={`h-32 border p-1 cursor-pointer flex flex-col justify-between ${isToday ? 'bg-blue-100' :
-              isSelected ? 'bg-blue-200' : 'bg-white hover:bg-blue-50'
+            isSelected ? 'bg-blue-200' : 'bg-white hover:bg-blue-50'
             }`}
           onClick={() => selectDate(day)}
         >
@@ -166,7 +166,7 @@ const Calendar = () => {
 
     return (
       <div className="h-full flex flex-col">
-        <div className="flex justify-between items-center mb-4 px-4 py-2 bg-gray-50 border rounded">
+        <div className="flex justify-between items-center mb-4 px-4 py-2 bg-gray-100 border rounded">
           <div>
             <h2 className="text-lg font-bold">{`${dayOfWeek[selectedDate.getDay()]}, ${monthNames[selectedDate.getMonth()]} ${selectedDate.getDate()}, ${selectedDate.getFullYear()}`}</h2>
           </div>
@@ -189,12 +189,13 @@ const Calendar = () => {
   };
 
   return (
-    <div className="h-screen w-full p-4 bg-white">
-      <div className="h-full border rounded shadow-lg overflow-hidden">
+    <div className="h-screen w-screen min-h-screen bg-white flex items-center justify-center">
+      <div className="h-full w-full">
         {view === 'month' ? renderMonthView() : renderDayView()}
       </div>
     </div>
   );
+
 };
 
 export default Calendar;
