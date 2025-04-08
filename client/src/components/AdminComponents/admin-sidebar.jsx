@@ -1,7 +1,26 @@
-import React from 'react';
+  import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = ({ activeTab, setActiveTab, userId }) => {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    // Fetch user details using their ID
+    const fetchUser = async () => {
+      try {
+        const response = await axios.get(`/api/users/${userId}`);
+        setUser(response.data);
+      } catch (error) {
+        console.error('Error fetching user details:', error);
+      }
+    };
+
+    if (userId) {
+      fetchUser();
+    }
+  }, [userId]);
+
   const navItems = [
     { id: 'dashboard', icon: '📊', text: 'Dashboard', path: '/admin/dashboard' },
     { id: 'calendar', icon: '📅', text: 'Calendar', path: '/admin/calendar' },
@@ -24,8 +43,9 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
             <li key={item.id}>
               <Link
                 to={item.path}
-                className={`flex items-center px-6 py-3 text-gray-300 hover:bg-blue-600 hover:text-white transition-colors ${activeTab === item.id ? 'bg-blue-700 text-white' : ''
-                  }`}
+                className={`flex items-center px-6 py-3 text-gray-300 hover:bg-blue-600 hover:text-white transition-colors ${
+                  activeTab === item.id ? 'bg-blue-700 text-white' : ''
+                }`}
                 onClick={() => setActiveTab(item.id)}
               >
                 <span className="mr-4 text-lg">{item.icon}</span>
@@ -40,11 +60,11 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       <div className="border-t border-gray-700 p-4">
         <div className="flex items-center">
           <div className="bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center mr-3">
-            A
+            {user?.firstName?.charAt(0).toUpperCase() || 'A'}
           </div>
           <div>
-            <div className="text-sm font-medium">Admin</div>
-            <div className="text-xs text-gray-400">System Administrator</div>
+            <div className="text-sm font-medium">{`${user?.firstName || 'Admin'} ${user?.lastName || ''}`.trim()}</div>
+<div className="text-xs text-gray-400">{user?.role || 'System Administrator'}</div>
           </div>
         </div>
       </div>

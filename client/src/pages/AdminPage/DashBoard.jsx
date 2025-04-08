@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import TopBar from '../../components/AdminComponents/TopBar'; // Adjust the path as needed
+import TopBar from '../../components/AdminComponents/TopBar';
+import Modal from '../../components/AdminComponents/Modal';
 
 const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
   const dates = [];
@@ -7,7 +8,7 @@ const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
   const end = new Date(endDate);
 
   while (currentDate <= end) {
-    dates.push(new Date(currentDate).toISOString().split('T')[0]); // Format as YYYY-MM-DD
+    dates.push(new Date(currentDate).toISOString().split('T')[0]);
 
     if (recurrenceType === 'Daily') {
       currentDate.setDate(currentDate.getDate() + 1);
@@ -39,12 +40,11 @@ const groupBookingsByDate = (bookings) => {
   return grouped;
 };
 
-// Generate current week's calendar days
 const generateWeeklyCalendarDays = () => {
   const today = new Date();
-  const currentDayOfWeek = today.getDay(); // 0 (Sunday) to 6 (Saturday)
+  const currentDayOfWeek = today.getDay();
   const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - currentDayOfWeek); // Set to the start of the week (Sunday)
+  startOfWeek.setDate(today.getDate() - currentDayOfWeek);
 
   const days = [];
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -63,14 +63,15 @@ const generateWeeklyCalendarDays = () => {
   return days;
 };
 
-// Utility function to format the date
 const formatDate = (dateString) => {
   const options = { year: 'numeric', month: 'long', day: '2-digit' };
-  return new Date(dateString).toLocaleDateString(undefined, options); // Uses the user's locale
+  return new Date(dateString).toLocaleDateString(undefined, options);
 };
 
 const Dashboard = ({ openModal }) => {
   const [activeBookingTab, setActiveBookingTab] = useState('all');
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const statCards = [
     { title: 'Total Rooms', value: '0', icon: '🏢', color: 'bg-blue-100' },
@@ -141,7 +142,6 @@ const Dashboard = ({ openModal }) => {
     },
   ];
 
-  // Filter bookings based on active tab
   const getFilteredBookings = () => {
     if (activeBookingTab === 'all') {
       return recentBookings;
@@ -156,17 +156,16 @@ const Dashboard = ({ openModal }) => {
   };
 
   const currentBookings = getFilteredBookings();
-
-  // Group bookings by date for calendar display
   const bookingsByDate = groupBookingsByDate(recentBookings);
 
-  // Handle edit button click
   const handleEditClick = (booking) => {
-    // Implement your edit logic here
-    console.log("Editing booking:", booking);
-    if (openModal) {
-      openModal(booking);
-    }
+    setSelectedBooking(booking);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedBooking(null);
   };
 
   return (
@@ -177,7 +176,6 @@ const Dashboard = ({ openModal }) => {
         <div className="p-6 bg-gray-50 min-h-screen">
           <h1 className="text-2xl font-bold mb-6 text-gray-800">Dashboard Overview</h1>
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {statCards.map((card, index) => (
               <div
@@ -205,7 +203,6 @@ const Dashboard = ({ openModal }) => {
             ))}
           </div>
 
-          {/* Calendar */}
           <div className="bg-white rounded-lg shadow-md mb-8 border border-gray-200">
             <div className="flex justify-between items-center p-4 border-b">
               <h2 className="font-bold text-gray-800">This Week</h2>
@@ -226,13 +223,12 @@ const Dashboard = ({ openModal }) => {
                     {day.date}
                   </div>
 
-                  {/* Display bookings for the date */}
                   {bookingsByDate[day.fullDate]?.map((booking, i) => (
                     <div
                       key={i}
                       className="text-xs bg-blue-100 text-blue-600 rounded px-1 mt-1 truncate cursor-pointer"
                       title={`${booking.title} (${booking.time})`}
-                      onClick={() => alert(`Booking Details:\n${JSON.stringify(booking, null, 2)}`)}
+                      onClick={() => handleEditClick(booking)}
                     >
                       {booking.title}
                     </div>
@@ -242,7 +238,6 @@ const Dashboard = ({ openModal }) => {
             </div>
           </div>
 
-          {/* Filter Buttons */}
           <div className="flex justify-between items-center mb-6">
             <div className="flex gap-4">
               {['All', 'Pending', 'Approved', 'Declined'].map((status) => (
@@ -268,7 +263,6 @@ const Dashboard = ({ openModal }) => {
             </div>
           </div>
 
-          {/* Bookings Table */}
           <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -349,6 +343,26 @@ const Dashboard = ({ openModal }) => {
               </tbody>
             </table>
           </div>
+
+          <Modal isOpen={isModalOpen} onClose={closeModal}>
+            {selectedBooking && (
+              <div>
+                <h2 className="text-xl font-bold mb-4">Booking Details</h2>
+                <p><strong>Title:</strong> {selectedBooking.title}</p>
+                <p><strong>First Name:</strong> {selectedBooking.firstName}</p>
+                <p><strong>Last Name:</strong> {selectedBooking.lastName}</p>
+                <p><strong>Department:</strong> {selectedBooking.department}</p>
+                <p><strong>Room Type:</strong> {selectedBooking.roomType}</p>
+                <p><strong>Meeting Room:</strong> {selectedBooking.meetingRoom}</p>
+                <p><strong>Building:</strong> {selectedBooking.building}</p>
+                <p><strong>Date:</strong> {formatDate(selectedBooking.date)}</p>
+                <p><strong>Time:</strong> {selectedBooking.time}</p>
+                <p><strong>Notes:</strong> {selectedBooking.notes}</p>
+                <p><strong>Status:</strong> {selectedBooking.status}</p>
+                <p><strong>Recurring:</strong> {selectedBooking.recurring}</p>
+              </div>
+            )}
+          </Modal>
         </div>
       </div>
     </div>

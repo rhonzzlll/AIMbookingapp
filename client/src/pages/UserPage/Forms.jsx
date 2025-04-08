@@ -9,8 +9,8 @@ const BookingForm = ({ onBookingSubmit }) => {
     lastName: '',
     email: '',
     building: '',  // Fixed syntax error
-    roomType: '',  // Added roomType field
-    room: '',
+    category: '',  // Changed from roomType to category
+    room: '',      // Changed from Room Selection to Room
     date: format(new Date(), 'yyyy-MM-dd'),
     startTime: '09:00',
     endTime: '10:00',
@@ -21,7 +21,7 @@ const BookingForm = ({ onBookingSubmit }) => {
     notes: ''
   });
 
-  const handleChange = (e) => {
+  const handleChange = (e) => { 
     const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
@@ -134,24 +134,24 @@ const BookingForm = ({ onBookingSubmit }) => {
             required
           >
             <option value="">Select Building</option>
-            <option value="ACC">ACC</option>
-            <option value="AIM">AIM</option>
+            <option value="ACC">Asian Institute of Management Conference Center</option>
+            <option value="AIM">Asian Institute of Management</option>
           </select>
         </div>
 
-        {/* Room Type */}
+        {/* Category */}
         <div className="mb-6">
           <label className="block text-gray-700 font-medium mb-2">
-            Room Type <span className="text-red-500">*</span>
+            Category <span className="text-red-500">*</span>
           </label>
           <select
-            name="roomType"
-            value={formData.roomType}
+            name="category"
+            value={formData.category}
             onChange={handleChange}
             className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           >
-            <option value="">Select Room Type</option>
+            <option value="">Select Category</option>
             <option value="Conference">Conference Room</option>
             <option value="Meeting">Meeting Room</option>
             <option value="Board">Board Room</option>
@@ -159,10 +159,10 @@ const BookingForm = ({ onBookingSubmit }) => {
           </select>
         </div>
 
-        {/* Room Selection */}
+        {/* Room */}
         <div className="mb-6">
           <label className="block text-gray-700 font-medium mb-2">
-            Room Selection <span className="text-red-500">*</span>
+            Room <span className="text-red-500">*</span>
           </label>
           <select
             name="room"

@@ -69,3 +69,5 @@ const TopBar = ({ openModal }) => {
 };
 
 export default TopBar;
+
+

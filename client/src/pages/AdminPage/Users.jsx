@@ -1,34 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import TopBar from '../../components/AdminComponents/TopBar'; // Adjust the path as needed
 
 const Users = () => {
-  const [users, setUsers] = useState([
-    {
-      id: 'U001',
-      firstName: 'Rhonzel',
-      lastName: 'Santos',
-      email: 'rhonzelsantos81@gmail.com',
-      department: 'ICT',
-      isActive: true,
-    },
-    {
-      id: 'U002',
-      firstName: 'Armand',
-      lastName: 'Barrios',
-      email: 'armandbarrios@gmail.com',
-      department: 'ICT',
-      isActive: true,
-    },
-    {
-      id: 'U003',
-      firstName: 'Kai',
-      lastName: 'Sotto',
-      email: 'kaisotto@gmail.com',
-      department: 'ICT',
-      isActive: false,
-    },
-  ]);
-
+  const [users, setUsers] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -40,19 +14,44 @@ const Users = () => {
     password: '',
     confirmPassword: '',
     isActive: true,
+    role: 'user',
   });
   const [errors, setErrors] = useState({});
 
   const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
 
-  // Handle form input changes
+  // Fetch users from the backend when the component mounts
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('http://localhost:5000/api/users', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch users');
+        }
+
+        const data = await response.json();
+        setUsers(data);
+      } catch (error) {
+        console.error('Error fetching users:', error.message);
+        alert(error.message);
+      }
+    };
+
+    fetchUsers();
+  }, []);
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
       [name]: type === 'checkbox' ? checked : value,
     });
-    // Clear error for this field
     if (errors[name]) {
       setErrors({
         ...errors,
@@ -72,8 +71,8 @@ const Users = () => {
       newErrors.email = 'Email is invalid';
     }
     if (!formData.department) newErrors.department = 'Department is required';
+    if (!formData.role) newErrors.role = 'Role is required';
 
-    // Only validate password for new users
     if (!currentUser) {
       if (!formData.password) newErrors.password = 'Password is required';
       if (formData.password !== formData.confirmPassword) {
@@ -95,6 +94,7 @@ const Users = () => {
       password: '',
       confirmPassword: '',
       isActive: true,
+      role: 'user',
     });
     setErrors({});
     setShowAddModal(true);
@@ -109,6 +109,7 @@ const Users = () => {
       email: user.email,
       department: user.department,
       isActive: user.isActive,
+      role: user.role.toLowerCase(),
       password: '',
       confirmPassword: '',
     });
@@ -117,64 +118,110 @@ const Users = () => {
   };
 
   // Save new user
-  const handleSaveUser = async () => {
-    if (validateForm()) {
-      try {
-        const response = await fetch('http://localhost:5000/api/users/register', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            password: formData.password,
-            department: formData.department,
-          }),
-        });
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5000/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`, 
+        },
+        body: JSON.stringify(formData),
+      });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to add user');
-        }
-
-        const newUser = await response.json();
-        setUsers([...users, newUser]); // Add the new user to the local state
-        setShowAddModal(false); // Close the modal
-      } catch (error) {
-        console.error('Error adding user:', error.message);
-        alert(error.message); // Show an error message to the user
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to add user');
       }
+
+      const newUser = await response.json();
+      setUsers((prevUsers) => [...prevUsers, newUser.user]);
+      setShowAddModal(false);
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        department: '',
+        password: '',
+        confirmPassword: '',
+        isActive: true,
+        role: 'user',
+      });
+      setErrors({});
+    } catch (error) {
+      console.error('Error adding user:', error.message);
+      alert(error.message);
     }
   };
 
   // Update existing user
-  const handleUpdateUser = () => {
-    if (validateForm()) {
-      const updatedUsers = users.map((user) =>
-        user.id === currentUser.id ?
-          {
-            ...user,
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            department: formData.department,
-            isActive: formData.isActive,
-          } : user
-      );
+  const handleUpdateUser = async () => {
+    if (!validateForm()) {
+      return;
+    }
 
-      setUsers(updatedUsers);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/users/${currentUser._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update user');
+      }
+
+      const updatedUser = await response.json();
+      setUsers((prevUsers) =>
+        prevUsers.map((user) => (user._id === updatedUser._id ? updatedUser : user))
+      );
       setShowEditModal(false);
+    } catch (error) {
+      console.error('Error updating user:', error.message);
+      alert(error.message);
     }
   };
 
   // Toggle user active status
-  const toggleUserStatus = (userId) => {
-    const updatedUsers = users.map((user) =>
-      user.id === userId ? { ...user, isActive: !user.isActive } : user
-    );
-    setUsers(updatedUsers);
+  const toggleUserStatus = async (userId) => {
+    const user = users.find((u) => u._id === userId);
+    if (!user) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ isActive: !user.isActive }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update user status');
+      }
+
+      const updatedUser = await response.json();
+      setUsers((prevUsers) =>
+        prevUsers.map((u) => (u._id === updatedUser._id ? updatedUser : u))
+      );
+    } catch (error) {
+      console.error('Error toggling user status:', error.message);
+      alert(error.message);
+    }
   };
 
   return (
@@ -207,7 +254,7 @@ const Users = () => {
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 transition">
+                <tr key={user._id} className="hover:bg-gray-50 transition">
                   <td className="px-4 py-2 border-b">{user.firstName}</td>
                   <td className="px-4 py-2 border-b">{user.lastName}</td>
                   <td className="px-4 py-2 border-b">{user.email}</td>
@@ -218,7 +265,7 @@ const Users = () => {
                         {user.isActive ? 'Active' : 'Inactive'}
                       </span>
                       <button
-                        onClick={() => toggleUserStatus(user.id)}
+                        onClick={() => toggleUserStatus(user._id)}
                         className={`relative inline-flex items-center h-6 rounded-full w-11 ${user.isActive ? 'bg-green-600' : 'bg-gray-300'
                           }`}
                       >
@@ -258,118 +305,138 @@ const Users = () => {
               </button>
             </div>
 
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">First Name</label>
-              <input
-                type="text"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleChange}
-                className={`w-full p-2 border rounded ${errors.firstName ? 'border-red-500' : ''}`}
-              />
-              {errors.firstName && (
-                <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">Last Name</label>
-              <input
-                type="text"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleChange}
-                className={`w-full p-2 border rounded ${errors.lastName ? 'border-red-500' : ''}`}
-              />
-              {errors.lastName && (
-                <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className={`w-full p-2 border rounded ${errors.email ? 'border-red-500' : ''}`}
-              />
-              {errors.email && (
-                <p className="text-red-500 text-sm mt-1">{errors.email}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">Department</label>
-              <input
-                type="text"
-                name="department"
-                value={formData.department}
-                onChange={handleChange}
-                placeholder="Enter department"
-                className={`w-full p-2 border rounded ${errors.department ? 'border-red-500' : ''}`}
-              />
-              {errors.department && (
-                <p className="text-red-500 text-sm mt-1">{errors.department}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">Password</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className={`w-full p-2 border rounded ${errors.password ? 'border-red-500' : ''}`}
-              />
-              {errors.password && (
-                <p className="text-red-500 text-sm mt-1">{errors.password}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">Confirm Password</label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                className={`w-full p-2 border rounded ${errors.confirmPassword ? 'border-red-500' : ''}`}
-              />
-              {errors.confirmPassword && (
-                <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="flex items-center">
+            <form onSubmit={handleSubmit}>
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">First Name</label>
                 <input
-                  type="checkbox"
-                  name="isActive"
-                  checked={formData.isActive}
+                  type="text"
+                  name="firstName"
+                  value={formData.firstName}
                   onChange={handleChange}
-                  className="mr-2"
+                  className={`w-full p-2 border rounded ${errors.firstName ? 'border-red-500' : ''}`}
                 />
-                <span>Active User</span>
-              </label>
-            </div>
+                {errors.firstName && (
+                  <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>
+                )}
+              </div>
 
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 border rounded hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveUser}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Add User
-              </button>
-            </div>
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Last Name</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  className={`w-full p-2 border rounded ${errors.lastName ? 'border-red-500' : ''}`}
+                />
+                {errors.lastName && (
+                  <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className={`w-full p-2 border rounded ${errors.email ? 'border-red-500' : ''}`}
+                />
+                {errors.email && (
+                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Department</label>
+                <select
+                  name="department"
+                  value={formData.department}
+                  onChange={handleChange}
+                  className={`w-full p-2 border rounded ${errors.department ? 'border-red-500' : ''}`}
+                >
+                  <option value="">Select Department</option>
+                  {departments.map((dept) => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+                {errors.department && (
+                  <p className="text-red-500 text-sm mt-1">{errors.department}</p>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Role</label>
+                <select
+                  className={`w-full p-2 border rounded ${errors.role ? 'border-red-500' : ''}`}
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+                {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
+              </div>
+
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Password</label>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className={`w-full p-2 border rounded ${errors.password ? 'border-red-500' : ''}`}
+                />
+                {errors.password && (
+                  <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Confirm Password</label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className={`w-full p-2 border rounded ${errors.confirmPassword ? 'border-red-500' : ''}`}
+                />
+                {errors.confirmPassword && (
+                  <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="isActive"
+                    checked={formData.isActive}
+                    onChange={handleChange}
+                    className="mr-2"
+                  />
+                  <span>Active User</span>
+                  </label>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded mr-2 hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -388,90 +455,100 @@ const Users = () => {
               </button>
             </div>
 
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">First Name</label>
-              <input
-                type="text"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleChange}
-                className={`w-full p-2 border rounded ${errors.firstName ? 'border-red-500' : ''}`}
-              />
-              {errors.firstName && (
-                <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">Last Name</label>
-              <input
-                type="text"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleChange}
-                className={`w-full p-2 border rounded ${errors.lastName ? 'border-red-500' : ''}`}
-              />
-              {errors.lastName && (
-                <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className={`w-full p-2 border rounded ${errors.email ? 'border-red-500' : ''}`}
-              />
-              {errors.email && (
-                <p className="text-red-500 text-sm mt-1">{errors.email}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block mb-1 font-medium">Department</label>
-              <input
-                type="text"
-                name="department"
-                value={formData.department}
-                onChange={handleChange}
-                placeholder="Enter department"
-                className={`w-full p-2 border rounded ${errors.department ? 'border-red-500' : ''}`}
-              />
-              {errors.department && (
-                <p className="text-red-500 text-sm mt-1">{errors.department}</p>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="flex items-center">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              handleUpdateUser();
+            }}>
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">First Name</label>
                 <input
-                  type="checkbox"
-                  name="isActive"
-                  checked={formData.isActive}
+                  type="text"
+                  name="firstName"
+                  value={formData.firstName}
                   onChange={handleChange}
-                  className="mr-2"
+                  className={`w-full p-2 border rounded ${errors.firstName ? 'border-red-500' : ''}`}
                 />
-                <span>Active User</span>
-              </label>
-            </div>
+                {errors.firstName && (
+                  <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>
+                )}
+              </div>
 
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="px-4 py-2 border rounded hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateUser}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Update User
-              </button>
-            </div>
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Last Name</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  className={`w-full p-2 border rounded ${errors.lastName ? 'border-red-500' : ''}`}
+                />
+                {errors.lastName && (
+                  <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className={`w-full p-2 border rounded ${errors.email ? 'border-red-500' : ''}`}
+                />
+                {errors.email && (
+                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Department</label>
+                <select
+                  name="department"
+                  value={formData.department}
+                  onChange={handleChange}
+                  className={`w-full p-2 border rounded ${errors.department ? 'border-red-500' : ''}`}
+                >
+                  <option value="">Select Department</option>
+                  {departments.map((dept) => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+                {errors.department && (
+                  <p className="text-red-500 text-sm mt-1">{errors.department}</p>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Role</label>
+                <select
+                  className={`w-full p-2 border rounded ${errors.role ? 'border-red-500' : ''}`}
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+                {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded mr-2 hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+                >
+                  Update
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

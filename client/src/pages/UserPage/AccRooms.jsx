@@ -1,43 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 import Header from './Header';
 
+const API_BASE_URL = 'http://localhost:5000/api'; // Ensure this matches your backend URL
+
 const AccRooms = () => {
-  const [selectedRooms, setSelectedRooms] = useState([]);
-  const [currentRoomType, setCurrentRoomType] = useState('Hybrid Caseroom');
+  const [rooms, setRooms] = useState([]);
+  const [filteredRooms, setFilteredRooms] = useState([]);
+  const [roomTypes, setRoomTypes] = useState([]);
+  const [currentRoomType, setCurrentRoomType] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const roomTypes = [
-    'Hybrid Caseroom',
-    'Regular Caseroom',
-    'Flatroom',
-    'Meeting Room',
-    'Mini Studio',
-  ];
+  const navigate = useNavigate(); // Initialize useNavigate
 
-  // Sample room data
-  const roomsByType = {
-    'Hybrid Caseroom': [
-      { id: 1, name: 'ABS-CBN', image: '/room-placeholder.jpg' },
-      { id: 2, name: 'Lopez', image: '/room-placeholder.jpg' },
-      { id: 3, name: 'FPH', image: '/room-placeholder.jpg' },
-      { id: 4, name: 'Meralco', image: '/room-placeholder.jpg' },
-    ],
-    'Regular Caseroom': [
-      { id: 5, name: 'Room A', image: '/room-placeholder.jpg' },
-      { id: 6, name: 'Room B', image: '/room-placeholder.jpg' },
-    ],
-    // Add data for other room types
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  const fetchRooms = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/rooms`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch rooms');
+      }
+      const data = await response.json();
+
+      // Filter rooms to include only those from the AIM building
+      const aimRooms = data.filter((room) => room.building === 'AIM Building');
+
+      // Extract unique room types for filtering
+      const uniqueRoomTypes = [...new Set(aimRooms.map((room) => room.category))];
+      setRoomTypes(uniqueRoomTypes);
+
+      setRooms(aimRooms);
+      setFilteredRooms(aimRooms); // Initially show all AIM rooms
+    } catch (error) {
+      console.error('Error fetching AIM building rooms:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRoomTypeChange = (roomType) => {
     setCurrentRoomType(roomType);
+    if (roomType) {
+      setFilteredRooms(rooms.filter((room) => room.category === roomType));
+    } else {
+      setFilteredRooms(rooms); // Show all rooms if no type is selected
+    }
   };
 
-  const handleCheckboxChange = (room) => {
-    setSelectedRooms((prevSelectedRooms) =>
-      prevSelectedRooms.includes(room)
-        ? prevSelectedRooms.filter((r) => r !== room)
-        : [...prevSelectedRooms, room]
-    );
+  const handleReserve = (roomId) => {
+    // Navigate to the /forms route with the roomId as a query parameter
+    navigate(`/forms`, { state: { roomId } });
   };
 
   return (
@@ -61,11 +77,23 @@ const AccRooms = () => {
             <div className="bg-white rounded-lg shadow-md p-4">
               <h2 className="text-lg font-bold mb-4">Room Types</h2>
               <ul className="space-y-2">
+                <li className="flex items-center">
+                  <input
+                    className="form-check-input mr-2"
+                    type="radio"
+                    id="allRooms"
+                    checked={currentRoomType === ''}
+                    onChange={() => handleRoomTypeChange('')}
+                  />
+                  <label className="form-check-label text-gray-700" htmlFor="allRooms">
+                    All Rooms
+                  </label>
+                </li>
                 {roomTypes.map((roomType, index) => (
                   <li key={index} className="flex items-center">
                     <input
                       className="form-check-input mr-2"
-                      type="checkbox"
+                      type="radio"
                       id={`roomType-${index}`}
                       checked={currentRoomType === roomType}
                       onChange={() => handleRoomTypeChange(roomType)}
@@ -76,49 +104,56 @@ const AccRooms = () => {
                   </li>
                 ))}
               </ul>
-              
-              <div className="mt-8">
-                <button className="w-full bg-blue-100 text-blue-700 py-2 px-4 rounded-md border border-blue-300 hover:bg-blue-200 transition duration-200">
-                  Back
-                </button>
-              </div>
             </div>
           </div>
 
           {/* Main Content Area - Room Cards */}
           <div className="flex-1">
-            {/* Room Type Title */}
-            <h1 className="text-3xl font-bold mb-6 uppercase">{currentRoomType}</h1>
+            {loading ? (
+              <div className="text-center py-16">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+                <p className="mt-4 text-gray-600">Loading rooms...</p>
+              </div>
+            ) : (
+              <>
+                {/* Room Type Title */}
+                <h1 className="text-3xl font-bold mb-6 uppercase">
+                  {currentRoomType || 'All Rooms'}
+                </h1>
 
-            {/* Room Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {(roomsByType[currentRoomType] || []).map((room) => (
-                <div key={room.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  {/* Room Image */}
-                  <div className="h-48 bg-gray-200 relative">
-                    <img
-                      src="/api/placeholder/400/320"
-                      alt={`${room.name} room`}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  
-                  {/* Room Details */}
-                  <div className="p-4">
-                    <h3 className="text-xl font-bold mb-2">{room.name}</h3>
-                    <div className="flex space-x-2 mb-4">
-                      <div className="bg-gray-200 rounded-full px-3 py-1 text-sm">&nbsp;</div>
-                      <div className="bg-gray-200 rounded-full px-3 py-1 text-sm w-16">&nbsp;</div>
+                {/* Room Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredRooms.map((room) => (
+                    <div key={room._id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                      {/* Room Image */}
+                      <div className="h-48 bg-gray-200 relative">
+                        <img
+                          src={
+                            room.roomImage
+                              ? `data:image/jpeg;base64,${room.roomImage}`
+                              : '/placeholder.jpg'
+                          }
+                          alt={`${room.roomName} room`}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+
+                      {/* Room Details */}
+                      <div className="p-4">
+                        <h3 className="text-xl font-bold mb-2">{room.roomName}</h3>
+                        <p className="text-gray-600 mb-4">{room.description}</p>
+                        <button
+                          onClick={() => handleReserve(room._id)} // Link to /forms
+                          className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition duration-200"
+                        >
+                          Reserve
+                        </button>
+                      </div>
                     </div>
-                    <div className="bg-gray-200 rounded-full px-3 py-1 text-sm w-24 mb-4">&nbsp;</div>
-                    
-                    <button className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition duration-200">
-                      Reserve
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -128,9 +163,9 @@ const AccRooms = () => {
 
 // Search Bar Component
 const SearchBar = () => {
-  const [fromDate, setFromDate] = useState('2025-03-28');
+  const [fromDate, setFromDate] = useState('');
   const [fromTime, setFromTime] = useState('');
-  const [toDate, setToDate] = useState('2025-03-28');
+  const [toDate, setToDate] = useState('');
   const [toTime, setToTime] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
 

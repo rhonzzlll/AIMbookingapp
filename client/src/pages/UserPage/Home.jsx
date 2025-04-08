@@ -189,17 +189,17 @@ const HomePage = () => {
               <div className="grid md:grid-cols-2 gap-6">
                 <FacilityCard
                   imageSrc="/src/images/AIM.png"
-                  title="AIM Building"
+                  title="Asian Institute of Management Building"
                   description="Contemporary venue perfect for conferences, workshops, and high-level discussions."
                   bookingLink="/aim-rooms"
-                  features={['Lorem', 'Lorem Ipsum', 'Lorem Ipsum']}
+                  features={['Minimal outside noise', 'Comfortable chairs'  , 'Air conditioning','Creative Atmosphere']}
                 />
                 <FacilityCard
                   imageSrc="/src/images/ACC.png"
-                  title="ACC Building"
-                  description="Modern space for meetings, seminars, and executive discussions with state-of-the-art equipment."
+                  title="Asian Institute of Management Conference Center  Building"
+                  description="Modern space for meetings, seminars, and executive discussions ."
                   bookingLink="/acc-rooms"
-                  features={['Lorem Ipsum', 'Lorem Ipsum', 'Lorem Ipsum ']}
+                  features={['Tech-Ready', 'Quiet and Private', 'Modern and Bright ', 'Air conditioning']}
                 />
               </div>
             </div>
