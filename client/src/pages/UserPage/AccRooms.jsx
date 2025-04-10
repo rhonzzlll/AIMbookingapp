@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 
-const API_BASE_URL = 'http://localhost:5000/api'; // Ensure this matches your backend URL
+const API_BASE_URL = 'http://localhost:5000/api';
 
 const AccRooms = () => {
   const [rooms, setRooms] = useState([]);
@@ -10,8 +10,23 @@ const AccRooms = () => {
   const [roomTypes, setRoomTypes] = useState([]);
   const [currentRoomType, setCurrentRoomType] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useState({
+    fromDate: format(new Date(), 'yyyy-MM-dd'),
+    fromTime: '09:00',
+    toDate: format(new Date(), 'yyyy-MM-dd'),
+    toTime: '10:00',
+    isRecurring: false
+  });
 
-  const navigate = useNavigate(); // Initialize useNavigate
+  const navigate = useNavigate();
+
+  // Helper function for date formatting
+  function format(date, formatStr) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return formatStr.replace('yyyy', year).replace('MM', month).replace('dd', day);
+  }
 
   useEffect(() => {
     fetchRooms();
@@ -51,9 +66,42 @@ const AccRooms = () => {
     }
   };
 
-  const handleReserve = (roomId) => {
-    // Navigate to the /forms route with the roomId as a query parameter
-    navigate(`/forms`, { state: { roomId } });
+  const handleReserve = (room) => {
+    // Make sure we have date/time values set before navigating
+    const validatedSearchParams = {
+      ...searchParams,
+      fromDate: searchParams.fromDate || format(new Date(), 'yyyy-MM-dd'),
+      fromTime: searchParams.fromTime || '09:00',
+      toDate: searchParams.toDate || format(new Date(), 'yyyy-MM-dd'),
+      toTime: searchParams.toTime || '10:00',
+    };
+
+    // Construct the booking data payload
+    const bookingData = {
+      room: room,
+      searchParams: validatedSearchParams
+    };
+
+    console.log('Navigating to booking form with data:', bookingData);
+
+    // Navigate to the booking form with the room and search parameters
+    navigate('/forms', {
+      state: { bookingData }
+    });
+  };
+
+  const handleSearchChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setSearchParams({
+      ...searchParams,
+      [name]: type === 'checkbox' ? checked : value
+    });
+  };
+
+  const handleSearch = () => {
+    console.log('Search parameters:', searchParams);
+    // In a real application, you would filter rooms based on availability
+    // For now, we'll just log the search parameters
   };
 
   return (
@@ -67,7 +115,11 @@ const AccRooms = () => {
       <div className="pt-16 px-4 pb-8">
         {/* Centered Search Bar */}
         <div className="max-w-3xl mx-auto mb-8">
-          <SearchBar />
+          <SearchBar 
+            searchParams={searchParams} 
+            handleSearchChange={handleSearchChange} 
+            handleSearch={handleSearch} 
+          />
         </div>
 
         {/* Room Selection Area */}
@@ -142,8 +194,16 @@ const AccRooms = () => {
                       <div className="p-4">
                         <h3 className="text-xl font-bold mb-2">{room.roomName}</h3>
                         <p className="text-gray-600 mb-4">{room.description}</p>
+                        <div className="flex justify-between mb-4">
+                          <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            {room.category}
+                          </span>
+                          <span className="text-sm bg-gray-100 text-gray-800 px-2 py-1 rounded">
+                            Capacity: {room.capacity || 'N/A'}
+                          </span>
+                        </div>
                         <button
-                          onClick={() => handleReserve(room._id)} // Link to /forms
+                          onClick={() => handleReserve(room)}
                           className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition duration-200"
                         >
                           Reserve
@@ -162,26 +222,7 @@ const AccRooms = () => {
 };
 
 // Search Bar Component
-const SearchBar = () => {
-  const [fromDate, setFromDate] = useState('');
-  const [fromTime, setFromTime] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [toTime, setToTime] = useState('');
-  const [isRecurring, setIsRecurring] = useState(false);
-
-  const handleSearch = () => {
-    const searchData = {
-      fromDate,
-      fromTime,
-      toDate,
-      toTime,
-      isRecurring,
-    };
-
-    console.log('Search data:', searchData);
-    // Add API call logic here if needed
-  };
-
+const SearchBar = ({ searchParams, handleSearchChange, handleSearch }) => {
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
       <div className="flex flex-col md:flex-row md:items-end md:space-x-4 space-y-4 md:space-y-0">
@@ -191,14 +232,16 @@ const SearchBar = () => {
           <div className="flex space-x-2">
             <input
               type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              name="fromDate"
+              value={searchParams.fromDate}
+              onChange={handleSearchChange}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
             <input
               type="time"
-              value={fromTime}
-              onChange={(e) => setFromTime(e.target.value)}
+              name="fromTime"
+              value={searchParams.fromTime}
+              onChange={handleSearchChange}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -210,14 +253,16 @@ const SearchBar = () => {
           <div className="flex space-x-2">
             <input
               type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              name="toDate"
+              value={searchParams.toDate}
+              onChange={handleSearchChange}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
             <input
               type="time"
-              value={toTime}
-              onChange={(e) => setToTime(e.target.value)}
+              name="toTime"
+              value={searchParams.toTime}
+              onChange={handleSearchChange}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -227,12 +272,13 @@ const SearchBar = () => {
         <div className="flex items-center">
           <input
             type="checkbox"
-            id="recurring"
-            checked={isRecurring}
-            onChange={(e) => setIsRecurring(e.target.checked)}
+            id="isRecurring"
+            name="isRecurring"
+            checked={searchParams.isRecurring}
+            onChange={handleSearchChange}
             className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
           />
-          <label htmlFor="recurring" className="ml-2 text-sm text-gray-700">
+          <label htmlFor="isRecurring" className="ml-2 text-sm text-gray-700">
             Recurring
           </label>
         </div>

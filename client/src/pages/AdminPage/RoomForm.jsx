@@ -9,7 +9,6 @@ const RoomForm = ({ room, onSubmit, onCancel }) => {
     description: '',
     isQuadrant: false,
     subRooms: [],
-    
   };
 
   const [formData, setFormData] = useState(initialFormState);
@@ -45,13 +44,8 @@ const RoomForm = ({ room, onSubmit, onCancel }) => {
         subRooms: room.subRooms || [],
       });
 
-      // Set the image preview
       if (room.roomImage) {
-        if (room.roomImage.startsWith('data:image')) {
-          setImagePreview(room.roomImage); // Base64 string
-        } else {
-          setImagePreview(room.roomImage); // URL
-        }
+        setImagePreview(`data:image/jpeg;base64,${room.roomImage}`);
       }
     }
   }, [room]);
@@ -181,55 +175,23 @@ const RoomForm = ({ room, onSubmit, onCancel }) => {
     setErrors(formErrors);
     return isValid;
   };
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
 
-    setUploading(true);
-    setError('');
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
 
-    const compressImage = async (file) => {
-      const options = {
-        maxSizeMB: 1,
-        maxWidthOrHeight: 1920,
-        useWebWorker: true,
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImagePreview(reader.result);
       };
+      reader.readAsDataURL(file);
 
-      try {
-        const compressedFile = await imageCompression(file, options);
-        return await convertToBase64(compressedFile);
-      } catch (error) {
-        console.error("Error compressing image:", error);
-        throw error;
-      }
-    };
-
-    const convertToBase64 = (file) => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = (error) => reject(error);
-        reader.readAsDataURL(file);
-      });
-    };
-
-    try {
-      const compressedImages = await Promise.all(files.map(compressImage));
-      setRoomData(prev => ({
-        ...prev,
-        images: [...prev.images, ...compressedImages].slice(0, 6)
-      }));
-    } catch (err) {
-      setError("Error processing images. Please try again.");
-    } finally {
-      setUploading(false);
+      // Clear any image error
+      setErrors((prev) => ({ ...prev, image: undefined }));
     }
   };
-
-
-
-
-
 
   const handleSubRoomChange = (index, field, value) => {
     const updatedSubRooms = [...formData.subRooms];
@@ -243,22 +205,13 @@ const RoomForm = ({ room, onSubmit, onCancel }) => {
   const handleSubRoomImageChange = (index, e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64Image = reader.result;
-
-        const updatedSubRooms = [...formData.subRooms];
-        updatedSubRooms[index] = {
-          ...updatedSubRooms[index],
-          image: base64Image,
-          imagePreview: base64Image,
-        };
-        setFormData({ ...formData, subRooms: updatedSubRooms });
-
-        // Store the sub-room image in local storage
-        localStorage.setItem(`subRoomImage${index}`, base64Image);
+      const updatedSubRooms = [...formData.subRooms];
+      updatedSubRooms[index] = { 
+        ...updatedSubRooms[index], 
+        image: file,
+        imagePreview: URL.createObjectURL(file)
       };
-      reader.readAsDataURL(file);
+      setFormData({ ...formData, subRooms: updatedSubRooms });
     }
   };
 
@@ -280,11 +233,7 @@ const RoomForm = ({ room, onSubmit, onCancel }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
-      console.log('Form Data:', formData);
-      console.log('Image File:', imageFile);
       onSubmit(formData, imageFile);
-    } else {
-      console.log('Validation Errors:', errors);
     }
   };
 

@@ -21,18 +21,18 @@ router.get("/", authenticate, async (req, res) => {
 router.get("/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid user ID format" });
     }
-    
+
     const user = await User.findById(id).select("-password");
-    
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     return res.status(200).json(user);
   } catch (error) {
     console.error("Error fetching user:", error);
@@ -97,33 +97,32 @@ router.post("/", authenticate, authorizeAdmin, async (req, res) => {
 router.put("/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, email, password, department, profileImage, address, birthdate, role, isActive } = req.body;
-    
+    const { firstName, lastName, email, password, department, profileImage, birthdate, role, isActive } = req.body;
+
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid user ID format" });
     }
-    
+
     // Find user first to check if exists
     const user = await User.findById(id);
-    
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     // Check if the authenticated user is updating their own profile or is an admin
     if (req.user._id.toString() !== id && req.user.role !== "Admin") {
       return res.status(403).json({ message: "Access denied. You can only update your own profile." });
     }
-    
+
     // Update user fields if provided
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (email) user.email = email;
     if (department) user.department = department;
-    if (address) user.address = address;
     if (birthdate) user.birthdate = birthdate;
-    
+
     // Only allow admins to change roles and active status
     if (req.user.role === "Admin") {
       if (role) {
@@ -134,27 +133,27 @@ router.put("/:id", authenticate, async (req, res) => {
         }
         user.role = normalizedRole === "admin" ? "Admin" : "User"; // Match the enum case
       }
-      
+
       // Set isActive if provided (only admins can change this)
       if (isActive !== undefined) {
         user.isActive = isActive;
       }
     }
-    
+
     // Handle password separately
     if (password) {
       // No need to hash here as the pre-save hook will handle it
       user.password = password;
     }
-    
+
     // Handle profile image
     if (profileImage) {
       user.profileImage = profileImage;
     }
-    
+
     // Save the updated user
     const updatedUser = await user.save();
-    
+
     // Return user without password
     return res.status(200).json({
       _id: updatedUser._id,
@@ -163,7 +162,6 @@ router.put("/:id", authenticate, async (req, res) => {
       email: updatedUser.email,
       role: updatedUser.role,
       department: updatedUser.department,
-      address: updatedUser.address,
       birthdate: updatedUser.birthdate,
       profileImage: updatedUser.profileImage,
       isActive: updatedUser.isActive
@@ -178,18 +176,18 @@ router.put("/:id", authenticate, async (req, res) => {
 router.delete("/:id", authenticate, authorizeAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid user ID format" });
     }
-    
+
     const user = await User.findByIdAndDelete(id);
-    
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     return res.status(200).json({ message: "User deleted successfully" });
   } catch (error) {
     console.error("Error deleting user:", error);

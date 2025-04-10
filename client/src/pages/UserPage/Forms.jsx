@@ -1,332 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
 import Header from './Header';
+import BookingForm from './BookingForm'; // Import the updated BookingForm component
 
-const BookingForm = ({ onBookingSubmit }) => {
-  const [formData, setFormData] = useState({
-    title: '',
-    firstName: '',
-    lastName: '',
-    email: '',
-    building: '',  // Fixed syntax error
-    category: '',  // Changed from roomType to category
-    room: '',      // Changed from Room Selection to Room
-    date: format(new Date(), 'yyyy-MM-dd'),
-    startTime: '09:00',
-    endTime: '10:00',
-    department: '',
-    isRecurring: false,
-    recurrenceType: '',
-    recurrenceDays: [],
-    notes: ''
-  });
-
-  const handleChange = (e) => { 
-    const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value
-    });
-  };
-
-  const handleRecurrenceDaysChange = (day) => {
-    setFormData((prevFormData) => {
-      const { recurrenceDays } = prevFormData;
-      if (recurrenceDays.includes(day)) {
-        return {
-          ...prevFormData,
-          recurrenceDays: recurrenceDays.filter((d) => d !== day)
-        };
-      } else {
-        return {
-          ...prevFormData,
-          recurrenceDays: [...recurrenceDays, day]
-        };
-      }
-    });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log('Booking submitted:', formData);
-    onBookingSubmit(formData);
-    alert('Booking submitted successfully!');
-  };
-
-  return (
-    <div className="bg-white rounded-lg shadow-md p-8">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
-      <form onSubmit={handleSubmit}>
-        {/* Booking Title */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Booking Title <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            placeholder="Enter a title for your booking"
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-
-        {/* First Name and Last Name */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              First Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="firstName"
-              value={formData.firstName}
-              onChange={handleChange}
-              placeholder="Enter your first name"
-              className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              Last Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="lastName"
-              value={formData.lastName}
-              onChange={handleChange}
-              placeholder="Enter your last name"
-              className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-        </div>
-
-        {/* Email */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Email <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            placeholder="Enter your email address"
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-
-        {/* Building Selection */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Building <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="building"
-            value={formData.building}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select Building</option>
-            <option value="ACC">Asian Institute of Management Conference Center</option>
-            <option value="AIM">Asian Institute of Management</option>
-          </select>
-        </div>
-
-        {/* Category */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Category <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="category"
-            value={formData.category}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select Category</option>
-            <option value="Conference">Conference Room</option>
-            <option value="Meeting">Meeting Room</option>
-            <option value="Board">Board Room</option>
-            <option value="Training">Training Room</option>
-          </select>
-        </div>
-
-        {/* Room */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Room <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="room"
-            value={formData.room}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select Room</option>
-            <option value="Conference Room A">Conference Room A</option>
-            <option value="Meeting Room 1">Meeting Room 1</option>
-            <option value="Board Room">Board Room</option>
-            <option value="Training Room">Training Room</option>
-          </select>
-        </div>
-
-        {/* Date and Time */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              Date <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              name="date"
-              value={formData.date}
-              onChange={handleChange}
-              className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              Start Time <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="time"
-              name="startTime"
-              value={formData.startTime}
-              onChange={handleChange}
-              className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              End Time <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="time"
-              name="endTime"
-              value={formData.endTime}
-              onChange={handleChange}
-              className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-        </div>
-
-        {/* Department */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">Department</label>
-          <select
-            name="department"
-            value={formData.department}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Select department</option>
-            <option value="HR">HR</option>
-            <option value="Finance">Finance</option>
-            <option value="Marketing">Marketing</option>
-            <option value="IT">IT</option>
-            <option value="Operations">Operations</option>
-          </select>
-        </div>
-
-        {/* Recurring Booking */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">Recurring Booking</label>
-          <div className="flex items-center mb-4">
-            <input
-              type="checkbox"
-              id="isRecurring"
-              name="isRecurring"
-              checked={formData.isRecurring}
-              onChange={handleChange}
-              className="mr-2"
-            />
-            <label htmlFor="isRecurring" className="text-gray-700">
-              Make this a recurring booking
-            </label>
-          </div>
-
-          {formData.isRecurring && (
-            <div className="mb-6">
-              <label className="block text-gray-700 font-medium mb-2">Recurrence Type</label>
-              <select
-                name="recurrenceType"
-                value={formData.recurrenceType}
-                onChange={handleChange}
-                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select recurrence type</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-
-              {formData.recurrenceType === 'weekly' && (
-                <div className="mt-4">
-                  <label className="block text-gray-700 font-medium mb-2">Select Days</label>
-                  <div className="grid grid-cols-7 gap-2">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                      <label key={day} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          value={day}
-                          checked={formData.recurrenceDays.includes(day)}
-                          onChange={() => handleRecurrenceDaysChange(day)}
-                          className="mr-2"
-                        />
-                        {day}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Additional Notes */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">Special Instructions </label>
-          <textarea
-            name="notes"
-            value={formData.notes}
-            onChange={handleChange}
-            placeholder="Any special requirements or information..."
-            rows="4"
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Form Actions */}
-        <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Submit Booking
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-};
+const API_BASE_URL = 'http://localhost:5000/api';
 
 const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -509,7 +186,7 @@ const BookingApp = () => {
       firstName: 'Rhonzel',
       lastName: 'Santos',
       email: 'rasantos@aim.edu',
-      building: 'ACC',
+      building: 'ACC Building',
       room: 'SGV HALL',
       date: '2025-04-05',
       startTime: '10:00',
@@ -525,7 +202,7 @@ const BookingApp = () => {
       firstName: 'Rhonzel',
       lastName: 'Santos',
       email: 'rasantos@aim.edu',
-      building: 'AIM',
+      building: 'AIM Building',
       room: 'Meeting Room 1',
       date: '2025-04-20',
       startTime: '10:00',
@@ -537,13 +214,55 @@ const BookingApp = () => {
     },
   ]);
 
-  const handleBookingSubmit = (newBooking) => {
-    const bookingWithId = {
-      ...newBooking,
-      id: bookings.length + 1,
-      status: 'pending',
-    };
-    setBookings([...bookings, bookingWithId]);
+  // Function to fetch existing bookings
+  const fetchBookings = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings`);
+      if (response.ok) {
+        const data = await response.json();
+        setBookings(data);
+      }
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+    }
+  };
+
+  // Fetch bookings when component mounts
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  const handleBookingSubmit = async (newBooking) => {
+    try {
+      // Add status to the booking
+      const bookingWithStatus = {
+        ...newBooking,
+        status: 'pending',
+      };
+
+      // Send booking to the API
+      const response = await fetch(`${API_BASE_URL}/bookings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}` // Include auth token if needed
+        },
+        body: JSON.stringify(bookingWithStatus),
+      });
+
+      if (response.ok) {
+        const savedBooking = await response.json();
+        // Add the new booking to the state with ID from API
+        setBookings(prev => [...prev, savedBooking]);
+        alert('Booking submitted successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.message || 'Failed to create booking'}`);
+      }
+    } catch (error) {
+      console.error('Error submitting booking:', error);
+      alert('Failed to submit booking. Please try again.');
+    }
   };
 
   const handleDateSelect = (date) => {
@@ -552,18 +271,13 @@ const BookingApp = () => {
 
   return (
     <div>
-    {/* Ensure the Header spans the full width */}
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-      <Header />
-    </div>
+      {/* Ensure the Header spans the full width */}
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
+        <Header />
+      </div>
       
-
-
-
-
-
-
-      <div className="flex flex-col md:flex-row gap-6 p-6">
+      {/* Add padding to prevent content from being hidden under fixed header */}
+      <div style={{ paddingTop: '70px' }} className="flex flex-col md:flex-row gap-6 p-6">
         {/* Left Column: Booking Form */}
         <div className="w-full md:w-1/2">
           <BookingForm onBookingSubmit={handleBookingSubmit} />

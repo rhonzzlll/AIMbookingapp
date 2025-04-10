@@ -142,10 +142,29 @@ const deleteRoom = async (req, res) => {
   }
 };
 
+const saveBuilding = async (req, res) => {
+  try {
+    const { building } = req.body;
+
+    // Validate that the building field is provided
+    if (!building) {
+      return res.status(400).json({ message: 'Building is required' });
+    }
+
+    const newRoom = new Room({ building });
+    const savedRoom = await newRoom.save();
+    res.status(201).json(savedRoom);
+  } catch (error) {
+    console.error('Error saving building:', error);
+    res.status(400).json({ message: 'Error saving building', error: error.message });
+  }
+};
+
 module.exports = {
   getAllRooms,
   getRoomById,
   createRoom,
   updateRoom,
   deleteRoom,
+  saveBuilding, // Export the new function
 };

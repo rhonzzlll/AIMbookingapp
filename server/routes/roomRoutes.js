@@ -6,6 +6,7 @@ const {
   updateRoom,
   deleteRoom,
 } = require('../Controllers/roomController');
+const Room = require('../models/roomModel'); // Adjust the path as needed
 
 const router = express.Router();
 
@@ -23,5 +24,16 @@ router.put('/:id', updateRoom);
 
 // Route to delete a room
 router.delete('/:id', deleteRoom);
+
+router.post('/rooms', async (req, res) => {
+  try {
+    const { building } = req.body;
+    const room = new Room({ building });
+    const savedRoom = await room.save();
+    res.status(201).json(savedfRoom);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
 module.exports = router;

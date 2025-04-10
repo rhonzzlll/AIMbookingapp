@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import Header from './Header';
 import { Calendar, Clock, MapPin, AlertCircle } from 'lucide-react';
 
-// Main Home Page Component
 const HomePage = () => {
+  const userId = localStorage.getItem('_id'); // Retrieve userId from localStorage
+  const token = localStorage.getItem('token'); // Get token for authenticated requests
+
+  const [user, setUser] = useState({
+    firstName: '',
+    lastName: '',
+    profileImage: '',
+    department: '',
+  });
+
   const [bookings, setBookings] = useState([]);
-  const [user, setUser] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('upcoming');
@@ -15,52 +24,61 @@ const HomePage = () => {
   useEffect(() => {
     const fetchUserAndBookings = async () => {
       try {
-        // Simulate loading with mock data
-        setTimeout(() => {
-          setUser({
-            firstName: 'Rhonzel',
-            lastName: 'Santos',
-          });
-          setBookings([
-            {
-              id: 'book-001',
-              title: 'Conference Room A',
-              date: '2025-04-05',
-              startTime: '10:00 AM',
-              endTime: '12:00 PM',
-              room: 'Room A',
-              building: 'AIM Building',
-              floor: '3rd Floor',
-              status: 'confirmed',
-              participants: 12,
-            },
-            {
-              id: 'book-002',
-              title: 'Meeting Room B',
-              date: '2025-04-06',
-              startTime: '2:00 PM',
-              endTime: '4:00 PM',
-              room: 'Room B',
-              building: 'ACC Building',
-              floor: '2nd Floor',
-              status: 'pending',
-              participants: 8,
-            },
-            {
-              id: 'book-003',
-              title: 'Executive Boardroom',
-              date: '2025-04-10',
-              startTime: '9:00 AM',
-              endTime: '11:30 AM',
-              room: 'Boardroom',
-              building: 'AIM Building',
-              floor: '5th Floor',
-              status: 'confirmed',
-              participants: 6,
-            },
-          ]);
-          setLoading(false);
-        }, 800); // Simulate network delay
+        const userResponse = await axios.get(`http://localhost:5000/api/users/${userId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const userData = userResponse.data;
+        setUser({
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          profileImage: userData.profileImage || '/default-avatar.png',
+          department: userData.department || '',
+        });
+
+        // Simulate fetching bookings
+        setBookings([
+          {
+            id: 'book-001',
+            title: 'Conference Room A',
+            date: '2025-04-05',
+            startTime: '10:00 AM',
+            endTime: '12:00 PM',
+            room: 'Room A',
+            building: 'AIM Building',
+            floor: '3rd Floor',
+            status: 'confirmed',
+            participants: 12,
+          },
+          {
+            id: 'book-002',
+            title: 'Meeting Room B',
+            date: '2025-04-06',
+            startTime: '2:00 PM',
+            endTime: '4:00 PM',
+            room: 'Room B',
+            building: 'ACC Building',
+            floor: '2nd Floor',
+            status: 'pending',
+            participants: 8,
+          },
+          {
+            id: 'book-003',
+            title: 'Executive Boardroom',
+            date: '2025-04-10',
+            startTime: '9:00 AM',
+            endTime: '11:30 AM',
+            room: 'Boardroom',
+            building: 'AIM Building',
+            floor: '5th Floor',
+            status: 'confirmed',
+            participants: 6,
+          },
+        ]);
+
+        setLoading(false);
       } catch (err) {
         setError('Failed to fetch data');
         setLoading(false);
@@ -68,10 +86,10 @@ const HomePage = () => {
     };
 
     fetchUserAndBookings();
-  }, []);
+  }, [userId, token]);
 
   // Filter bookings based on active tab
-  const filteredBookings = bookings.filter(booking => {
+  const filteredBookings = bookings.filter((booking) => {
     const bookingDate = new Date(booking.date);
     const today = new Date();
 
@@ -100,10 +118,9 @@ const HomePage = () => {
           <div className="max-w-6xl mx-auto px-4 py-12">
             <div className="flex flex-col md:flex-row items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold mb-2">Welcome! </h1>
+                <h1 className="text-3xl font-bold mb-2">Welcome, {user.firstName}!</h1>
                 <p className="text-blue-100">Find and book your ideal meeting space today</p>
               </div>
-              
             </div>
           </div>
         </div>
@@ -111,7 +128,7 @@ const HomePage = () => {
         {/* Dashboard Content */}
         <div className="max-w-6xl mx-auto px-4 py-8">
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Left Column - Stats */}
+            {/* Left Column - User Info */}
             <div className="md:col-span-1">
               <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
                 <div className="flex items-center space-x-4">
@@ -123,7 +140,10 @@ const HomePage = () => {
                     />
                   </div>
                   <div>
-                    <h2 className="font-bold text-lg">{user.firstName} {user.lastName}</h2>
+                    <h2 className="font-bold text-lg">{`${user.firstName} ${user.lastName}`}</h2>
+                    {user.department && (
+                      <p className="text-sm text-gray-500">{user.department}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -192,14 +212,14 @@ const HomePage = () => {
                   title="Asian Institute of Management Building"
                   description="Contemporary venue perfect for conferences, workshops, and high-level discussions."
                   bookingLink="/aim-rooms"
-                  features={['Minimal outside noise', 'Comfortable chairs'  , 'Air conditioning','Creative Atmosphere']}
+                  features={['Minimal outside noise', 'Air conditioning', 'Creative Atmosphere']}
                 />
                 <FacilityCard
                   imageSrc="/src/images/ACC.png"
-                  title="Asian Institute of Management Conference Center  Building"
-                  description="Modern space for meetings, seminars, and executive discussions ."
+                  title="Asian Institute of Management Conference Center Building"
+                  description="Modern space for meetings, seminars, and executive discussions."
                   bookingLink="/acc-rooms"
-                  features={['Tech-Ready', 'Quiet and Private', 'Modern and Bright ', 'Air conditioning']}
+                  features={['Tech-Ready', 'Quiet and Private', 'Modern and Bright', 'Air conditioning']}
                 />
               </div>
             </div>
@@ -242,19 +262,19 @@ const BookingCard = ({ booking }) => {
     <div className="border border-gray-200 rounded-lg hover:shadow-md transition-shadow overflow-hidden">
       <div className="flex flex-col md:flex-row">
         {/* Left side - Date */}
-        <div className={`p-4 text-center flex-shrink-0 ${booking.status === 'confirmed' ? 'bg-green-50' :
-          booking.status === 'pending' ? 'bg-yellow-50' : 'bg-red-50'
-          }`}>
+        <div
+          className={`p-4 text-center flex-shrink-0 ${
+            booking.status === 'confirmed'
+              ? 'bg-green-50'
+              : booking.status === 'pending'
+              ? 'bg-yellow-50'
+              : 'bg-red-50'
+          }`}
+        >
           <div className="md:w-24">
-            <p className="text-sm font-medium text-gray-500">
-              {format(new Date(booking.date), 'EEE')}
-            </p>
-            <p className="text-2xl font-bold">
-              {format(new Date(booking.date), 'dd')}
-            </p>
-            <p className="text-sm font-medium">
-              {format(new Date(booking.date), 'MMM')}
-            </p>
+            <p className="text-sm font-medium text-gray-500">{format(new Date(booking.date), 'EEE')}</p>
+            <p className="text-2xl font-bold">{format(new Date(booking.date), 'dd')}</p>
+            <p className="text-sm font-medium">{format(new Date(booking.date), 'MMM')}</p>
           </div>
         </div>
 
@@ -274,26 +294,16 @@ const BookingCard = ({ booking }) => {
             </div>
 
             <span
-              className={`px-3 py-1 text-xs font-medium rounded-full ${booking.status === 'confirmed'
-                ? 'bg-green-100 text-green-600'
-                : booking.status === 'pending'
+              className={`px-3 py-1 text-xs font-medium rounded-full ${
+                booking.status === 'confirmed'
+                  ? 'bg-green-100 text-green-600'
+                  : booking.status === 'pending'
                   ? 'bg-yellow-100 text-yellow-600'
                   : 'bg-red-100 text-red-600'
-                }`}
+              }`}
             >
               {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
             </span>
-          </div>
-
-          <div className="flex justify-between items-end mt-4">
-            <div className="flex space-x-2">
-              <button className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
-                Reschedule
-              </button>
-              <button className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-                View Details
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -301,7 +311,7 @@ const BookingCard = ({ booking }) => {
   );
 };
 
-// Enhanced Facility Card Component
+// Facility Card Component
 const FacilityCard = ({ imageSrc, title, description, bookingLink, features }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">

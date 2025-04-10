@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const Login = () => {
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
+    password: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -20,37 +21,23 @@ const Login = () => {
     setLoading(true);
 
     try {
-      console.log('Submitting form data:', formData);
+      const url = 'http://localhost:5000/api/auth'; // Your API endpoint
+      const { data: res } = await axios.post(url, formData);
 
-      const response = await fetch('http://localhost:5000/api/auth', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      // Save data to localStorage
+      localStorage.setItem('_id', res._id);
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('role', res.role);
 
-      console.log('Response status:', response.status);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error response:', errorData);
-        throw new Error(errorData.message || 'Login failed');
-      }
-
-      const userData = await response.json();
-      console.log('User Data:', userData);
-
-      localStorage.setItem('token', userData.token);
-
-      if (userData.role === 'Admin') {
+      // Navigate based on user role
+      if (res.role === 'Admin') {
         navigate('/admin/dashboard');
       } else {
         navigate('/home');
       }
     } catch (error) {
-      console.error('Error during login:', error.message);
-      alert(error.message);
+      console.error('Error during login:', error.response?.data?.message || error.message);
+      alert(error.response?.data?.message || 'Login failed');
     } finally {
       setLoading(false);
     }

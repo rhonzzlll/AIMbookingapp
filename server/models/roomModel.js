@@ -9,10 +9,7 @@ const subRoomSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  roomImage: {
-    type: String, 
-    required: false,
-  },
+  roomImage: { type: [String] }, 
   description: {
     type: String,
     maxlength: 100,

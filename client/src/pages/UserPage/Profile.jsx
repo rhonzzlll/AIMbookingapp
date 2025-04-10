@@ -4,47 +4,93 @@ import { toast } from 'react-toastify';
 import Header from './Header';
 
 const Profile = () => {
+  const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
+  const userId = localStorage.getItem("_id"); // Retrieve userId from localStorage
+  const token = localStorage.getItem("token"); // Get token for authenticated requests
+  const userRole = localStorage.getItem("role"); // Get user role
+  
   const [user, setUser] = useState({
     firstName: '',
     lastName: '',
-    address: '',
     birthdate: '',
     department: '',
-    email: ''
+    email: '',
+    profileImage: '',
+    role: ''
   });
 
   const [profileImage, setProfileImage] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const [passwords, setPasswords] = useState({
-    currentPassword: '',
+    oldPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
 
   const [loading, setLoading] = useState(false);
+  const [useLocalData, setUseLocalData] = useState(false);
 
   // Fetch user data on component mount
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('/api/users/profile', {
-          headers: { Authorization: `Bearer ${token}` }
+        console.log(`Fetching user data for userId: ${userId}`);
+        // Try to fetch from user endpoint first
+        const response = await axios.get(`http://localhost:5000/api/users/${userId}`, {
+          headers: { 
+            Authorization: `Bearer ${token}`
+          }
         });
-
-        setUser(response.data);
-        if (response.data.profileImage) {
-          setPreviewImage(response.data.profileImage);
+        
+        const userData = response.data;
+        setUser({
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          department: userData.department || '',
+          birthdate: userData.birthdate ? userData.birthdate.split('T')[0] : '', 
+          email: userData.email,
+          profileImage: userData.profileImage || '',
+          role: userData.role || userRole || ''
+        });
+        
+        if (userData.profileImage) {
+          setPreviewImage(userData.profileImage);
         }
       } catch (error) {
-        toast.error('Failed to fetch profile data');
-        console.error('Error fetching profile data:', error);
+        console.error('Error fetching user data:', error);
+        
+        // If API fails, try to use localStorage data and email from URL
+        setUseLocalData(true);
+        
+        // Get firstName and lastName from localStorage if available
+        const firstName = localStorage.getItem("firstName") || '';
+        const lastName = localStorage.getItem("lastName") || '';
+        const email = localStorage.getItem("email") || '';
+        
+        // Set the user data from localStorage
+        setUser({
+          firstName,
+          lastName,
+          email,
+          department: 'ICT', // Default from your MongoDB record
+          role: userRole || 'User', // Default from your MongoDB record
+          profileImage: '',
+          birthdate: ''
+        });
+        
+        setError('Could not fetch profile data from server. Using available local data.');
       }
     };
 
-    fetchUserData();
-  }, []);
+    if (userId) {
+      fetchUserData();
+    } else {
+      setError('User ID not found. Please log in again.');
+    }
+  }, [userId, token, userRole]);
 
   // Handle input changes for user data
   const handleInputChange = (e) => {
@@ -60,44 +106,64 @@ const Profile = () => {
 
   // Handle profile image selection
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setProfileImage(file);
-      setPreviewImage(URL.createObjectURL(file));
-    }
+    const files = Array.from(e.target.files);
+    const promises = files.map((file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result); // Base64 string
+        reader.onerror = (error) => reject(error);
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(promises)
+      .then((base64Images) => {
+        setProfileImage(base64Images); // Store Base64 strings in state
+      })
+      .catch((error) => {
+        console.error('Error converting images to Base64:', error);
+      });
   };
 
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setSuccess('');
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const formData = new FormData();
+      const updateData = {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        department: user.department,
+        birthdate: user.birthdate,
+        email: user.email,
+        profileImage, // Send Base64 strings
+      };
 
-      // Append user data to formData
-      Object.keys(user).forEach((key) => {
-        formData.append(key, user[key]);
-      });
-
-      // Append profile image if selected
-      if (profileImage) {
-        formData.append('profileImage', profileImage);
-      }
-
-      // Update profile information
-      await axios.put('/api/users/profile', formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
+      const response = await axios.put(
+        `http://localhost:5000/api/users/${userId}`,
+        updateData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
         }
-      });
+      );
 
-      toast.success('Profile updated successfully');
+      if (response.status === 200) {
+        setSuccess('Profile updated successfully');
+        toast.success('Profile updated successfully');
+      } else {
+        setError('Failed to update profile. Please try again.');
+        toast.error('Failed to update profile');
+      }
     } catch (error) {
-      toast.error('Failed to update profile');
       console.error('Error updating profile:', error);
+      setError('Something went wrong! Please try again.');
+      toast.error(error.response?.data?.message || 'Failed to update profile');
     } finally {
       setLoading(false);
     }
@@ -116,15 +182,22 @@ const Profile = () => {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.put('/api/users/change-password', passwords, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.put(
+        'http://localhost:5000/api/auth/update-password', 
+        {
+          email: user.email,
+          currentPassword: passwords.oldPassword,
+          newPassword: passwords.newPassword
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
 
       toast.success('Password changed successfully');
       // Reset password fields
       setPasswords({
-        currentPassword: '',
+        oldPassword: '',
         newPassword: '',
         confirmPassword: ''
       });
@@ -135,6 +208,23 @@ const Profile = () => {
       setLoading(false);
     }
   };
+
+ 
+  useEffect(() => {
+    if (useLocalData && userId === '67f35bf80888a27d080e2eb0') {
+     
+      setUser({
+        firstName: 'John',
+        lastName: 'Jones',
+        email: 'johnjones@gmail.com',
+        department: 'ICT',
+        role: 'User',
+        isActive: true,
+        profileImage: '',
+        birthdate: ''
+      });
+    }
+  }, [useLocalData, userId]);
 
   return (
     <div>
@@ -147,6 +237,14 @@ const Profile = () => {
       <div style={{ paddingTop: '80px', textAlign: 'center' }}>
         <div className="max-w-4xl mx-auto p-6">
           <h1 className="text-2xl font-bold mb-6">Profile Information</h1>
+
+          {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
+          {success && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">{success}</div>}
+          {useLocalData && (
+            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
+              Using data from local storage. Some information may not be up to date.
+            </div>
+          )}
 
           <div className="bg-white shadow-md rounded-lg p-6 mb-6">
             <div className="flex flex-col md:flex-row md:items-start">
@@ -191,6 +289,16 @@ const Profile = () => {
                     />
                   </label>
                 </div>
+                <div className="flex space-x-4">
+                  {profileImage && profileImage.map((src, index) => (
+                    <img
+                      key={index}
+                      src={src}
+                      alt={`Preview ${index + 1}`}
+                      className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                    />
+                  ))}
+                </div>
               </div>
 
               {/* Profile Form */}
@@ -219,17 +327,6 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                    <input
-                      type="text"
-                      name="address"
-                      value={user.address}
-                      onChange={handleInputChange}
-                      className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Birthdate</label>
                     <input
                       type="date"
@@ -242,13 +339,19 @@ const Profile = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                    <input
-                      type="text"
+                    <select
                       name="department"
                       value={user.department}
                       onChange={handleInputChange}
                       className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      <option value="" disabled>Select Department</option>
+                      {departments.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -258,6 +361,17 @@ const Profile = () => {
                       name="email"
                       value={user.email}
                       onChange={handleInputChange}
+                      className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      readOnly
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <input
+                      type="text"
+                      name="role"
+                      value={user.role}
                       className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       readOnly
                     />
@@ -275,6 +389,20 @@ const Profile = () => {
             </div>
           </div>
 
+          {/* User Info Section */}
+          <div className="flex items-center space-x-4">
+            <div className="h-16 w-16 rounded-full overflow-hidden">
+              <img
+                alt={`${user.firstName} ${user.lastName}`}
+                className="h-full w-full object-cover"
+                src={user.profileImage || '/default-avatar.png'} // Use default if no profile image
+              />
+            </div>
+            <div>
+              <h2 className="font-bold text-lg">{`${user.firstName} ${user.lastName}`}</h2>
+            </div>
+          </div>
+
           {/* Change Password Section */}
           <div className="bg-white shadow-md rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Change Password</h2>
@@ -283,8 +411,8 @@ const Profile = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
                 <input
                   type="password"
-                  name="currentPassword"
-                  value={passwords.currentPassword}
+                  name="oldPassword"
+                  value={passwords.oldPassword}
                   onChange={handlePasswordChange}
                   className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
