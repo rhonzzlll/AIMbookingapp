@@ -12,8 +12,7 @@ const RoomManagement = () => {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
-  const [isSubroomVisible, setIsSubroomVisible] = useState({}); // Manage subroom visibility
-
+  const [isSubroomVisible, setIsSubroomVisible] = useState({}); 
   const API_BASE_URL = 'http://localhost:5000/api';
 
   useEffect(() => {
@@ -37,6 +36,8 @@ const RoomManagement = () => {
       }
       const data = await response.json();
       setRooms(data);
+      console.log('Fetched Rooms:', data);
+
     } catch (error) {
       console.error('Error fetching rooms:', error);
       showToast('Failed to load rooms. Please try again.', 'error');
@@ -163,10 +164,11 @@ const RoomManagement = () => {
         if (!response.ok) {
           throw new Error('Failed to create room');
         }
-
-        const newRoom = await response.json();
-        setRooms([...rooms, newRoom]);
-        showToast(`${newRoom.roomName} added successfully`);
+        
+        // ✅ Instead of trusting response, just reload
+        await fetchRooms();
+        showToast(`${roomData.roomName} added successfully`);
+        
       }
 
       setIsFormOpen(false);

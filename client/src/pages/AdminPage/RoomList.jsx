@@ -25,8 +25,12 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
           ) : (
             rooms.map((room) => {
               // Retrieve the image from localStorage
-              const roomImage = localStorage.getItem(`roomImage_${room.roomName}`);
+              const roomImage = room.roomImage
+              ? `data:image/jpeg;base64,${room.roomImage}`
+              : localStorage.getItem(`roomImage_${room.roomName}`);
+            
 
+            
               return (
                 <React.Fragment key={room._id}>
                   {/* Parent Room */}

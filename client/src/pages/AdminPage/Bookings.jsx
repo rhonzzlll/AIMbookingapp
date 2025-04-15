@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { TextField } from '@mui/material';
+import format from 'date-fns/format';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 // Utility functions for date handling
 const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
@@ -49,7 +54,8 @@ const initialFormState = {
   room: '',
   building: '',
   date: '',
-  time: '',
+  startTime: null,
+  endTime: null,
   notes: '',
   recurring: 'No',
   recurrenceEndDate: '',
@@ -91,7 +97,6 @@ const Bookings = () => {
 
   const bookingsPerPage = 5;
 
-  // Fetch bookings from the backend API - memoized to prevent unnecessary recreations
   const fetchBookings = useCallback(async () => {
     setLoading(true);
     try {
@@ -102,7 +107,7 @@ const Bookings = () => {
         }
       };
 
-      const response = await axios.get(`${API_BASE_URL}/bookings`, config);
+      const response = await axios.get(`${API_BASE_URL}/bookings?userId=${userId}`, config); // Pass userId as a query parameter
       if (Array.isArray(response.data)) {
         setRecentBookings(response.data);
       } else {
@@ -116,7 +121,7 @@ const Bookings = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   // Fetch rooms from the backend API - memoized
   const fetchRooms = useCallback(async () => {
@@ -246,6 +251,13 @@ const Bookings = () => {
     }));
   }, []);
 
+  const handleTimeChange = useCallback((timeType, newTime) => {
+    setFormData((prevData) => ({
+      ...prevData,
+      [timeType]: newTime,
+    }));
+  }, []);
+
   const validateForm = useCallback(() => {
     const errors = {};
 
@@ -256,14 +268,18 @@ const Bookings = () => {
       }
     }
 
+    // Validate time fields
+    if (!formData.startTime || !formData.endTime) {
+      errors.time = "Both start and end times are required";
+    }
+
     setFormError(errors);
     return Object.keys(errors).length === 0;
-  }, [formData.firstName, formData.lastName, users.length, validateNameExists]);
+  }, [formData.firstName, formData.lastName, formData.startTime, formData.endTime, users.length, validateNameExists]);
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
 
-    // Validate the form first
     if (!validateForm()) {
       return;
     }
@@ -273,16 +289,31 @@ const Bookings = () => {
 
     try {
       const token = localStorage.getItem('authToken');
-      const user = JSON.parse(localStorage.getItem('user')); // Assuming user details are stored in localStorage
       const config = {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       };
 
+      // Parse startTime and endTime strings into Date objects
+      const today = new Date();
+      const parseTime = (timeString) => {
+        const [time, period] = timeString.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+
+        if (period === 'PM' && hours < 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+
+        const date = new Date(today);
+        date.setHours(hours, minutes, 0, 0);
+        return date;
+      };
+
       const bookingData = {
         ...formData,
-        bookedBy: user ? `${user.firstName} ${user.lastName}` : '', // Use the logged-in user's name
+        startTime: parseTime(formData.startTime).toISOString(),
+        endTime: parseTime(formData.endTime).toISOString(),
+        userId: userId || '', // Include userId in the payload
       };
 
       if (isEditModalOpen && currentBooking) {
@@ -291,7 +322,7 @@ const Bookings = () => {
         await axios.post(`${API_BASE_URL}/bookings`, bookingData, config);
       }
 
-      fetchBookings(); // Refresh bookings after submission
+      fetchBookings();
       resetForm();
       setIsAddModalOpen(false);
       setIsEditModalOpen(false);
@@ -333,12 +364,54 @@ const Bookings = () => {
 
   const handleEditClick = useCallback((booking) => {
     setCurrentBooking(booking);
+    
+    // Parse time string to set startTime and endTime
+    let startTime = null;
+    let endTime = null;
+    
+    if (booking.time) {
+      const timeParts = booking.time.split(' - ');
+      if (timeParts.length === 2) {
+        // Create Date objects for today with the specified times
+        const today = new Date();
+        const startParts = timeParts[0].match(/(\d+):(\d+)\s*(am|pm)/i);
+        const endParts = timeParts[1].match(/(\d+):(\d+)\s*(am|pm)/i);
+        
+        if (startParts && endParts) {
+          // Parse start time
+          let startHour = parseInt(startParts[1]);
+          const startMinute = parseInt(startParts[2]);
+          const startPeriod = startParts[3].toLowerCase();
+          
+          if (startPeriod === 'pm' && startHour < 12) startHour += 12;
+          if (startPeriod === 'am' && startHour === 12) startHour = 0;
+          
+          startTime = new Date(today);
+          startTime.setHours(startHour, startMinute, 0);
+          
+          // Parse end time
+          let endHour = parseInt(endParts[1]);
+          const endMinute = parseInt(endParts[2]);
+          const endPeriod = endParts[3].toLowerCase();
+          
+          if (endPeriod === 'pm' && endHour < 12) endHour += 12;
+          if (endPeriod === 'am' && endHour === 12) endHour = 0;
+          
+          endTime = new Date(today);
+          endTime.setHours(endHour, endMinute, 0);
+        }
+      }
+    }
+    
     // Format date for the form input
     const formattedBooking = {
       ...booking,
       date: parseISODate(booking.date),
+      startTime: startTime,
+      endTime: endTime,
       recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : ''
     };
+    
     setFormData(formattedBooking);
     setIsEditModalOpen(true);
   }, []);
@@ -374,44 +447,44 @@ const Bookings = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Booking Title</label>
             <input
-              type="text"
-              name="title"
-              value={formData.title}
-              onChange={handleInputChange}
-              onFocus={(e) => e.target.select()} // Retain focus
-              required
-              placeholder="Enter booking title"
-              autoComplete="off"
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
+  type="text"
+  name="title"
+  defaultValue={formData.title} // Use defaultValue for uncontrolled input
+  onBlur={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))} // Update state on blur
+  onFocus={(e) => e.target.select()} // Retain focus
+  required
+  placeholder="Enter booking title"
+  autoComplete="off"
+  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+/>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
             <input
-              type="text"
-              name="firstName"
-              value={formData.firstName}
-              onChange={handleInputChange}
-              required
-              placeholder="Enter first name"
-              autoComplete="off"
-              className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
-            />
+  type="text"
+  name="firstName"
+  defaultValue={formData.firstName} // Use defaultValue for uncontrolled input
+  onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
+  required
+  placeholder="Enter first name"
+  autoComplete="off"
+  className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+/>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
             <input
-              type="text"
-              name="lastName"
-              value={formData.lastName}
-              onChange={handleInputChange}
-              required
-              placeholder="Enter last name"
-              autoComplete="off"
-              className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
-            />
+  type="text"
+  name="lastName"
+  defaultValue={formData.lastName} // Use defaultValue for uncontrolled input
+  onBlur={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))} // Update state on blur
+  required
+  placeholder="Enter last name"
+  autoComplete="off"
+  className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+/>
           </div>
 
           <div>
@@ -497,16 +570,50 @@ const Bookings = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-            <input
-              type="text"
-              name="time"
-              value={formData.time}
-              onChange={handleInputChange}
-              placeholder="e.g. 10:00 AM - 11:30 AM"
-              required
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+            <select
+              value={formData.startTime || ''}
+              onChange={(e) => handleTimeChange('startTime', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="">Select Start Time</option>
+              {[
+                '12:00 AM', '12:30 AM', '1:00 AM', '1:30 AM', '2:00 AM', '2:30 AM', '3:00 AM', '3:30 AM',
+                '4:00 AM', '4:30 AM', '5:00 AM', '5:30 AM', '6:00 AM', '6:30 AM', '7:00 AM', '7:30 AM',
+                '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+                '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
+                '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
+                '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+              ].map((time) => (
+                <option key={time} value={time}>
+                  {time}
+                </option>
+              ))}
+            </select>
+            {formError.time && <p className="text-red-500 text-xs mt-1">{formError.time}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+            <select
+              value={formData.endTime || ''}
+              onChange={(e) => handleTimeChange('endTime', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="">Select End Time</option>
+              {[
+                '12:00 AM', '12:30 AM', '1:00 AM', '1:30 AM', '2:00 AM', '2:30 AM', '3:00 AM', '3:30 AM',
+                '4:00 AM', '4:30 AM', '5:00 AM', '5:30 AM', '6:00 AM', '6:30 AM', '7:00 AM', '7:30 AM',
+                '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+                '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
+                '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
+                '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+              ].map((time) => (
+                <option key={time} value={time}>
+                  {time}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -558,13 +665,13 @@ const Bookings = () => {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
           <textarea
-            name="notes"
-            value={formData.notes}
-            onChange={handleInputChange}
-            rows="3"
-            placeholder="Add any additional notes here"
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-          ></textarea>
+  name="notes"
+  defaultValue={formData.notes} // Use defaultValue for uncontrolled input
+  onBlur={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} // Update state on blur
+  rows="3"
+  placeholder="Add any additional notes here"
+  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+></textarea>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -692,7 +799,10 @@ const Bookings = () => {
                         <div>{formatDate(booking.date)}</div>
                       )}
                     </td>
-                    <td className="px-4 py-2 border-b">{booking.time}</td>
+                    <td className="px-4 py-2 border-b">
+                      {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
+                      {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
                     <td className="px-4 py-2 border-b">{booking.notes}</td>
                     <td className="px-4 py-2 border-b">
                       <div>
@@ -708,7 +818,7 @@ const Bookings = () => {
                           {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                         </span>
                         <small className="block text-gray-500 mt-1">
-                          Booked by {booking.bookedBy || ': '}
+                          Changed by {booking.bookedBy || ': '}
                         </small>
                       </div>
                     </td>
@@ -721,7 +831,12 @@ const Bookings = () => {
                         >
                           Edit
                         </button>
-                       
+                        <button
+                          className="text-red-600 hover:underline"
+                          onClick={() => handleDeleteBooking(booking._id || booking.id)}
+                        >
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -743,9 +858,6 @@ const Bookings = () => {
         {filteredBookings.length > 0 && (
           <div className="flex justify-between items-center mt-4">
             <button
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                currentPage === 1 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-600 text-white'
-              }`}
               onClick={handlePreviousPage}
               disabled={currentPage === 1}
             >

@@ -64,7 +64,7 @@ const Sidebar = ({ activeTab, setActiveTab, userId }) => {
           </div>
           <div>
             <div className="text-sm font-medium">{`${user?.firstName || 'Admin'} ${user?.lastName || ''}`.trim()}</div>
-<div className="text-xs text-gray-400">{user?.role || 'System Administrator'}</div>
+
           </div>
         </div>
       </div>

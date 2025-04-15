@@ -2,8 +2,95 @@ import React, { useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
 import Header from './Header';
 import BookingForm from './BookingForm'; // Import the updated BookingForm component
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { Button } from "../../components/ui/button"; // Fixed import
+import { Checkbox } from "../../components/ui/checkbox";
+import { X } from 'lucide-react';
+ 
 
 const API_BASE_URL = 'http://localhost:5000/api';
+
+export function PrivacyModal({ isOpen, onOpenChange, onConfirm }) {
+  const [isAgreed, setIsAgreed] = useState(false);
+
+  const handleConfirm = () => {
+    if (isAgreed) {
+      onConfirm();
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="flex items-center justify-between">
+          <DialogTitle>Data Privacy Confirmation</DialogTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100"
+            onClick={() => onOpenChange(false)}
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </Button>
+        </DialogHeader>
+
+        <div className="mt-2">
+          <p className="text-sm text-muted-foreground">
+            Before proceeding with your booking, please review and agree to our data privacy terms.
+          </p>
+
+          <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>Your personal information will be securely stored and processed</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>We will only use your data for booking and related communication</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>Your data will not be shared with third parties without consent</span>
+            </li>
+            <li className="flex items-start">
+              <span className="mr-2">•</span>
+              <span>You can request data deletion at any time</span>
+            </li>
+          </ul>
+
+          <div className="mt-6 flex items-start space-x-2">
+            <Checkbox
+ 
+                      id="privacy-agreement"
+                      checked={isAgreed}
+                      onChange={(e) => setIsAgreed(e.target.checked)}
+                    />
+            <label
+              htmlFor="privacy-agreement"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              I agree to the data privacy terms
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end space-x-3">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={!isAgreed}
+            className={!isAgreed ? 'opacity-50 cursor-not-allowed' : ''}
+          >
+            Confirm Booking
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -137,38 +224,40 @@ const MyBookings = ({ bookings }) => {
       <h2 className="text-xl font-bold mb-4">My Bookings</h2>
       <div className="space-y-4">
         {bookings.length > 0 ? (
-          bookings.map((booking, index) => (
-            <div key={index} className="border rounded-lg p-4">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="font-bold">{booking.title}</h3>
-                  <p className="text-sm text-gray-600">
-                    {format(parseISO(booking.date), 'yyyy-MM-dd')} · {booking.startTime} -{' '}
-                    {booking.endTime}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Booked by: {booking.firstName} {booking.lastName}
-                  </p>
-                  {booking.building && (
-                    <p className="text-xs text-gray-500">
-                      Location: {booking.building}, {booking.room}
+          bookings.map((booking, index) => {
+            const formattedDate = booking.date ? format(parseISO(booking.date), 'yyyy-MM-dd') : 'Invalid date';
+            return (
+              <div key={index} className="border rounded-lg p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="font-bold">{booking.title}</h3>
+                    <p className="text-sm text-gray-600">
+                      {formattedDate} · {booking.startTime || 'N/A'} - {booking.endTime || 'N/A'}
                     </p>
-                  )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Booked by: {booking.firstName} {booking.lastName}
+                    </p>
+                    {booking.building && (
+                      <p className="text-xs text-gray-500">
+                        Location: {booking.building}, {booking.room}
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={`px-2 py-1 text-xs rounded ${
+                      booking.status === 'approved'
+                        ? 'bg-green-100 text-green-600'
+                        : booking.status === 'pending'
+                        ? 'bg-yellow-100 text-yellow-600'
+                        : 'bg-red-100 text-red-600'
+                    }`}
+                  >
+                    {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                  </span>
                 </div>
-                <span
-                  className={`px-2 py-1 text-xs rounded ${
-                    booking.status === 'approved'
-                      ? 'bg-green-100 text-green-600'
-                      : booking.status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-600'
-                      : 'bg-red-100 text-red-600'
-                  }`}
-                >
-                  {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                </span>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <p className="text-center text-gray-500 py-4">No bookings found</p>
         )}
@@ -179,40 +268,9 @@ const MyBookings = ({ bookings }) => {
 
 const BookingApp = () => {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [bookings, setBookings] = useState([
-    {
-      id: 1,
-      title: 'Team Meeting',
-      firstName: 'Rhonzel',
-      lastName: 'Santos',
-      email: 'rasantos@aim.edu',
-      building: 'ACC Building',
-      room: 'SGV HALL',
-      date: '2025-04-05',
-      startTime: '10:00',
-      endTime: '11:30',
-      department: 'Marketing',
-      isRecurring: false,
-      notes: '',
-      status: 'approved',
-    },
-    {
-      id: 2,
-      title: 'Project Review',
-      firstName: 'Rhonzel',
-      lastName: 'Santos',
-      email: 'rasantos@aim.edu',
-      building: 'AIM Building',
-      room: 'Meeting Room 1',
-      date: '2025-04-20',
-      startTime: '10:00',
-      endTime: '11:00',
-      department: 'IT',
-      isRecurring: false,
-      notes: '',
-      status: 'pending',
-    },
-  ]);
+  const [bookings, setBookings] = useState([]);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [pendingBooking, setPendingBooking] = useState(null);
 
   // Function to fetch existing bookings
   const fetchBookings = async () => {
@@ -232,36 +290,44 @@ const BookingApp = () => {
     fetchBookings();
   }, []);
 
-  const handleBookingSubmit = async (newBooking) => {
-    try {
-      // Add status to the booking
-      const bookingWithStatus = {
-        ...newBooking,
-        status: 'pending',
-      };
+  const handleBookingSubmit = (newBooking) => {
+    setPendingBooking(newBooking);
+    setIsPrivacyModalOpen(true); // Open PrivacyModal
+  };
 
-      // Send booking to the API
-      const response = await fetch(`${API_BASE_URL}/bookings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}` // Include auth token if needed
-        },
-        body: JSON.stringify(bookingWithStatus),
-      });
+  const handlePrivacyConfirm = async () => {
+    setIsPrivacyModalOpen(false);
 
-      if (response.ok) {
-        const savedBooking = await response.json();
-        // Add the new booking to the state with ID from API
-        setBookings(prev => [...prev, savedBooking]);
-        alert('Booking submitted successfully!');
-      } else {
-        const errorData = await response.json();
-        alert(`Error: ${errorData.message || 'Failed to create booking'}`);
+    if (pendingBooking) {
+      try {
+        const bookingWithStatus = {
+          ...pendingBooking,
+          status: 'pending',
+        };
+
+        const response = await fetch(`${API_BASE_URL}/bookings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+          body: JSON.stringify(bookingWithStatus),
+        });
+
+        if (response.ok) {
+          const savedBooking = await response.json();
+          setBookings((prev) => [...prev, savedBooking]);
+          alert('Booking submitted successfully!');
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.message || 'Failed to create booking'}`);
+        }
+      } catch (error) {
+        console.error('Error submitting booking:', error);
+        alert('Failed to submit booking. Please try again.');
+      } finally {
+        setPendingBooking(null);
       }
-    } catch (error) {
-      console.error('Error submitting booking:', error);
-      alert('Failed to submit booking. Please try again.');
     }
   };
 
@@ -271,19 +337,13 @@ const BookingApp = () => {
 
   return (
     <div>
-      {/* Ensure the Header spans the full width */}
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
         <Header />
       </div>
-      
-      {/* Add padding to prevent content from being hidden under fixed header */}
       <div style={{ paddingTop: '70px' }} className="flex flex-col md:flex-row gap-6 p-6">
-        {/* Left Column: Booking Form */}
         <div className="w-full md:w-1/2">
           <BookingForm onBookingSubmit={handleBookingSubmit} />
         </div>
-
-        {/* Right Column: Calendar, DaySchedule, and MyBookings */}
         <div className="w-full md:w-1/2">
           <Calendar
             selectedDate={selectedDate}
@@ -294,6 +354,13 @@ const BookingApp = () => {
           <MyBookings bookings={bookings} />
         </div>
       </div>
+
+      {/* Privacy Modal */}
+      <PrivacyModal
+        isOpen={isPrivacyModalOpen}
+        onOpenChange={setIsPrivacyModalOpen}
+        onConfirm={handlePrivacyConfirm}
+      />
     </div>
   );
 };
