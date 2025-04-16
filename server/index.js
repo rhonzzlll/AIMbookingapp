@@ -48,12 +48,6 @@ const roomsRoutes = require('./routes/roomRoutes');
  
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/rooms', roomsRoutes);
- 
-
-
-
-
-// API routes
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);

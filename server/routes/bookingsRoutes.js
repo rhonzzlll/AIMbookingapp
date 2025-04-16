@@ -17,4 +17,7 @@ router.put('/:id', bookingsController.updateBooking);
 // Route to delete a booking by ID
 router.delete('/:id', bookingsController.deleteBooking);
 
+// Route to check availability
+router.post('/check-availability', bookingsController.checkAvailability);
+
 module.exports = router;

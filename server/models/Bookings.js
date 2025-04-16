@@ -1,8 +1,6 @@
-const mongoose = require('mongoose');
+const mongoose = require('mongoose'); // Import mongoose
 
 const bookingSchema = new mongoose.Schema({
-
- 
   title: {
     type: String,
     required: true,
@@ -42,10 +40,13 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  time: {
-    type: String,
-    required: true,
-    trim: true
+  startTime: {
+    type: Date,
+    required: true
+  },
+  endTime: {
+    type: Date,
+    required: true
   },
   notes: {
     type: String,
@@ -57,16 +58,21 @@ const bookingSchema = new mongoose.Schema({
     default: 'No'
   },
   recurrenceEndDate: {
-    type: String,
+    type: Date,
     default: null
   },
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'declined'],
     default: 'pending'
+  },
+  userId: { // Add userId field
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User', // Reference the User model
+    required: true
   }
 }, { timestamps: true });
 
-const Booking = mongoose.model('Booking', bookingSchema);
+const Booking = mongoose.model('Booking', bookingSchema); // Define the Booking model
 
-module.exports = Booking;
+module.exports = Booking; // Export the Booking model

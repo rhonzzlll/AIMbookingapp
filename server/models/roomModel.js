@@ -63,15 +63,7 @@ const roomSchema = new mongoose.Schema({
       return !this.isQuadrant; // Required only if it's a standalone room
     },
   },
-  roomImage: {
-    type: String,
-    required: false,
-  },
-  description: {
-    type: String,
-    maxlength: 100,
-    required: true,
-  },
+
   isQuadrant: {
     type: Boolean,
     default: false,

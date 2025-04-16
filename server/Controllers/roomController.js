@@ -1,22 +1,17 @@
 const Room = require('../models/roomModel');
 const crypto = require('crypto'); // For generating a shortened image name
- 
+
+// Process the image to generate a base64 string
 const processImage = (image) => {
   if (!image) return null;
 
-   
-  const shortenedName = crypto.randomBytes(8).toString('hex');
+  const shortenedName = crypto.randomBytes(8).toString('hex'); // Generate a unique name
+  const base64Image = Buffer.from(image, 'base64').toString('base64'); // Decode the image to base64
 
- 
-  const base64Image = Buffer.from(image).toString('base64');
-
-  return {
-    shortenedName,
-    base64Image,
-  };
+  return { shortenedName, base64Image };
 };
 
-// Validate subrooms
+// Validate subrooms for correct structure and required fields
 const validateSubRooms = (subRooms) => {
   if (!Array.isArray(subRooms)) {
     throw new Error('Subrooms must be an array');
@@ -41,6 +36,7 @@ const getAllRooms = async (req, res) => {
     const rooms = await Room.find();
     res.status(200).json(rooms);
   } catch (error) {
+    console.error('Error fetching rooms:', error);
     res.status(500).json({ message: 'Error fetching rooms', error });
   }
 };
@@ -54,6 +50,7 @@ const getRoomById = async (req, res) => {
     }
     res.status(200).json(room);
   } catch (error) {
+    console.error('Error fetching room:', error);
     res.status(500).json({ message: 'Error fetching room', error });
   }
 };
@@ -76,14 +73,15 @@ const createRoom = async (req, res) => {
       validateSubRooms(subRooms);
     }
 
-    // Process the image
+    // Process the image if available
     const processedImage = processImage(roomImage);
 
+    // Create and save the room
     const newRoom = new Room({
       ...roomData,
       isQuadrant: !!isQuadrant, // Ensure isQuadrant is a boolean
       subRooms: isQuadrant ? subRooms : [], // Only include subRooms if isQuadrant is true
-      roomImage: processedImage ? processedImage.base64Image : null,
+      roomImage: processedImage ? processedImage.base64Image : null, // Save the base64 image if available
     });
 
     const savedRoom = await newRoom.save();
@@ -125,6 +123,7 @@ const updateRoom = async (req, res) => {
 
     res.status(200).json(updatedRoom);
   } catch (error) {
+    console.error('Error updating room:', error);
     res.status(400).json({ message: 'Error updating room', error: error.message });
   }
 };
@@ -138,10 +137,12 @@ const deleteRoom = async (req, res) => {
     }
     res.status(200).json({ message: 'Room deleted successfully' });
   } catch (error) {
+    console.error('Error deleting room:', error);
     res.status(500).json({ message: 'Error deleting room', error });
   }
 };
 
+// Save building (not clear if necessary, but kept for completeness)
 const saveBuilding = async (req, res) => {
   try {
     const { building } = req.body;
@@ -166,5 +167,5 @@ module.exports = {
   createRoom,
   updateRoom,
   deleteRoom,
-  saveBuilding, // Export the new function
+  saveBuilding,
 };
