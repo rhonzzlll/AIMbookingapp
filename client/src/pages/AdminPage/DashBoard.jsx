@@ -72,6 +72,7 @@ const Dashboard = ({ openModal }) => {
   const [activeBookingTab, setActiveBookingTab] = useState('all');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
 
   const statCards = [
     { title: 'Total Rooms', value: '0', icon: '🏢', color: 'bg-blue-100' },
@@ -168,10 +169,35 @@ const Dashboard = ({ openModal }) => {
     setSelectedBooking(null);
   };
 
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+const handleSort = (key) => {
+  setSortConfig((prev) => {
+    if (prev.key === key) {
+      return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+    }
+    return { key, direction: 'asc' };
+  });
+};
+
+const sortedBookings = [...getFilteredBookings()].sort((a, b) => {
+  const { key, direction } = sortConfig;
+  if (!key) return 0;
+
+  const valA = a[key]?.toString().toLowerCase() ?? '';
+  const valB = b[key]?.toString().toLowerCase() ?? '';
+
+  return direction === 'asc'
+    ? valA.localeCompare(valB)
+    : valB.localeCompare(valA);
+});
+
+
+
   return (
     <div>
-      <div style={{ position: 'fixed', top: 0, left: 300, width: 'calc(100% - 300px)', zIndex: 500 }}>
-        <TopBar />
+      <div style={{position:'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh' }}>
+      <TopBar />
 
         <div className="p-6 bg-gray-50 min-h-screen">
           <h1 className="text-2xl font-bold mb-6 text-gray-800">Dashboard Overview</h1>
@@ -263,86 +289,98 @@ const Dashboard = ({ openModal }) => {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
+              <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="px-4 py-2 border-b">Booking Title</th>
-                  <th className="px-4 py-2 border-b">First Name</th>
-                  <th className="px-4 py-2 border-b">Last Name</th>
-                  <th className="px-4 py-2 border-b">Department</th>
-                  <th className="px-4 py-2 border-b">Room Type</th>
-                  <th className="px-4 py-2 border-b">Meeting Room</th>
-                  <th className="px-4 py-2 border-b">Building</th>
-                  <th className="px-4 py-2 border-b">Date</th>
-                  <th className="px-4 py-2 border-b">Time</th>
-                  <th className="px-4 py-2 border-b">Notes</th>
-                  <th className="px-4 py-2 border-b">Status</th>
-                  <th className="px-4 py-2 border-b">Recurring</th>
+                  {[
+                    { label: 'Name', key: 'lastName' },
+                    { label: 'Department', key: 'department' },
+                    { label: 'Room Type', key: 'roomType' },
+                    { label: 'Meeting Room', key: 'meetingRoom' },
+                    { label: 'Building', key: 'building' },
+                    { label: 'Date', key: 'date' },
+                    { label: 'Time', key: 'time' },
+                    { label: 'Notes', key: 'notes' },
+                    { label: 'Status', key: 'status' },
+                    { label: 'Recurring', key: 'recurring' }
+                  ].map(({ label, key }) => (
+                    <th
+                      key={key}
+                      onClick={() => handleSort(key)}
+                      className="cursor-pointer px-4 py-2 border-b"
+                    >
+                      {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    </th>
+                  ))}
                   <th className="px-4 py-2 border-b">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {currentBookings.length > 0 ? (
-                  currentBookings.map((booking) => {
-                    const recurringDates =
-                      booking.recurring !== 'No' && booking.recurrenceEndDate
-                        ? calculateRecurringDates(booking.date, booking.recurring, booking.recurrenceEndDate)
-                        : [booking.date];
 
-                    return (
-                      <tr key={booking.id} className="hover:bg-gray-50 transition">
-                        <td className="px-4 py-2 border-b">{booking.title}</td>
-                        <td className="px-4 py-2 border-b">{booking.firstName}</td>
-                        <td className="px-4 py-2 border-b">{booking.lastName}</td>
-                        <td className="px-4 py-2 border-b">{booking.department}</td>
-                        <td className="px-4 py-2 border-b">{booking.roomType}</td>
-                        <td className="px-4 py-2 border-b">{booking.meetingRoom}</td>
-                        <td className="px-4 py-2 border-b">{booking.building}</td>
-                        <td className="px-4 py-2 border-b">
-                          {recurringDates.map((date, index) => (
-                            <div key={index}>{formatDate(date)}</div>
-                          ))}
-                        </td>
-                        <td className="px-4 py-2 border-b">{booking.time}</td>
-                        <td className="px-4 py-2 border-b">{booking.notes}</td>
-                        <td className="px-4 py-2 border-b">
-                          <div>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs ${booking.status === 'confirmed'
-                                ? 'bg-green-100 text-green-600'
-                                : booking.status === 'pending'
-                                  ? 'bg-yellow-100 text-yellow-600'
-                                  : 'bg-red-100 text-red-600'
+                <tbody>
+                  {currentBookings.length > 0 ? (
+                    sortedBookings.map((booking) => {
+                      const recurringDates =
+                        booking.recurring !== 'No' && booking.recurrenceEndDate
+                          ? calculateRecurringDates(booking.date, booking.recurring, booking.recurrenceEndDate)
+                          : [booking.date];
+
+                      return (
+                        <tr key={booking.id} className="hover:bg-gray-50 transition">
+                          <td className="px-4 py-2 border-b">
+                            {`${booking.lastName}, ${booking.firstName}`}
+                          </td>
+                          <td className="px-4 py-2 border-b">{booking.department}</td>
+                          <td className="px-4 py-2 border-b">{booking.roomType}</td>
+                          <td className="px-4 py-2 border-b">{booking.meetingRoom}</td>
+                          <td className="px-4 py-2 border-b">{booking.building}</td>
+                          <td className="px-4 py-2 border-b">
+                            {recurringDates.map((date, index) => (
+                              <div key={index}>{formatDate(date)}</div>
+                            ))}
+                          </td>
+                          <td className="px-4 py-2 border-b">{booking.time}</td>
+                          <td className="px-4 py-2 border-b">{booking.notes}</td>
+                          <td className="px-4 py-2 border-b">
+                            <div>
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs ${
+                                  booking.status === 'confirmed'
+                                    ? 'bg-green-100 text-green-600'
+                                    : booking.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-600'
+                                    : 'bg-red-100 text-red-600'
                                 }`}
+                              >
+                                {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                              </span>
+                              <small className="block text-gray-500 mt-1">
+                                Booked by {booking.firstName} {booking.lastName}
+                              </small>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 border-b">{booking.recurring}</td>
+                          <td className="px-4 py-2 border-b">
+                            <button
+                              className="text-blue-600 hover:underline"
+                              onClick={() => handleEditClick(booking)}
                             >
-                              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                            </span>
-                            <small className="block text-gray-500 mt-1">Booked by {booking.firstName} {booking.lastName}</small>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 border-b">{booking.recurring}</td>
-                        <td className="px-4 py-2 border-b">
-                          <button
-                            className="text-blue-600 hover:underline"
-                            onClick={() => handleEditClick(booking)}
-                          >
-                            Edit
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan="13" className="px-4 py-4 text-center text-gray-500">
-                      No bookings found. Add a new booking to get started.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                              view
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="11" className="px-4 py-4 text-center text-gray-500">
+                        No bookings found. Add a new booking to get started.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
           <Modal isOpen={isModalOpen} onClose={closeModal}>
             {selectedBooking && (

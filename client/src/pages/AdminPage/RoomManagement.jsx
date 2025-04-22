@@ -3,6 +3,7 @@ import RoomList from './RoomList';
 import RoomForm from './RoomForm';
 import DeleteConfirmation from './modals/DeleteConfirmation';
 import Toast from './Toast';
+import TopBar from '../../components/AdminComponents/TopBar';
 
 const RoomManagement = () => {
   const [rooms, setRooms] = useState([]);
@@ -210,7 +211,7 @@ const RoomManagement = () => {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto">
+    <div className="p-2 md:p-4 max-w-7xl mx-auto">
       {toast && (
         <Toast
           message={toast.message}
@@ -218,66 +219,68 @@ const RoomManagement = () => {
           onClose={closeToast}
         />
       )}
-
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+    <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
+      <TopBar />
+      <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4 mt-2 p-6 bg-gray-50">
         <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
-        <button
-          onClick={handleAddRoom}
-          className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
-        >
-          <svg
-            className="w-5 h-5 mr-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+          <button
+            onClick={handleAddRoom}
+            className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          Add New Room
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="text-center py-16">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-          <p className="mt-4 text-gray-600">Loading rooms...</p>
+            <svg
+              className="w-5 h-5 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            Add New Room
+          </button>
         </div>
-      ) : (
-        <RoomList
-          rooms={rooms}
-          onEdit={handleEditRoom}
-          onDelete={handleDeleteRoom}
-          onDivide={handleDivideRoom}
-          toggleSubroomVisibility={toggleSubroomVisibility}
-          isSubroomVisible={isSubroomVisible}
-        />
-      )}
 
-      {isFormOpen && (
-        <RoomForm
-          initialData={editingRoom}
-          onSubmit={handleFormSubmit}
-          onCancel={() => setIsFormOpen(false)}
-        />
-      )}
+        {loading ? (
+          <div className="text-center py-16">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+            <p className="mt-4 text-gray-600">Loading rooms...</p>
+          </div>
+        ) : (
+          <RoomList
+            rooms={rooms}
+            onEdit={handleEditRoom}
+            onDelete={handleDeleteRoom}
+            onDivide={handleDivideRoom}
+            toggleSubroomVisibility={toggleSubroomVisibility}
+            isSubroomVisible={isSubroomVisible}
+          />
+        )}
 
-      {isDeleteModalOpen && (
-        <DeleteConfirmation
-          title="Delete Room"
-          message={`Are you sure you want to delete "${roomToDelete.roomName}"? This action cannot be undone.`}
-          onConfirm={confirmDelete}
-          onCancel={() => {
-            setIsDeleteModalOpen(false);
-            setRoomToDelete(null);
-          }}
-        />
-      )}
-    </div>
+        {isFormOpen && (
+          <RoomForm
+            initialData={editingRoom}
+            onSubmit={handleFormSubmit}
+            onCancel={() => setIsFormOpen(false)}
+          />
+        )}
+
+        {isDeleteModalOpen && (
+          <DeleteConfirmation
+            title="Delete Room"
+            message={`Are you sure you want to delete "${roomToDelete.roomName}"? This action cannot be undone.`}
+            onConfirm={confirmDelete}
+            onCancel={() => {
+              setIsDeleteModalOpen(false);
+              setRoomToDelete(null);
+            }}
+          />
+        )}
+      </div>
+      </div> 
   );
 };
 

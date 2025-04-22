@@ -1,16 +1,16 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
-import { useNavigate } from 'react-router-dom'; // Updated import
+import { useNavigate } from 'react-router-dom';
 
 const ConfirmationModal = ({ isOpen, onOpenChange }) => {
-  const navigate = useNavigate(); // Updated to useNavigate
-
+  const navigate = useNavigate();
+  
   const handleRedirect = () => {
     onOpenChange(false);
-    navigate('/home'); // Updated navigation
+    navigate('/home');
   };
-
+  
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">

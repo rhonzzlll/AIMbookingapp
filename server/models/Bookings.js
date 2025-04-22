@@ -1,78 +1,78 @@
 const mongoose = require('mongoose'); // Import mongoose
 
 const bookingSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
   title: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
   },
   firstName: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
   },
   lastName: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
   },
   department: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
   },
   category: {
-    type: String,
+    type: String, // Changed to String
     required: true,
-    trim: true
+    trim: true,
   },
   room: {
-    type: String,
+    type: String, // Changed to String
     required: true,
-    trim: true
+    trim: true,
   },
   building: {
-    type: String,
+    type: String, // Changed to String
     required: true,
-    trim: true
+    trim: true,
   },
   date: {
     type: String,
-    required: true
+    required: true,
   },
   startTime: {
     type: Date,
-    required: true
+    required: true,
   },
   endTime: {
     type: Date,
-    required: true
+    required: true,
   },
   notes: {
     type: String,
-    trim: true
+    trim: true,
   },
   recurring: {
     type: String,
     enum: ['No', 'Daily', 'Weekly', 'Monthly'],
-    default: 'No'
+    default: 'No',
   },
   recurrenceEndDate: {
     type: Date,
-    default: null
+    default: null,
   },
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'declined'],
-    default: 'pending'
+    default: 'pending',
   },
-  userId: { // Add userId field
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User', // Reference the User model
-    required: true
-  }
 }, { timestamps: true });
 
-const Booking = mongoose.model('Booking', bookingSchema); // Define the Booking model
+const Booking = mongoose.model('Booking', bookingSchema);
 
-module.exports = Booking; // Export the Booking model
+module.exports = Booking;

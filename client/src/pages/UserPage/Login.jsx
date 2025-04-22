@@ -1,15 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { MdEmail, MdLock } from 'react-icons/md';
+import AIMLogo from '../../images/AIM_Logo.png';
 
 const Login = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Load remembered email on mount
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    if (savedEmail) {
+      setFormData((prev) => ({ ...prev, email: savedEmail }));
+      setRememberMe(true);
+    }
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -19,17 +27,23 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      const url = 'http://localhost:5000/api/auth'; // Your API endpoint
+      const url = 'http://localhost:5000/api/auth';
       const { data: res } = await axios.post(url, formData);
 
-      // Save data to localStorage
+      // Save auth details
       localStorage.setItem('_id', res._id);
       localStorage.setItem('token', res.token);
       localStorage.setItem('role', res.role);
 
-      // Navigate based on user role
+      // Save or clear remembered email
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', formData.email);
+      } else {
+        localStorage.removeItem('rememberedEmail');
+      }
+
+      // Navigate by role
       if (res.role === 'Admin') {
         navigate('/admin/dashboard');
       } else {
@@ -44,53 +58,84 @@ const Login = () => {
   };
 
   return (
-    <div className="h-screen w-screen bg-gray-100 flex items-center justify-center">
-      <div className="w-full max-w-md mx-auto px-4">
-        <div className="border-t-4 border-black">
-          <div className="bg-white shadow-md p-8 rounded-b">
-            <h1 className="text-5xl font-bold mb-10 text-center">LOGIN</h1>
+    <div className="flex rounded-lg shadow-lg overflow-hidden">
+      {/* Left: Logo */}
+      <div className="hidden md:flex w-1/2 items-center justify-center bg-gradient-to-br from-blue-300 to-blue-100 shadow-lg">
+        <div className="flex flex-col items-center space-y-4">
+          <img src={AIMLogo} alt="Logo" className="w-350 h-auto object-contain" />
+          <h2 className="text-xl font-bold text-gray-700">Welcome to AIM Portal!</h2>
+        </div>
+      </div>
 
+      {/* Right: Login Form */}
+      <div className="flex w-full md:w-1/2 items-center justify-center bg-blue-200 px-4 py-5">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl p-10">
+            <h1 className="text-4xl font-extrabold text-center text-gray-800 mb-4">Log In</h1>
+            <p className="text-gray-500 text-center mb-8">Enter your credentials to access your account</p>
             <form onSubmit={handleSubmit}>
+              {/* Email */}
               <div className="mb-6">
-                <label className="block text-gray-700 font-medium mb-2">
-                  EMAIL <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="Please enter your email"
-                  className="w-full p-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                <div className="flex items-center border border-gray-300 rounded-lg shadow-sm focus-within:ring-2 focus-within:ring-blue-500">
+                  <span className="pl-4 text-gray-400 text-xl">
+                    <MdEmail />
+                  </span>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="Enter your email"
+                    className="w-full p-4 pl-2 outline-none rounded-r-lg"
+                    required
+                  />
+                </div>
               </div>
 
-              <div className="mb-8">
-                <label className="block text-gray-700 font-medium mb-2">
-                  PASSWORD <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Password"
-                  className="w-full p-4 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+              {/* Password */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                <div className="flex items-center border border-gray-300 rounded-lg shadow-sm focus-within:ring-2 focus-within:ring-blue-500">
+                  <span className="pl-4 text-gray-400 text-xl">
+                    <MdLock />
+                  </span>
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="Password"
+                    className="w-full p-4 pl-2 outline-none rounded-r-lg"
+                    required
+                  />
+                </div>
               </div>
 
+              {/* Remember Me */}
+              <div className="flex items-center mb-6">
+                <input
+                  type="checkbox"
+                  id="remember"
+                  checked={rememberMe}
+                  onChange={() => setRememberMe(!rememberMe)}
+                  className="mr-2"
+                />
+                <label htmlFor="remember" className="text-sm text-gray-600">Remember me</label>
+              </div>
+
+              {/* Submit */}
               <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded font-medium text-lg transition duration-200"
                 disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold text-lg transition-transform duration-200 transform hover:scale-105 shadow-md"
               >
-                {loading ? 'LOGGING IN...' : 'LOGIN'}
+                {loading ? 'Logging in...' : 'Log In'}
               </button>
 
-              <div className="text-center mt-6">
-                <Link to="/forgot-password" className="text-blue-600 hover:underline">
+              {/* Forgot Password */}
+              <div className="text-center mt-4">
+                <Link to="/forgot-password" className="text-sm text-blue-600 hover:underline font-medium">
                   Forgot Password?
                 </Link>
               </div>

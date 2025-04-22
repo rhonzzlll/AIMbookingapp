@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import Header from './Header';
-import BookingForm from './BookingForm'; // Import the updated BookingForm component
+import BookingForm from './BookingForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
-import { Button } from "../../components/ui/button"; // Fixed import
+import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
-import { X } from 'lucide-react';
+import { X, AlertCircle } from 'lucide-react';
+import ConfirmationModal from '../../components/ui/ConfirmationModal';
  
-
 const API_BASE_URL = 'http://localhost:5000/api';
 
 export function PrivacyModal({ isOpen, onOpenChange, onConfirm }) {
@@ -61,11 +61,10 @@ export function PrivacyModal({ isOpen, onOpenChange, onConfirm }) {
 
           <div className="mt-6 flex items-start space-x-2">
             <Checkbox
- 
-                      id="privacy-agreement"
-                      checked={isAgreed}
-                      onChange={(e) => setIsAgreed(e.target.checked)}
-                    />
+              id="privacy-agreement"
+              checked={isAgreed}
+              onChange={(e) => setIsAgreed(e.target.checked)}
+            />
             <label
               htmlFor="privacy-agreement"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
@@ -219,12 +218,49 @@ const DaySchedule = ({ selectedDate, bookings }) => {
 };
 
 const MyBookings = ({ bookings }) => {
+  const [activeTab, setActiveTab] = useState('upcoming');
+  
+  const filteredBookings = useMemo(() => {
+    const now = new Date();
+    
+    if (activeTab === 'upcoming') {
+      return bookings.filter(booking => new Date(booking.date) >= now);
+    } else if (activeTab === 'past') {
+      return bookings.filter(booking => new Date(booking.date) < now);
+    } else {
+      return bookings;
+    }
+  }, [bookings, activeTab]);
+
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 mt-4">
-      <h2 className="text-xl font-bold mb-4">My Bookings</h2>
+    <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold">My Bookings</h2>
+        <div className="flex rounded-lg overflow-hidden border">
+          <button
+            className={`px-4 py-1 text-sm ${activeTab === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
+            onClick={() => setActiveTab('upcoming')}
+          >
+            Upcoming
+          </button>
+          <button
+            className={`px-4 py-1 text-sm ${activeTab === 'past' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
+            onClick={() => setActiveTab('past')}
+          >
+            Past
+          </button>
+          <button
+            className={`px-4 py-1 text-sm ${activeTab === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
+            onClick={() => setActiveTab('all')}
+          >
+            All
+          </button>
+        </div>
+      </div>
+      
       <div className="space-y-4">
-        {bookings.length > 0 ? (
-          bookings.map((booking, index) => {
+        {filteredBookings.length > 0 ? (
+          filteredBookings.map((booking, index) => {
             const formattedDate = booking.date ? format(parseISO(booking.date), 'yyyy-MM-dd') : 'Invalid date';
             return (
               <div key={index} className="border rounded-lg p-4">
@@ -259,7 +295,15 @@ const MyBookings = ({ bookings }) => {
             );
           })
         ) : (
-          <p className="text-center text-gray-500 py-4">No bookings found</p>
+          <div className="text-center py-8">
+            <div className="text-gray-400 mb-2">
+              <AlertCircle size={32} className="mx-auto" />
+            </div>
+            <p className="text-gray-500">No bookings found</p>
+            <button className="mt-4 text-blue-600 text-sm font-medium hover:underline">
+              Book a room now
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -270,6 +314,7 @@ const BookingApp = () => {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [bookings, setBookings] = useState([]);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [pendingBooking, setPendingBooking] = useState(null);
 
   // Function to fetch existing bookings
@@ -314,19 +359,15 @@ const BookingApp = () => {
           body: JSON.stringify(bookingWithStatus),
         });
 
-        if (response.ok) {
-          const savedBooking = await response.json();
-          setBookings((prev) => [...prev, savedBooking]);
-          alert('Booking submitted successfully!');
-        } else {
-          const errorData = await response.json();
-          alert(`Error: ${errorData.message || 'Failed to create booking'}`);
-        }
+        const savedBooking = await response.json();
+        setBookings((prev) => [...prev, savedBooking]);
+        setPendingBooking(null);
+        
+        // Show confirmation modal after successful booking
+        setIsConfirmationModalOpen(true);
       } catch (error) {
         console.error('Error submitting booking:', error);
         alert('Failed to submit booking. Please try again.');
-      } finally {
-        setPendingBooking(null);
       }
     }
   };
@@ -360,6 +401,12 @@ const BookingApp = () => {
         isOpen={isPrivacyModalOpen}
         onOpenChange={setIsPrivacyModalOpen}
         onConfirm={handlePrivacyConfirm}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isConfirmationModalOpen}
+        onOpenChange={setIsConfirmationModalOpen}
       />
     </div>
   );

@@ -3,7 +3,9 @@ import axios from 'axios';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import Header from './Header';
-import { Calendar, Clock, MapPin, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, Facebook, Instagram, Youtube, Linkedin } from 'lucide-react';
+import AIMLogo from "../../images/AIM_Logo.png";
+
 
 const HomePage = () => {
   const userId = localStorage.getItem('_id'); // Retrieve userId from localStorage
@@ -105,28 +107,26 @@ const HomePage = () => {
   if (error) return <ErrorState message={error} />;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50 flex flex-col">
       {/* Fixed Header */}
       <div className="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
         <Header />
       </div>
-
+  
       {/* Main Content */}
-      <div className="pt-16 pb-12">
+      <div className="pt-10 pb-16 flex-grow">
         {/* Hero Section */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
-          <div className="max-w-6xl mx-auto px-4 py-12">
-            <div className="flex flex-col md:flex-row items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold mb-2">Welcome, {user.firstName}!</h1>
-                <p className="text-blue-100">Find and book your ideal meeting space today</p>
-              </div>
+          <div className="max-w-8xl mx-auto px-4 py-12">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Welcome, {user.firstName}!</h1>
+              <p className="text-blue-100">Find and book your ideal meeting space today</p>
             </div>
           </div>
         </div>
-
+  
         {/* Dashboard Content */}
-        <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="bg-blue-100 max-w-6xl mx-auto px-4 py-8">
           <div className="grid md:grid-cols-3 gap-8">
             {/* Left Column - User Info */}
             <div className="md:col-span-1">
@@ -147,7 +147,7 @@ const HomePage = () => {
                   </div>
                 </div>
               </div>
-
+  
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <h3 className="font-bold text-lg mb-4">Need Help?</h3>
                 <p className="text-gray-600 text-sm mb-4">
@@ -158,7 +158,7 @@ const HomePage = () => {
                 </button>
               </div>
             </div>
-
+  
             {/* Right Column - Bookings & Facilities */}
             <div className="md:col-span-2">
               <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
@@ -185,7 +185,7 @@ const HomePage = () => {
                     </button>
                   </div>
                 </div>
-
+  
                 <div className="space-y-4">
                   {filteredBookings.length > 0 ? (
                     filteredBookings.map((booking) => (
@@ -204,7 +204,7 @@ const HomePage = () => {
                   )}
                 </div>
               </div>
-
+  
               <h2 className="text-xl font-bold mt-8 mb-4">Available Facilities</h2>
               <div className="grid md:grid-cols-2 gap-6">
                 <FacilityCard
@@ -226,9 +226,63 @@ const HomePage = () => {
           </div>
         </div>
       </div>
+  
+      <footer className="bg-purple-900 text-white mt-12">
+        {/* Main footer content */}
+        <div className="max-w-6xl mx-auto px-4 py-10">
+          {/* Tagline */}
+          <div className="mb-8 text-center md:text-left">
+            <h2 className="font-serif text-3xl md:text-4xl font-light tracking-wide">Lead. Inspire. Transform.</h2>
+          </div>
+
+          {/* Middle section */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Contact info */}
+            <div className="space-y-4 md:col-span-1">
+              <h3 className="text-xl font-semibold mb-4">Contact Us</h3>
+              <div className="flex items-start space-x-3">
+                <MapPin className="h-5 w-5 mt-1 flex-shrink-0" />
+                <p>Eugenio Lopez Foundation Bldg. 123, Paseo de Roxas Makati City 1229, Philippines</p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <Phone className="h-5 w-5 flex-shrink-0" />
+                <p>2133</p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <Mail className="h-5 w-5 flex-shrink-0" />
+                <p>atirazona@aim.edu</p>
+              </div>
+            </div>
+
+            {/* Logos */}
+            <div className="flex flex-col items-center md:items-end space-y-4 md:col-span-1">
+              <div className="w-200 h-16 rounded-md flex items-center justify-center p-2">
+                <img
+                  src={AIMLogo}
+                  alt="Asian Institute of Management Logo"
+                  className="object-contain"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom bar */}
+        <div className="border-t border-purple-800 py-4">
+          <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
+            <div className="text-sm text-purple-200 mb-2 md:mb-0">
+              &copy; {new Date().getFullYear()} AIM Room Booking. All rights reserved.
+            </div>
+            <div className="flex space-x-6 text-sm">
+              <a href="/terms" className="text-purple-200 hover:text-white transition-colors">Terms Privacy</a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
-};
+}
+
 
 // Loading State Component
 const LoadingState = () => (

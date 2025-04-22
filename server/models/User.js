@@ -48,7 +48,7 @@ userSchema.methods.generateAuthToken = function () {
   return token;
 };
 
-// Middleware to check if user is active
+
 userSchema.methods.checkActiveStatus = function () {
   return this.isActive;
 };

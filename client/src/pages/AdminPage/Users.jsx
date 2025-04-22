@@ -223,11 +223,56 @@ const Users = () => {
       alert(error.message);
     }
   };
+  
+  useEffect(() => {
+    if (showAddModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+  
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showAddModal]);
+  
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+  const sortedUsers = [...users].sort((a, b) => {
+    const { key, direction } = sortConfig;
+    if (!key) return 0;
+  
+    const valA = a[key];
+    const valB = b[key];
+  
+    // Sort numbers or strings
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return direction === 'asc' ? valA - valB : valB - valA;
+    }
+  
+    return direction === 'asc'
+      ? String(valA).localeCompare(String(valB))
+      : String(valB).localeCompare(String(valA));
+  });
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+  
+
 
   return (
-    <div>
+      <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh' }}>
       <TopBar />
-      <div className="p-4 bg-gray-100 min-h-screen w-full flex flex-col" style={{ marginTop: '60px' }}>
+      <div className="p-4 bg-gray-100 w-full flex flex-col">
         {/* Header with Add User button */}
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold">User Management</h1>
@@ -242,18 +287,27 @@ const Users = () => {
         {/* Users Table */}
         <div className="bg-white rounded-lg shadow-md border border-gray-200 w-full overflow-hidden">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-4 py-2 border-b w-1/6">First Name</th>
-                <th className="px-4 py-2 border-b w-1/6">Last Name</th>
-                <th className="px-4 py-2 border-b w-1/4">Email</th>
-                <th className="px-4 py-2 border-b w-1/6">Department</th>
-                <th className="px-4 py-2 border-b w-1/6">Status</th>
-                <th className="px-4 py-2 border-b w-1/6">Actions</th>
-              </tr>
-            </thead>
+          <thead>
+            <tr className="bg-gray-100">
+              <th onClick={() => handleSort('firstName')} className="cursor-pointer px-4 py-2 border-b w-1/6">
+                First Name {sortConfig.key === 'firstName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('lastName')} className="cursor-pointer px-4 py-2 border-b w-1/6">
+                Last Name {sortConfig.key === 'lastName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('email')} className="cursor-pointer px-4 py-2 border-b w-1/4">
+                Email {sortConfig.key === 'email' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('department')} className="cursor-pointer px-4 py-2 border-b w-1/6">
+                Department {sortConfig.key === 'department' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="px-4 py-2 border-b w-1/6">Status</th>
+              <th className="px-4 py-2 border-b w-1/6">Actions</th>
+            </tr>
+          </thead>
+
             <tbody>
-              {users.map((user) => (
+              {sortedUsers.map((user) => (
                 <tr key={user._id} className="hover:bg-gray-50 transition">
                   <td className="px-4 py-2 border-b">{user.firstName}</td>
                   <td className="px-4 py-2 border-b">{user.lastName}</td>
@@ -294,7 +348,7 @@ const Users = () => {
       {/* Add User Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white rounded-lg p-8 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Add New User</h2>
               <button
@@ -418,7 +472,7 @@ const Users = () => {
                     className="mr-2"
                   />
                   <span>Active User</span>
-                  </label>
+                </label>
               </div>
 
               <div className="flex justify-end">
@@ -555,5 +609,6 @@ const Users = () => {
     </div>
   );
 };
+
 
 export default Users;

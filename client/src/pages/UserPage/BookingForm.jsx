@@ -2,23 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
-
+ 
+import  Confirm from "../../components/ui/ConfirmationModal";  
 const API_BASE_URL = 'http://localhost:5000/api';
 
-const generateTimeOptions = () => {
-  const times = [];
-  for (let hour = 0; hour < 24; hour++) {
-    for (let minute = 0; minute < 60; minute += 30) {
-      const period = hour < 12 ? 'AM' : 'PM';
-      const formattedHour = hour % 12 === 0 ? 12 : hour % 12; // Convert 24-hour to 12-hour format
-      const formattedTime = `${formattedHour.toString().padStart(2, '0')}:${minute
-        .toString()
-        .padStart(2, '0')} ${period}`;
-      times.push(formattedTime);
-    }
-  }
-  return times;
-};
+const TIME_OPTIONS = [
+  '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+  '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
+  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
+  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+];
 
 const convertTo24HourFormat = (time) => {
   const [timePart, modifier] = time.split(' ');
@@ -33,16 +26,10 @@ const convertTo24HourFormat = (time) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 };
 
-const timeOptions = generateTimeOptions();
-
 const BookingForm = ({ onBookingSubmit }) => {
   const location = useLocation();
   const bookingData = location.state?.bookingData;
   
-  const userId = localStorage.getItem('_id'); // Fetch userId from localStorage
-  const token = localStorage.getItem('token');
-  const userRole = localStorage.getItem('role');
-
   const [formData, setFormData] = useState({
     title: '',
     firstName: '',
@@ -51,7 +38,7 @@ const BookingForm = ({ onBookingSubmit }) => {
     building: '',
     category: '',
     room: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
+    date: format(new Date(), 'yyyy-MM-dd'), 
     startTime: '09:00 AM',
     endTime: '10:00 AM',
     department: '',
@@ -60,7 +47,6 @@ const BookingForm = ({ onBookingSubmit }) => {
     recurrenceDays: [],
     endRecurrenceDate: '',
     notes: '',
-    userId: userId || '', // Include userId here
   });
 
   const [rooms, setRooms] = useState([]);
@@ -76,6 +62,10 @@ const BookingForm = ({ onBookingSubmit }) => {
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  const userId = localStorage.getItem('_id');
+  const token = localStorage.getItem('token');
+  const userRole = localStorage.getItem('role');
+
   // Predefined departments array
   const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
 
@@ -83,50 +73,77 @@ const BookingForm = ({ onBookingSubmit }) => {
   useEffect(() => {
     if (bookingData) {
       const { room, searchParams } = bookingData;
-      
-      // Parse dates and times from search params
-      const fromDate = searchParams.fromDate || format(new Date(), 'yyyy-MM-dd');
-      const fromTime = searchParams.fromTime || '09:00 AM';
-      const toTime = searchParams.toTime || '10:00 AM';
-      
-      // Update form with booking data
-      setFormData(prevFormData => ({
-        ...prevFormData,
-        building: room.building || '',
-        category: room.category || '',
-        room: room.roomName || '',
-        date: fromDate,
-        startTime: fromTime,
-        endTime: toTime,
-        isRecurring: searchParams.isRecurring || false
-      }));
+
+      // Ensure room and building data are properly set
+      if (room) {
+        setFormData((prevFormData) => ({
+          ...prevFormData,
+          building: room.building || '',
+          category: room.category || '',
+          room: room.roomName || '',
+        }));
+      }
+
+      // Ensure searchParams are properly set
+      if (searchParams) {
+        setFormData((prevFormData) => ({
+          ...prevFormData,
+          date: searchParams.fromDate || format(new Date(), 'yyyy-MM-dd'),
+          startTime: searchParams.fromTime || '09:00 AM',
+          endTime: searchParams.toTime || '10:00 AM',
+          isRecurring: searchParams.isRecurring || false,
+        }));
+      }
     }
   }, [bookingData]);
 
   // Fetch user data and populate the form
+  const fetchUserData = async () => {
+    try {
+      console.log(`Fetching user data for userId: ${userId}`);
+      const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const userData = response.data;
+
+      // Update form data with user information
+      setFormData((prevFormData) => ({
+        ...prevFormData,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        department: userData.department || '',
+        email: userData.email,
+      }));
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+
+      // If API fails, try to use localStorage data
+      setUseLocalData(true);
+
+      const firstName = localStorage.getItem('firstName') || '';
+      const lastName = localStorage.getItem('lastName') || '';
+      const email = localStorage.getItem('email') || '';
+
+      setFormData((prevFormData) => ({
+        ...prevFormData,
+        firstName,
+        lastName,
+        email,
+        department: 'ICT', // Default department
+      }));
+
+      setError('Could not fetch profile data from server. Using available local data.');
+    }
+  };
+
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        console.log("Token:", token); // Log the token
-        const response = await axios.get(`${API_BASE_URL}/users`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setUsers(response.data);
-      } catch (err) {
-        console.error('Error fetching users:', err);
-      }
-    };
-  
-    fetchUsers();
-  }, [token]);  
-        // Update form data with user information
-setFormData((prevFormData) => ({
-  ...prevFormData,
-  firstName: userData.firstName,
-  lastName: userData.lastName,
-  department: userData.department || '',
-  email: userData.email,
-}));
+    if (userId) {
+      fetchUserData();
+    } else {
+      setError('User ID not found. Please log in again.');
+    }
+  }, [userId, token, userRole]);
 
   // Fetch rooms data
   useEffect(() => {
@@ -211,7 +228,7 @@ setFormData((prevFormData) => ({
       };
       
       // Find relevant time slots in our options that fall within buffer zones
-      timeOptions.forEach(timeOption => {
+      TIME_OPTIONS.forEach(timeOption => {
         const timeOption24 = convertTo24HourFormat(timeOption);
         const timeOptionDate = new Date(`${formData.date}T${timeOption24}:00`);
         
@@ -370,6 +387,7 @@ setFormData((prevFormData) => ({
         {
           building: data.building,
           room: data.room,
+          category: data.category, // Include category
           startTime: startDateTime.toISOString(),
           endTime: endDateTime.toISOString(),
         },
@@ -403,52 +421,78 @@ setFormData((prevFormData) => ({
     e.preventDefault();
     setLoading(true);
     setError('');
-
+  
     try {
+      // Fetch user data to ensure it's up-to-date
+      await fetchUserData();
+  
       // Ensure date and time are valid
       if (!formData.date || !formData.startTime || !formData.endTime) {
         setError('Please provide a valid date, start time, and end time.');
         setLoading(false);
         return;
       }
-
+  
       // Convert time formats correctly
       const startTime24 = convertTo24HourFormat(formData.startTime);
       const endTime24 = convertTo24HourFormat(formData.endTime);
-
+  
       // Combine date and time into ISO strings
       const startDateTime = new Date(`${formData.date}T${startTime24}:00`);
       const endDateTime = new Date(`${formData.date}T${endTime24}:00`);
-
+  
       // Validate that the dates are valid
       if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
         setError('Invalid date or time. Please check your input.');
         setLoading(false);
         return;
       }
-
+  
       // Validate that start time is before end time
       if (startDateTime >= endDateTime) {
         setError('Start time must be earlier than end time.');
         setLoading(false);
         return;
       }
-
-      // Prepare payload with ISO strings and userId
+  
+      // Check availability one last time before submitting
+      const availabilityCheck = await axios.post(
+        `${API_BASE_URL}/bookings/check-availability`,
+        {
+          building: formData.building,
+          room: formData.room,
+          category: formData.category, // Include category
+          startTime: startDateTime.toISOString(),
+          endTime: endDateTime.toISOString(),
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+  
+      if (!availabilityCheck.data.available) {
+        setError(`Booking conflict: ${availabilityCheck.data.message}`);
+        setLoading(false);
+        return;
+      }
+  
+      // Prepare payload with ISO strings and user data
+      // Remove _id from formData if present to avoid duplicate key error
+      const { _id, ...cleanFormData } = formData;
+  
       const bookingPayload = {
-        ...formData,
+        ...cleanFormData, // Remove _id
         startTime: startDateTime.toISOString(),
         endTime: endDateTime.toISOString(),
-        userId, // Include userId in the payload
+        userId, // Ensure userId is included in the payload
       };
-
+  
       // Make API request
       const response = await axios.post(`${API_BASE_URL}/bookings`, bookingPayload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      localStorage.setItem('token', response.data.token);
-      onBookingSubmit(response.data);
+  
+      onBookingSubmit(response.data); // Notify parent component of successful booking
     } catch (err) {
       if (err.response && err.response.status === 400) {
         setError(err.response.data.message);
@@ -460,28 +504,13 @@ setFormData((prevFormData) => ({
       setLoading(false);
     }
   };
-
+  
   return (
     <div className="bg-white rounded-lg shadow-md p-8">
       <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
       
-      {error && <div className="text-red-500 mb-4 p-3 bg-red-50 border border-red-200 rounded">{error}</div>}
-      
-      {availabilityStatus && (
-        <div className={`mb-4 p-3 rounded ${availabilityStatus.available ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
-          <p className="font-medium">{availabilityStatus.available ? '✓ Selected time slot is available' : '⚠️ ' + availabilityStatus.message}</p>
-          {!availabilityStatus.available && (
-            <p className="text-sm mt-1">Remember: There's a 30-minute buffer before and after each booking.</p>
-          )}
-        </div>
-      )}
-      
-      {useLocalData && (
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-          Using data from local storage. Some information may not be up to date.
-        </div>
-      )}
-      
+     
+  
       <form onSubmit={handleSubmit}>
         {/* Booking Title */}
         <div className="mb-6">
@@ -688,19 +717,17 @@ setFormData((prevFormData) => ({
               required
             >
               <option value="">Select Start Time</option>
-              {timeOptions.map((time) => (
-                <option 
-                  key={time} 
-                  value={time} 
-                  disabled={isTimeSlotUnavailable(time)}
-                  title={getTimeSlotTooltip(time)}
-                  className={isTimeSlotUnavailable(time) ? 'text-gray-400' : ''}
+              {TIME_OPTIONS.map((time) => (
+                <option
+                  key={time}
+                  value={time}
+                  disabled={isTimeSlotUnavailable(time)} // Disable if the time slot is unavailable
+                  title={getTimeSlotTooltip(time)} // Add a tooltip to explain why it's unavailable
                 >
-                  {time} {isTimeSlotUnavailable(time) ? '(Unavailable)' : ''}
+                  {isTimeSlotUnavailable(time) ? `${time} (Unavailable)` : time}
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-500 mt-1">Unavailable times have existing bookings (with 30min buffer)</p>
           </div>
           <div>
             <label className="block text-gray-700 font-medium mb-2">
@@ -714,30 +741,21 @@ setFormData((prevFormData) => ({
               required
             >
               <option value="">Select End Time</option>
-              {timeOptions.map((time) => (
-                <option 
-                  key={time} 
-                  value={time} 
-                  disabled={isTimeSlotUnavailable(time)}
-                  title={getTimeSlotTooltip(time)}
-                  className={isTimeSlotUnavailable(time) ? 'text-gray-400' : ''}
+              {TIME_OPTIONS.map((time) => (
+                <option
+                  key={time}
+                  value={time}
+                  disabled={isTimeSlotUnavailable(time)} // Disable if the time slot is unavailable
+                  title={getTimeSlotTooltip(time)} // Add a tooltip to explain why it's unavailable
                 >
-                  {time} {isTimeSlotUnavailable(time) ? '(Unavailable)' : ''}
+                  {isTimeSlotUnavailable(time) ? `${time} (Unavailable)` : time}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Buffer Time Information */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded">
-          <h3 className="font-medium text-blue-800 mb-1">Booking Buffer Information</h3>
-          <p className="text-sm text-blue-700">
-            There is a required 30-minute buffer before and after all bookings. This means you cannot book a room if
-            there is an existing booking that ends less than 30 minutes before your start time or begins less than
-            30 minutes after your end time.
-          </p>
-        </div>
+        
 
         {/* Recurring Booking Options */}
         <div className="mb-6">

@@ -1,31 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { TextField } from '@mui/material';
-import format from 'date-fns/format';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-
-// Utility functions for date handling
-const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
-  const dates = [];
-  const currentDate = new Date(startDate);
-  const end = new Date(endDate);
-
-  while (currentDate <= end) {
-    dates.push(new Date(currentDate).toISOString().split('T')[0]); // Format as YYYY-MM-DD
-
-    if (recurrenceType === 'Daily') {
-      currentDate.setDate(currentDate.getDate() + 1);
-    } else if (recurrenceType === 'Weekly') {
-      currentDate.setDate(currentDate.getDate() + 7);
-    } else if (recurrenceType === 'Monthly') {
-      currentDate.setMonth(currentDate.getMonth() + 1);
-    }
-  }
-
-  return dates;
-};
+import TopBar from '../../components/AdminComponents/TopBar';
 
 const formatDate = (date) => {
   const options = { year: 'numeric', month: 'short', day: 'numeric' };
@@ -37,32 +12,31 @@ const parseISODate = (dateString) => {
   return isNaN(date.getTime()) ? '' : date.toISOString().split('T')[0];
 };
 
-// Base API URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Format time between 12-hour and 24-hour formats
+const convertTo24HourFormat = (time12h) => {
+  if (!time12h) return '';
+  
+  const [time, modifier] = time12h.split(' ');
+  let [hours, minutes] = time.split(':');
+  
+  if (hours === '12') {
+    hours = modifier === 'PM' ? '12' : '00';
+  } else {
+    hours = modifier === 'PM' ? String(parseInt(hours, 10) + 12) : hours.padStart(2, '0');
+  }
+  
+  return `${hours}:${minutes}`;
+};
+ 
 
-// Predefined options for dropdowns to avoid recreation
-const DEPARTMENTS = ['Engineering', 'Marketing', 'HR', 'Finance', 'Sales', 'IT'];
+// Base API URL
+const API_BASE_URL = 'http://localhost:5000/api';
+
+// Predefined options for dropdowns
+const DEPARTMENTS = ['Engineering', 'Marketing', 'HR', 'Finance', 'Sales', 'IT', 'ICT'];
 const BUILDINGS = ['ACC Building', 'AIM Building'];
 
-// Initial form state - extracted to avoid recreation on each render
-const initialFormState = {
-  title: '',
-  firstName: '',
-  lastName: '',
-  department: '',
-  category: '',
-  room: '',
-  building: '',
-  date: '',
-  startTime: null,
-  endTime: null,
-  notes: '',
-  recurring: 'No',
-  recurrenceEndDate: '',
-  status: 'pending',
-};
-
-// Room categories by building - memoized map
+// Room categories by building
 const BUILDING_CATEGORIES = {
   'ACC Building': [
     'Hybrid Caseroom',
@@ -79,356 +53,425 @@ const BUILDING_CATEGORIES = {
   ]
 };
 
+// Initial form state
+const initialFormState = {
+  title: '',
+  firstName: '',
+  lastName: '',
+  email: '',
+  department: '',
+  category: '',
+  room: '',
+  building: '',
+  date: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+  startTime: null,
+  endTime: null,
+  notes: '',
+  recurring: 'No',
+  recurrenceEndDate: '',
+  status: 'pending',
+};
+
+// Time options for dropdowns
+const TIME_OPTIONS = [
+  '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+  '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
+  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
+  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+];
+
+// Tab Button Component
+const TabButton = ({ label, active, onClick }) => (
+  <button
+    className={`px-4 py-2 font-medium rounded-lg transition ${
+      active ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+    }`}
+    onClick={onClick}
+  >
+    {label}
+  </button>
+);
+
 const Bookings = () => {
-  // State variables
+  // State for bookings data and filtering
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [activeBookingTab, setActiveBookingTab] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  
+  // State for modal controls
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [currentBooking, setCurrentBooking] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [submitLoading, setSubmitLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [recentBookings, setRecentBookings] = useState([]);
+  const [editBookingId, setEditBookingId] = useState(null);
+  
+  // State for room data
   const [rooms, setRooms] = useState([]);
   const [users, setUsers] = useState([]);
-  const [formError, setFormError] = useState({});
-  const [formData, setFormData] = useState(initialFormState);
+  
+  // Get token from localStorage
+  const token = localStorage.getItem('token');
 
-  const bookingsPerPage = 5;
-
+  // Fetch bookings data
   const fetchBookings = useCallback(async () => {
     setLoading(true);
+    setError('');
+    
     try {
-      const token = localStorage.getItem('authToken');
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      };
-
-      const response = await axios.get(`${API_BASE_URL}/bookings?userId=${userId}`, config); // Pass userId as a query parameter
-      if (Array.isArray(response.data)) {
-        setRecentBookings(response.data);
-      } else {
-        console.error("Unexpected bookings response format:", response.data);
-        setRecentBookings([]);
-      }
+      const response = await axios.get(`${API_BASE_URL}/bookings`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setBookings(response.data);
     } catch (err) {
-      console.error("Error fetching bookings:", err);
-      setError("Failed to load bookings. Please try again later.");
-      setRecentBookings([]);
+      console.error('Error fetching bookings:', err);
+      setError('Failed to load bookings. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [token]);
 
-  // Fetch rooms from the backend API - memoized
+  // Fetch rooms data
   const fetchRooms = useCallback(async () => {
     try {
-      const token = localStorage.getItem('authToken');
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      };
-
-      const response = await axios.get(`${API_BASE_URL}/rooms`, config);
-      if (Array.isArray(response.data)) {
-        setRooms(response.data);
-      } else if (response.data.rooms && Array.isArray(response.data.rooms)) {
-        setRooms(response.data.rooms);
-      } else {
-        console.error("Unexpected rooms response format:", response.data);
-        setRooms([]);
-      }
+      const response = await axios.get(`${API_BASE_URL}/rooms`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setRooms(response.data);
     } catch (err) {
-      console.error("Error fetching rooms:", err);
-      setRooms([]);
+      console.error('Error fetching rooms:', err);
     }
-  }, []);
+  }, [token]);
 
-  // Fetch users - memoized
+  // Fetch users data
   const fetchUsers = useCallback(async () => {
     try {
-      const token = localStorage.getItem('authToken');
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      };
-
-      const response = await axios.get(`${API_BASE_URL}/users`, config);
-      let usersData = [];
-
-      if (Array.isArray(response.data)) {
-        usersData = response.data;
-      } else if (response.data.users && Array.isArray(response.data.users)) {
-        usersData = response.data.users;
-      }
-
-      setUsers(usersData);
+      const response = await axios.get(`${API_BASE_URL}/users`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUsers(response.data);
     } catch (err) {
-      console.error("Error fetching users:", err);
-      setUsers([]);
+      console.error('Error fetching users:', err);
     }
-  }, []);
+  }, [token]);
 
-  // Load data on component mount
+  // Initialize data on component mount
   useEffect(() => {
     fetchBookings();
     fetchRooms();
     fetchUsers();
   }, [fetchBookings, fetchRooms, fetchUsers]);
 
-  // Filter bookings based on the active tab - memoized
+  // Filter bookings based on active tab
   const filteredBookings = useMemo(() => {
-    if (!Array.isArray(recentBookings)) return [];
+    if (activeBookingTab === 'all') return bookings;
+    
+    return bookings.filter(booking => {
+      if (activeBookingTab === 'pending') return booking.status === 'pending';
+      if (activeBookingTab === 'approved') return booking.status === 'confirmed';
+      if (activeBookingTab === 'declined') return booking.status === 'declined';
+      return true;
+    });
+  }, [bookings, activeBookingTab]);
 
-    return recentBookings.filter((booking) =>
-      activeBookingTab === 'all'
-        ? true
-        : activeBookingTab === 'approved'
-        ? booking.status === 'confirmed'
-        : activeBookingTab === 'pending'
-        ? booking.status === 'pending'
-        : booking.status === 'declined'
-    );
-  }, [recentBookings, activeBookingTab]);
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
+  const indexOfLastBooking = currentPage * itemsPerPage;
+  const indexOfFirstBooking = indexOfLastBooking - itemsPerPage;
+  const currentBookings = filteredBookings.slice(indexOfFirstBooking, indexOfLastBooking);
 
-  // Pagination logic - memoized
-  const currentBookings = useMemo(() => {
-    const indexOfLastBooking = currentPage * bookingsPerPage;
-    const indexOfFirstBooking = indexOfLastBooking - bookingsPerPage;
-    return filteredBookings.slice(indexOfFirstBooking, indexOfLastBooking);
-  }, [filteredBookings, currentPage, bookingsPerPage]);
-
-  // Calculate total pages once
-  const totalPages = useMemo(() =>
-    Math.ceil(filteredBookings.length / bookingsPerPage),
-    [filteredBookings.length, bookingsPerPage]
-  );
-
-  const handleNextPage = useCallback(() => {
+  // Pagination handlers
+  const handleNextPage = () => {
     if (currentPage < totalPages) {
-      setCurrentPage(prevPage => prevPage + 1);
+      setCurrentPage(currentPage + 1);
     }
-  }, [currentPage, totalPages]);
+  };
 
-  const handlePreviousPage = useCallback(() => {
+  const handlePreviousPage = () => {
     if (currentPage > 1) {
-      setCurrentPage(prevPage => prevPage - 1);
+      setCurrentPage(currentPage - 1);
     }
-  }, [currentPage]);
+  };
 
-  // Memoized function for getting categories
-  const getCategoriesForBuilding = useCallback((building) => {
-    return BUILDING_CATEGORIES[building] || [];
-  }, []);
+  // Modal handlers
+  const handleAddNewClick = () => {
+    resetForm();
+    setIsAddModalOpen(true);
+  };
 
-  // Memoized function for getting rooms
-  const getRoomsForBuildingAndCategory = useCallback((building, category) => {
-    if (!building || !category) return [];
-    return rooms.filter(
-      (room) => room.building === building && room.category === category
-    );
-  }, [rooms]);
-
-  // Memoized name validation
-  const validateNameExists = useCallback((firstName, lastName) => {
-    if (!firstName || !lastName) return false;
-    return users.some(
-      user => user.firstName?.toLowerCase() === firstName?.toLowerCase() &&
-        user.lastName?.toLowerCase() === lastName?.toLowerCase()
-    );
-  }, [users]);
-
-  const handleInputChange = useCallback((e) => {
-    const { name, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-  }, []);
-
-  const handleTimeChange = useCallback((timeType, newTime) => {
-    setFormData((prevData) => ({
-      ...prevData,
-      [timeType]: newTime,
-    }));
-  }, []);
-
-  const validateForm = useCallback(() => {
-    const errors = {};
-
-    // Validate names if we have users data
-    if (users.length > 0 && formData.firstName && formData.lastName) {
-      if (!validateNameExists(formData.firstName, formData.lastName)) {
-        errors.name = "This name doesn't match any existing account";
+  const handleEditClick = (booking) => {
+    setFormData({
+      ...booking,
+      date: parseISODate(booking.date),
+      startTime: new Date(booking.startTime).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }),
+      endTime: new Date(booking.endTime).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }),
+      recurring: booking.recurring || 'No',
+      recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
+    });
+    
+    setEditBookingId(booking._id);
+    setIsEditModalOpen(true);
+    
+    // Update available rooms based on selected building and category
+    if (booking.building) {
+      setCategories(BUILDING_CATEGORIES[booking.building] || []);
+      
+      if (booking.category) {
+        const availableRooms = rooms.filter(
+          room => room.building === booking.building && room.category === booking.category
+        );
+        setAvailableRooms(availableRooms);
       }
     }
+  };
 
-    // Validate time fields
-    if (!formData.startTime || !formData.endTime) {
-      errors.time = "Both start and end times are required";
-    }
-
-    setFormError(errors);
-    return Object.keys(errors).length === 0;
-  }, [formData.firstName, formData.lastName, formData.startTime, formData.endTime, users.length, validateNameExists]);
-
-  const handleSubmit = useCallback(async (e) => {
-    e.preventDefault();
-
-    if (!validateForm()) {
+  const handleDeleteBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to delete this booking?')) {
       return;
     }
-
-    setSubmitLoading(true);
-    setError(null);
-
+    
     try {
-      const token = localStorage.getItem('authToken');
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      };
+      await axios.delete(`${API_BASE_URL}/bookings/${bookingId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchBookings(); // Refresh the bookings list
+    } catch (err) {
+      console.error('Error deleting booking:', err);
+      setError('Failed to delete booking. Please try again.');
+    }
+  };
 
-      // Parse startTime and endTime strings into Date objects
-      const today = new Date();
-      const parseTime = (timeString) => {
-        const [time, period] = timeString.split(' ');
-        let [hours, minutes] = time.split(':').map(Number);
+  // Form states
+  const [formData, setFormData] = useState({ ...initialFormState });
+  const [formError, setFormError] = useState({});
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [availableRooms, setAvailableRooms] = useState([]);
 
-        if (period === 'PM' && hours < 12) hours += 12;
-        if (period === 'AM' && hours === 12) hours = 0;
+  // Reset form to initial state
+  const resetForm = () => {
+    setFormData({ ...initialFormState });
+    setFormError({});
+    setCategories([]);
+    setAvailableRooms([]);
+  };
 
-        const date = new Date(today);
-        date.setHours(hours, minutes, 0, 0);
-        return date;
-      };
+  // Form input handlers
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Reset dependent fields when changing building or category
+    if (name === 'building') {
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value,
+        category: '',
+        room: ''
+      }));
+      
+      // Update available categories
+      setCategories(BUILDING_CATEGORIES[value] || []);
+      setAvailableRooms([]);
+    } 
+    else if (name === 'category') {
+      setFormData(prev => ({ 
+        ...prev,
+        [name]: value,
+        room: ''
+      }));
+      
+      // Update available rooms
+      if (formData.building && value) {
+        const filteredRooms = rooms.filter(
+          room => room.building === formData.building && room.category === value
+        );
+        setAvailableRooms(filteredRooms);
+      }
+    }
+    
+    // Clear related errors
+    if (name === 'firstName' || name === 'lastName') {
+      setFormError(prev => ({ ...prev, name: '' }));
+    }
+  };
 
-      const bookingData = {
-        ...formData,
-        startTime: parseTime(formData.startTime).toISOString(),
-        endTime: parseTime(formData.endTime).toISOString(),
-        userId: userId || '', // Include userId in the payload
-      };
-
-      if (isEditModalOpen && currentBooking) {
-        await axios.put(`${API_BASE_URL}/bookings/${currentBooking._id}`, bookingData, config);
+  // Handle time selection
+  const handleTimeChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Validate start time before end time
+    if (field === 'startTime' && formData.endTime) {
+      const start = convertTo24HourFormat(value);
+      const end = convertTo24HourFormat(formData.endTime);
+      
+      if (start >= end) {
+        setFormError(prev => ({ 
+          ...prev, 
+          time: 'Start time must be before end time' 
+        }));
       } else {
-        await axios.post(`${API_BASE_URL}/bookings`, bookingData, config);
+        setFormError(prev => ({ ...prev, time: '' }));
+      }
+    }
+    
+    if (field === 'endTime' && formData.startTime) {
+      const start = convertTo24HourFormat(formData.startTime);
+      const end = convertTo24HourFormat(value);
+      
+      if (start >= end) {
+        setFormError(prev => ({ 
+          ...prev, 
+          time: 'End time must be after start time' 
+        }));
+      } else {
+        setFormError(prev => ({ ...prev, time: '' }));
+      }
+    }
+  };
+
+  // Handle user selection
+  const handleUserSelect = (user) => {
+    setFormData(prev => ({
+      ...prev,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      department: user.department || ''
+    }));
+  };
+
+  // Form submission handler
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitLoading(true);
+    setError('');
+    setFormError({});
+    
+    // Form validation
+    let hasError = false;
+    const errors = {};
+    
+    if (!formData.firstName || !formData.lastName) {
+      errors.name = 'First name and last name are required';
+      hasError = true;
+    }
+    
+    if (!formData.startTime || !formData.endTime) {
+      errors.time = 'Start and end times are required';
+      hasError = true;
+    } else {
+      const start = convertTo24HourFormat(formData.startTime);
+      const end = convertTo24HourFormat(formData.endTime);
+      
+      if (start >= end) {
+        errors.time = 'Start time must be before end time';
+        hasError = true;
+      }
+    }
+    
+    if (formData.recurring !== 'No' && !formData.recurrenceEndDate) {
+      errors.recurrence = 'Recurrence end date is required for recurring bookings';
+      hasError = true;
+    }
+    
+    if (hasError) {
+      setFormError(errors);
+      setSubmitLoading(false);
+      return;
+    }
+    
+    try {
+      // Retrieve userId from localStorage
+      const userId = localStorage.getItem('userId');
+
+      // Fetch user data using the API if userId exists
+      let userData = {};
+      if (userId) {
+        const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        userData = response.data;
       }
 
-      fetchBookings();
+      // Format dates for API
+      const startTime24 = convertTo24HourFormat(formData.startTime);
+      const endTime24 = convertTo24HourFormat(formData.endTime);
+
+      const startDateTime = new Date(`${formData.date}T${startTime24}:00`);
+      const endDateTime = new Date(`${formData.date}T${endTime24}:00`);
+
+      // Prepare payload
+      const payload = {
+        ...formData,
+        startTime: startDateTime.toISOString(),
+        endTime: endDateTime.toISOString(),
+        recurrenceEndDate: formData.recurrenceEndDate ? new Date(formData.recurrenceEndDate).toISOString() : null,
+        userId: userId || null, // Include userId if it exists, otherwise set to null
+        bookedBy: userData.name || 'Admin', // Use fetched user data or default to 'Admin'
+      };
+
+      let responseBooking;
+
+      if (isEditModalOpen && editBookingId) {
+        // Update existing booking
+        responseBooking = await axios.put(
+          `${API_BASE_URL}/bookings/${editBookingId}`,
+          payload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } else {
+        // Create new booking
+        responseBooking = await axios.post(
+          `${API_BASE_URL}/bookings`,
+          payload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+
+      // Reset and refresh
       resetForm();
       setIsAddModalOpen(false);
       setIsEditModalOpen(false);
+      fetchBookings();
     } catch (err) {
-      console.error("Error submitting booking:", err);
-      setError(err.response?.data?.message || "Failed to save booking. Please try again.");
+      console.error('Error submitting booking:', err);
+      if (err.response && err.response.data && err.response.data.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Failed to save booking. Please try again.');
+      }
     } finally {
       setSubmitLoading(false);
     }
-  }, [formData, validateForm, isEditModalOpen, currentBooking, fetchBookings]);
+  };
 
-  const handleDeleteBooking = useCallback(async (id) => {
-    if (window.confirm('Are you sure you want to delete this booking?')) {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem('authToken');
-        const config = {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        };
-
-        await axios.delete(`${API_BASE_URL}/bookings/${id}`, config);
-        fetchBookings(); // Refresh after delete
-      } catch (err) {
-        console.error("Error deleting booking:", err);
-        setError(err.response?.data?.message || "Failed to delete booking");
-      } finally {
-        setLoading(false);
-      }
-    }
-  }, [fetchBookings]);
-
-  const resetForm = useCallback(() => {
-    setFormData(initialFormState);
-    setFormError({});
-    setCurrentBooking(null);
-  }, []);
-
-  const handleEditClick = useCallback((booking) => {
-    setCurrentBooking(booking);
+  // User search functionality
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  
+  const filteredUsers = useMemo(() => {
+    if (!userSearchQuery) return [];
     
-    // Parse time string to set startTime and endTime
-    let startTime = null;
-    let endTime = null;
-    
-    if (booking.time) {
-      const timeParts = booking.time.split(' - ');
-      if (timeParts.length === 2) {
-        // Create Date objects for today with the specified times
-        const today = new Date();
-        const startParts = timeParts[0].match(/(\d+):(\d+)\s*(am|pm)/i);
-        const endParts = timeParts[1].match(/(\d+):(\d+)\s*(am|pm)/i);
-        
-        if (startParts && endParts) {
-          // Parse start time
-          let startHour = parseInt(startParts[1]);
-          const startMinute = parseInt(startParts[2]);
-          const startPeriod = startParts[3].toLowerCase();
-          
-          if (startPeriod === 'pm' && startHour < 12) startHour += 12;
-          if (startPeriod === 'am' && startHour === 12) startHour = 0;
-          
-          startTime = new Date(today);
-          startTime.setHours(startHour, startMinute, 0);
-          
-          // Parse end time
-          let endHour = parseInt(endParts[1]);
-          const endMinute = parseInt(endParts[2]);
-          const endPeriod = endParts[3].toLowerCase();
-          
-          if (endPeriod === 'pm' && endHour < 12) endHour += 12;
-          if (endPeriod === 'am' && endHour === 12) endHour = 0;
-          
-          endTime = new Date(today);
-          endTime.setHours(endHour, endMinute, 0);
-        }
-      }
-    }
-    
-    // Format date for the form input
-    const formattedBooking = {
-      ...booking,
-      date: parseISODate(booking.date),
-      startTime: startTime,
-      endTime: endTime,
-      recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : ''
-    };
-    
-    setFormData(formattedBooking);
-    setIsEditModalOpen(true);
-  }, []);
-
-  const handleAddNewClick = useCallback(() => {
-    resetForm();
-    setIsAddModalOpen(true);
-  }, [resetForm]);
-
-  // Memoized BookingForm component to avoid unnecessary re-renders
+    return users.filter(user => 
+      user.firstName.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+      user.lastName.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+      (user.email && user.email.toLowerCase().includes(userSearchQuery.toLowerCase()))
+    ).slice(0, 5); // Limit to 5 results
+  }, [users, userSearchQuery]);
+  
+  // BookingForm component
   const BookingForm = React.memo(({ isEdit }) => {
-    const categories = getCategoriesForBuilding(formData.building);
-    const availableRooms = getRoomsForBuildingAndCategory(
-      formData.building,
-      formData.category
-    );
-
+     
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -578,8 +621,7 @@ const Bookings = () => {
             >
               <option value="">Select Start Time</option>
               {[
-                '12:00 AM', '12:30 AM', '1:00 AM', '1:30 AM', '2:00 AM', '2:30 AM', '3:00 AM', '3:30 AM',
-                '4:00 AM', '4:30 AM', '5:00 AM', '5:30 AM', '6:00 AM', '6:30 AM', '7:00 AM', '7:30 AM',
+        
                 '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
                 '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
                 '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
@@ -602,12 +644,12 @@ const Bookings = () => {
             >
               <option value="">Select End Time</option>
               {[
-                '12:00 AM', '12:30 AM', '1:00 AM', '1:30 AM', '2:00 AM', '2:30 AM', '3:00 AM', '3:30 AM',
-                '4:00 AM', '4:30 AM', '5:00 AM', '5:30 AM', '6:00 AM', '6:30 AM', '7:00 AM', '7:30 AM',
-                '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-                '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
-                '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-                '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+                 
+                
+                 '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+                 '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
+                 '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
+                 '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
               ].map((time) => (
                 <option key={time} value={time}>
                   {time}
@@ -713,21 +755,40 @@ const Bookings = () => {
     );
   });
 
-  // TabButton component to reduce repetition
-  const TabButton = React.memo(({ label, active, onClick }) => (
-    <button
-      className={`px-4 py-2 rounded-lg font-medium transition ${
-        active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-      }`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  ));
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+  
+  const sortedBookings = [...currentBookings].sort((a, b) => {
+    const { key, direction } = sortConfig;
+    if (!key) return 0;
+  
+    const valA = a[key];
+    const valB = b[key];
+  
+    // Handle dates, numbers, or strings
+    const aVal = typeof valA === 'string' || valA instanceof Date ? String(valA) : valA;
+    const bVal = typeof valB === 'string' || valB instanceof Date ? String(valB) : valB;
+  
+    return direction === 'asc'
+      ? aVal.localeCompare(bVal)
+      : bVal.localeCompare(aVal);
+  });
+ 
 
   return (
-    <div>
-      <div className="p-6 bg-gray-50 min-h-screen">
+    <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
+      <TopBar />
+      <div className="p-2 bg-gray-50 min-h-screen">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Bookings</h2>
           <button
@@ -764,24 +825,48 @@ const Bookings = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-100">
-                <th className="px-4 py-2 border-b">Booking Title</th>
-                <th className="px-4 py-2 border-b">First Name</th>
-                <th className="px-4 py-2 border-b">Last Name</th>
-                <th className="px-4 py-2 border-b">Department</th>
-                <th className="px-4 py-2 border-b">Category</th>
-                <th className="px-4 py-2 border-b">Room</th>
-                <th className="px-4 py-2 border-b">Building</th>
-                <th className="px-4 py-2 border-b">Date</th>
-                <th className="px-4 py-2 border-b">Time</th>
-                <th className="px-4 py-2 border-b">Notes</th>
-                <th className="px-4 py-2 border-b">Status</th>
-                <th className="px-4 py-2 border-b">Recurring</th>
-                <th className="px-4 py-2 border-b">Actions</th>
+              <th onClick={() => handleSort('title')} className="cursor-pointer px-4 py-2 border-b">
+                Booking Title {sortConfig.key === 'title' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('firstName')} className="cursor-pointer px-4 py-2 border-b">
+                First Name {sortConfig.key === 'firstName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('lastName')} className="cursor-pointer px-4 py-2 border-b">
+                Last Name {sortConfig.key === 'lastName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('department')} className="cursor-pointer px-4 py-2 border-b">
+                Department {sortConfig.key === 'department' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('category')} className="cursor-pointer px-4 py-2 border-b">
+                Category {sortConfig.key === 'category' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('room')} className="cursor-pointer px-4 py-2 border-b">
+                Room {sortConfig.key === 'room' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('building')} className="cursor-pointer px-4 py-2 border-b">
+                Building {sortConfig.key === 'building' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('date')} className="cursor-pointer px-4 py-2 border-b">
+                Date {sortConfig.key === 'date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('startTime')} className="cursor-pointer px-4 py-2 border-b">
+                Time {sortConfig.key === 'startTime' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('notes')} className="cursor-pointer px-4 py-2 border-b">
+                Notes {sortConfig.key === 'notes' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('status')} className="cursor-pointer px-4 py-2 border-b">
+                Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th onClick={() => handleSort('recurring')} className="cursor-pointer px-4 py-2 border-b">
+                Recurring {sortConfig.key === 'recurring' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="px-4 py-2 border-b">Actions</th>
               </tr>
             </thead>
             <tbody>
               {!loading && currentBookings.length > 0 ? (
-                currentBookings.map((booking) => (
+                sortedBookings.map((booking) => (
                   <tr key={booking._id || booking.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-2 border-b">{booking.title}</td>
                     <td className="px-4 py-2 border-b">{booking.firstName}</td>

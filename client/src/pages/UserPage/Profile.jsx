@@ -227,15 +227,13 @@ const Profile = () => {
   }, [useLocalData, userId]);
 
   return (
-    <div>
+    <div className="bg-blue-200 p-10 w-full">
       {/* Ensure the Header spans the full width */}
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
         <Header />
-      </div>
+      </div>  
 
-      {/* Add padding to avoid content overlapping with the fixed header */}
-      <div style={{ paddingTop: '80px', textAlign: 'center' }}>
-        <div className="max-w-4xl mx-auto p-6">
+        <div>
           <h1 className="text-2xl font-bold mb-6">Profile Information</h1>
 
           {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
@@ -389,20 +387,6 @@ const Profile = () => {
             </div>
           </div>
 
-          {/* User Info Section */}
-          <div className="flex items-center space-x-4">
-            <div className="h-16 w-16 rounded-full overflow-hidden">
-              <img
-                alt={`${user.firstName} ${user.lastName}`}
-                className="h-full w-full object-cover"
-                src={user.profileImage || '/default-avatar.png'} // Use default if no profile image
-              />
-            </div>
-            <div>
-              <h2 className="font-bold text-lg">{`${user.firstName} ${user.lastName}`}</h2>
-            </div>
-          </div>
-
           {/* Change Password Section */}
           <div className="bg-white shadow-md rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Change Password</h2>
@@ -454,7 +438,6 @@ const Profile = () => {
           </div>
         </div>
       </div>
-    </div>
   );
 };
 

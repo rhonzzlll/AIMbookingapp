@@ -481,12 +481,17 @@ const BookingCalendar = () => {
   };
 
   return (
-    <div className="h-screen w-full bg-white p-4">
-      <div className="h-full w-full border rounded shadow-md overflow-hidden">
-        {view === 'month' ? renderMonthView() : renderDayView()}
+    <div className="fixed top-0 left-60 right-0 bottom-0 overflow-hidden">
+      <div className="h-full w-full px-4 flex justify-center">
+        <div className="h-full w-full max-w-[1200px] border rounded shadow-md overflow-auto">
+          {view === 'month' ? renderMonthView() : renderDayView()}
+        </div>
       </div>
     </div>
   );
+  
+  
+  
 };
 
 export default BookingCalendar;

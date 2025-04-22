@@ -3,8 +3,7 @@ const router = express.Router();
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
-// Authentication helper function embedded in this file
+ 
 const authenticate = async (req, res, next) => {
   try {
     // Check if authorization header exists
