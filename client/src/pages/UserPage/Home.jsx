@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import Header from './Header';
 import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, Facebook, Instagram, Youtube, Linkedin } from 'lucide-react';
 import AIMLogo from "../../images/AIM_Logo.png";
+import AIMbg from "../../images/AIM_bldg.jpg";
 
 
 const HomePage = () => {
@@ -106,171 +107,187 @@ const HomePage = () => {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
 
+  console.log("AIMbg path:", AIMbg);
+
   return (
-    <div className="bg-gray-50 flex flex-col">
-      {/* Fixed Header */}
-      <div className="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
-        <Header />
-      </div>
-  
-      {/* Main Content */}
-      <div className="pt-10 pb-16 flex-grow">
-        {/* Hero Section */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white">
-          <div className="max-w-8xl mx-auto px-4 py-12">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">Welcome, {user.firstName}!</h1>
-              <p className="text-blue-100">Find and book your ideal meeting space today</p>
-            </div>
-          </div>
+    <div className="relative min-h-screen w-full overflow-x-auto">
+      {/* Fixed Background Image and Overlay */}
+        <div className="fixed inset-0 z-0">
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `url(${AIMbg})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+              backgroundAttachment: "fixed",
+            }}
+          />
+          <div className="absolute inset-0 bg-black bg-opacity-40" />
         </div>
+
   
-        {/* Dashboard Content */}
-        <div className="bg-blue-100 max-w-6xl mx-auto px-4 py-8">
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Left Column - User Info */}
-            <div className="md:col-span-1">
-              <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="h-16 w-16 rounded-full overflow-hidden">
-                    <img
-                      src={user.profileImage}
-                      alt={`${user.firstName} ${user.lastName}`}
-                      className="h-full w-full object-cover"
-                    />
+      {/* Scrollable Foreground Layer */}
+      <div className="relative z-10 flex flex-col min-h-screen w-full">
+        {/* Fixed Header */}
+        <header className="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
+          <Header />
+        </header>
+  
+        {/* Main content with dark overlay */}
+        <main className="pt-16 text-white flex-grow">
+          {/* Hero Section */}
+          <div className="container mx-auto px-4 pb-4 text-center">
+            <h1 className="text-4xl font-bold">Welcome, {user.firstName}!</h1>
+            <p className="text-blue-100">Find and book your ideal meeting space today</p>
+          </div>
+  
+          {/* Dashboard Content */}
+          <div className="container mx-auto px-4 pb-16">
+            <div className="grid md:grid-cols-3 gap-8">
+              {/* Left Column */}
+              <div className="space-y-6">
+                {/* User Info Card */}
+                <div className="bg-white bg-opacity-90 text-gray-800 rounded-xl shadow-sm p-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="h-16 w-16 rounded-full overflow-hidden">
+                      <img
+                        src={user.profileImage || "/placeholder.svg"}
+                        alt={`${user.firstName} ${user.lastName}`}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-lg">{`${user.firstName} ${user.lastName}`}</h2>
+                      {user.department && <p className="text-sm text-gray-500">{user.department}</p>}
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="font-bold text-lg">{`${user.firstName} ${user.lastName}`}</h2>
-                    {user.department && (
-                      <p className="text-sm text-gray-500">{user.department}</p>
+                </div>
+  
+                {/* Help Card */}
+                <div className="bg-white bg-opacity-90 text-gray-800 rounded-xl shadow-sm p-6">
+                  <h3 className="font-bold text-lg mb-4">Need Help?</h3>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Contact our support team for assistance with bookings or technical issues.
+                  </p>
+                  <button className="w-full bg-gray-100 text-gray-700 font-medium py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                    Contact Support
+                  </button>
+                </div>
+              </div>
+  
+              {/* Right Column */}
+              <div className="md:col-span-2 space-y-8">
+                {/* My Bookings */}
+                <div className="bg-white bg-opacity-90 text-gray-800 rounded-xl shadow-sm p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold">My Bookings</h2>
+                    <div className="flex rounded-lg overflow-hidden border">
+                      {["upcoming", "past", "all"].map((tab) => (
+                        <button
+                          key={tab}
+                          className={`px-4 py-1 text-sm ${
+                            activeTab === tab ? "bg-blue-600 text-white" : "bg-white text-gray-700"
+                          }`}
+                          onClick={() => setActiveTab(tab)}
+                        >
+                          {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+  
+                  <div className="space-y-4">
+                    {filteredBookings.length > 0 ? (
+                      filteredBookings.map((booking) => <BookingCard key={booking.id} booking={booking} />)
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="text-gray-400 mb-2">
+                          <AlertCircle size={32} className="mx-auto" />
+                        </div>
+                        <p className="text-gray-500">No bookings found</p>
+                        <button className="mt-4 text-blue-600 text-sm font-medium hover:underline">
+                          Book a room now
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
+  
+                {/* Facilities */}
+                <div>
+                  <h2 className="text-xl font-bold mb-4 text-white">Available Facilities</h2>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <FacilityCard
+                      imageSrc="/images/AIM.png"
+                      title="Asian Institute of Management Building"
+                      description="Contemporary venue perfect for conferences, workshops, and high-level discussions."
+                      bookingLink="/aim-rooms"
+                      features={["Minimal outside noise", "Air conditioning", "Creative Atmosphere"]}
+                    />
+                    <FacilityCard
+                      imageSrc="/images/ACC.png"
+                      title="Asian Institute of Management Conference Center Building"
+                      description="Modern space for meetings, seminars, and executive discussions."
+                      bookingLink="/acc-rooms"
+                      features={["Tech-Ready", "Quiet and Private", "Modern and Bright", "Air conditioning"]}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+  
+          {/* Footer */}
+          <footer className="bg-blue-900 text-white w-full">
+            <div className="container mx-auto px-4 py-10">
+              <div className="mb-8 text-center">
+                <h2 className="font-serif text-3xl md:text-4xl font-light tracking-wide">
+                  Lead. Inspire. Transform.
+                </h2>
               </div>
   
-            
-            </div>
-  
-            {/* Right Column - Bookings & Facilities */}
-            <div className="md:col-span-2">
-              <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-bold">My Bookings</h2>
-                  <div className="flex rounded-lg overflow-hidden border">
-                    <button
-                      className={`px-4 py-1 text-sm ${activeTab === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
-                      onClick={() => setActiveTab('upcoming')}
-                    >
-                      Upcoming
-                    </button>
-                    <button
-                      className={`px-4 py-1 text-sm ${activeTab === 'past' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
-                      onClick={() => setActiveTab('past')}
-                    >
-                      Past
-                    </button>
-                    <button
-                      className={`px-4 py-1 text-sm ${activeTab === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
-                      onClick={() => setActiveTab('all')}
-                    >
-                      All
-                    </button>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* Contact info */}
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold mb-4">Contact Us</h3>
+                  <div className="flex items-start space-x-3">
+                    <MapPin className="h-5 w-5 mt-1 flex-shrink-0" />
+                    <p>Eugenio Lopez Foundation Bldg. 123, Paseo de Roxas Makati City 1229, Philippines</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Phone className="h-5 w-5 flex-shrink-0" />
+                    <p>2133</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Mail className="h-5 w-5 flex-shrink-0" />
+                    <p>atirazona@aim.edu</p>
                   </div>
                 </div>
   
-                <div className="space-y-4">
-                  {filteredBookings.length > 0 ? (
-                    filteredBookings.map((booking) => (
-                      <BookingCard key={booking.id} booking={booking} />
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="text-gray-400 mb-2">
-                        <AlertCircle size={32} className="mx-auto" />
-                      </div>
-                      <p className="text-gray-500">No bookings found</p>
-                      <button className="mt-4 text-blue-600 text-sm font-medium hover:underline">
-                        Book a room now
-                      </button>
-                    </div>
-                  )}
+                {/* Logo */}
+                <div className="flex items-center justify-center">
+                  <div className="h-32 p-2">
+                    <img src={AIMLogo || "/placeholder.svg"} alt="AIM Logo" className="object-contain h-full" />
+                  </div>
                 </div>
               </div>
+            </div>
   
-              <h2 className="text-xl font-bold mt-8 mb-4">Available Facilities</h2>
-              <div className="grid md:grid-cols-2 gap-6">
-                <FacilityCard
-                  imageSrc="/src/images/AIM.png"
-                  title="Asian Institute of Management Building"
-                  description="Contemporary venue perfect for conferences, workshops, and high-level discussions."
-                  bookingLink="/aim-rooms"
-                  features={['Minimal outside noise', 'Air conditioning', 'Creative Atmosphere']}
-                />
-                <FacilityCard
-                  imageSrc="/src/images/ACC.png"
-                  title="Asian Institute of Management Conference Center Building"
-                  description="Modern space for meetings, seminars, and executive discussions."
-                  bookingLink="/acc-rooms"
-                  features={['Tech-Ready', 'Quiet and Private', 'Modern and Bright', 'Air conditioning']}
-                />
+            {/* Bottom Bar */}
+            <div className="border-t border-purple-800 py-4 px-4 flex flex-col md:flex-row justify-between items-center">
+              <div className="text-sm text-purple-200 mb-2 md:mb-0">
+                &copy; {new Date().getFullYear()} AIM Room Booking. All rights reserved.
+              </div>
+              <div className="flex space-x-6 text-sm">
+                <a href="/terms" className="text-purple-200 hover:text-white transition-colors">
+                  Terms Privacy
+                </a>
               </div>
             </div>
-          </div>
-        </div>
+          </footer>
+        </main>
       </div>
-  
-      <footer className="bg-purple-900 text-white mt-12">
-        {/* Main footer content */}
-        <div className="max-w-6xl mx-auto px-4 py-10">
-          {/* Tagline */}
-          <div className="mb-8 text-center md:text-left">
-            <h2 className="font-serif text-3xl md:text-4xl font-light tracking-wide">Lead. Inspire. Transform.</h2>
-          </div>
-
-          {/* Middle section */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Contact info */}
-            <div className="space-y-4 md:col-span-1">
-              <h3 className="text-xl font-semibold mb-4">Contact Us</h3>
-              <div className="flex items-start space-x-3">
-                <MapPin className="h-5 w-5 mt-1 flex-shrink-0" />
-                <p>Eugenio Lopez Foundation Bldg. 123, Paseo de Roxas Makati City 1229, Philippines</p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Phone className="h-5 w-5 flex-shrink-0" />
-                <p>2133</p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Mail className="h-5 w-5 flex-shrink-0" />
-                <p>atirazona@aim.edu</p>
-              </div>
-            </div>
-
-            {/* Logos */}
-            <div className="flex flex-col items-center md:items-end space-y-4 md:col-span-1">
-              <div className="w-200 h-16 rounded-md flex items-center justify-center p-2">
-                <img
-                  src={AIMLogo}
-                  alt="Asian Institute of Management Logo"
-                  className="object-contain"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom bar */}
-        <div className="border-t border-purple-800 py-4">
-          <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
-            <div className="text-sm text-purple-200 mb-2 md:mb-0">
-              &copy; {new Date().getFullYear()} AIM Room Booking. All rights reserved.
-            </div>
-            <div className="flex space-x-6 text-sm">
-              <a href="/terms" className="text-purple-200 hover:text-white transition-colors">Terms Privacy</a>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

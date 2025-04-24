@@ -17,6 +17,7 @@ const Users = () => {
     role: 'user',
   });
   const [errors, setErrors] = useState({});
+  const [searchTerm, setSearchTerm] = useState('');
 
   const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
 
@@ -83,6 +84,8 @@ const Users = () => {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
+  
 
   // Open add user modal
   const handleAddUser = () => {
@@ -223,6 +226,7 @@ const Users = () => {
       alert(error.message);
     }
   };
+
   
   useEffect(() => {
     if (showAddModal) {
@@ -271,7 +275,7 @@ const Users = () => {
 
   return (
       <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh' }}>
-      <TopBar />
+      <TopBar onSearch={setSearchTerm} />
       <div className="p-4 bg-gray-100 w-full flex flex-col">
         {/* Header with Add User button */}
         <div className="flex justify-between items-center mb-4">
@@ -307,7 +311,13 @@ const Users = () => {
           </thead>
 
             <tbody>
-              {sortedUsers.map((user) => (
+            {sortedUsers
+              .filter(user =>
+                `${user.firstName} ${user.lastName} ${user.email} ${user.department}`
+                  .toLowerCase()
+                  .includes(searchTerm.toLowerCase())
+              )
+              .map((user) => (
                 <tr key={user._id} className="hover:bg-gray-50 transition">
                   <td className="px-4 py-2 border-b">{user.firstName}</td>
                   <td className="px-4 py-2 border-b">{user.lastName}</td>

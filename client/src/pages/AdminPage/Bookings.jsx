@@ -100,6 +100,7 @@ const Bookings = () => {
   const [activeBookingTab, setActiveBookingTab] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [searchTerm, setSearchTerm] = useState('');
   
   // State for modal controls
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -889,7 +890,7 @@ const Bookings = () => {
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
-      <TopBar />
+      <TopBar onSearch={setSearchTerm} />
       <div className="p-2 bg-gray-50 min-h-screen">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Bookings</h2>
@@ -925,50 +926,43 @@ const Bookings = () => {
         {/* Bookings Table */}
         <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
-              <th onClick={() => handleSort('title')} className="cursor-pointer px-4 py-2 border-b">
-                Booking Title {sortConfig.key === 'title' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('firstName')} className="cursor-pointer px-4 py-2 border-b">
-                First Name {sortConfig.key === 'firstName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('lastName')} className="cursor-pointer px-4 py-2 border-b">
-                Last Name {sortConfig.key === 'lastName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('department')} className="cursor-pointer px-4 py-2 border-b">
-                Department {sortConfig.key === 'department' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('category')} className="cursor-pointer px-4 py-2 border-b">
-                Category {sortConfig.key === 'category' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('room')} className="cursor-pointer px-4 py-2 border-b">
-                Room {sortConfig.key === 'room' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('building')} className="cursor-pointer px-4 py-2 border-b">
-                Building {sortConfig.key === 'building' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('date')} className="cursor-pointer px-4 py-2 border-b">
-                Date {sortConfig.key === 'date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('startTime')} className="cursor-pointer px-4 py-2 border-b">
-                Time {sortConfig.key === 'startTime' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('notes')} className="cursor-pointer px-4 py-2 border-b">
-                Notes {sortConfig.key === 'notes' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('status')} className="cursor-pointer px-4 py-2 border-b">
-                Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('recurring')} className="cursor-pointer px-4 py-2 border-b">
-                Recurring {sortConfig.key === 'recurring' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
+          <thead>
+            <tr className="bg-gray-100">
+              {[
+                { key: 'title', label: 'Booking Title' },
+                { key: 'firstName', label: 'First Name' },
+                { key: 'lastName', label: 'Last Name' },
+                { key: 'department', label: 'Department' },
+                { key: 'category', label: 'Category' },
+                { key: 'room', label: 'Room' },
+                { key: 'building', label: 'Building' },
+                { key: 'date', label: 'Date' },
+                { key: 'startTime', label: 'Time' },
+                { key: 'notes', label: 'Notes' },
+                { key: 'status', label: 'Status' },
+                { key: 'recurring', label: 'Recurring' },
+              ].map(({ key, label }) => (
+                <th
+                  key={key}
+                  onClick={() => handleSort(key)}
+                  className="cursor-pointer px-4 py-2 border-b"
+                >
+                  {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </th>
+              ))}
               <th className="px-4 py-2 border-b">Actions</th>
-              </tr>
-            </thead>
+            </tr>
+          </thead>
+
             <tbody>
-              {!loading && currentBookings.length > 0 ? (
-                sortedBookings.map((booking) => (
+            {!loading && currentBookings.length > 0 ? (
+              sortedBookings
+                .filter(booking =>
+                  `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.category} ${booking.roomName} ${booking.building}`
+                    .toLowerCase()
+                    .includes(searchTerm.toLowerCase())
+                )
+                .map((booking) => (
                   <tr key={booking._id || booking.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-2 border-b">{booking.title}</td>
                     <td className="px-4 py-2 border-b">{booking.firstName}</td>

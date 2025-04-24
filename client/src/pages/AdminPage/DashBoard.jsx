@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import TopBar from '../../components/AdminComponents/TopBar';
+import axios from 'axios';
 import Modal from '../../components/AdminComponents/Modal';
+import { useEffect, useCallback } from 'react';
+
+const API_BASE_URL = 'http://localhost:5000/api';
 
 const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
   const dates = [];
@@ -72,6 +76,8 @@ const Dashboard = ({ openModal }) => {
   const [activeBookingTab, setActiveBookingTab] = useState('all');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   
 
   const statCards = [
@@ -93,55 +99,60 @@ const Dashboard = ({ openModal }) => {
 
   const weeklyCalendarDays = generateWeeklyCalendarDays();
 
-  const recentBookings = [
-    {
-      id: 'BK001',
-      title: 'Team Meeting',
-      firstName: 'Rhonzel',
-      lastName: 'Santos',
-      department: 'ICT Department',
-      roomType: 'Hybrid',
-      meetingRoom: 'Security Bank',
-      building: 'AIM',
-      date: '2025-03-18',
-      time: '10:00 AM - 11:30 AM',
-      notes: 'Discuss project updates',
-      status: 'confirmed',
-      recurring: 'Weekly',
-      recurrenceEndDate: '2025-04-08'
-    },
-    {
-      id: 'BK002',
-      title: 'Client Presentation',
-      firstName: 'Armand',
-      lastName: 'Barrios',
-      department: 'ICT Department',
-      roomType: 'Caseroom',
-      meetingRoom: 'Conference Hall',
-      building: 'ACC',
-      date: '2025-03-19',
-      time: '2:00 PM - 4:00 PM',
-      notes: 'Present Q1 results',
-      status: 'pending',
-      recurring: 'Daily',
-      recurrenceEndDate: '2025-03-25'
-    },
-    {
-      id: 'BK003',
-      title: 'Training Session',
-      firstName: 'KAI',
-      lastName: 'SOTTO',
-      department: 'ICT Department',
-      roomType: 'Caseroom',
-      meetingRoom: 'Training Room',
-      building: 'AIM',
-      date: '2025-03-20',
-      time: '9:00 AM - 12:00 PM',
-      notes: 'Onboarding new hires',
-      status: 'declined',
-      recurring: 'No'
-    },
-  ];
+  const [recentBookings, setRecentBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const token = localStorage.getItem('token');
+  
+  const fetchBookings = useCallback(async () => {
+    setLoading(true);
+    setError('');
+  
+    try {
+      const [bookingsRes, roomsRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/bookings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        axios.get(`${API_BASE_URL}/rooms`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+  
+      const allRooms = roomsRes.data.flatMap((room) => {
+        const baseRoom = {
+          _id: room._id,
+          roomName: room.roomName,
+        };
+        const subRooms =
+          room.subRooms?.map((sub, i) => ({
+            _id: `${room._id}-sub-${i}`,
+            roomName: sub.roomName,
+          })) || [];
+        return [baseRoom, ...subRooms];
+      });
+  
+      const roomMap = Object.fromEntries(
+        allRooms.map((r) => [r._id, r.roomName])
+      );
+  
+      const enrichedBookings = bookingsRes.data.map((booking) => ({
+        ...booking,
+        meetingRoom: roomMap[booking.room] || booking.room,
+      }));
+  
+      setRecentBookings(enrichedBookings);
+    } catch (err) {
+      console.error('Error fetching bookings or rooms:', err);
+      setError('Failed to load bookings. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+  
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+  
 
   const getFilteredBookings = () => {
     if (activeBookingTab === 'all') {
@@ -197,7 +208,7 @@ const sortedBookings = [...getFilteredBookings()].sort((a, b) => {
   return (
     <div>
       <div style={{position:'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh' }}>
-      <TopBar />
+      <TopBar onSearch={setSearchTerm} />
 
         <div className="p-6 bg-gray-50 min-h-screen">
           <h1 className="text-2xl font-bold mb-6 text-gray-800">Dashboard Overview</h1>
@@ -294,6 +305,7 @@ const sortedBookings = [...getFilteredBookings()].sort((a, b) => {
               <thead>
                 <tr className="bg-gray-100">
                   {[
+                    { label: 'Booking Title', key: 'title' },
                     { label: 'Name', key: 'lastName' },
                     { label: 'Department', key: 'department' },
                     { label: 'Room Type', key: 'roomType' },
@@ -318,20 +330,27 @@ const sortedBookings = [...getFilteredBookings()].sort((a, b) => {
               </thead>
 
                 <tbody>
-                  {currentBookings.length > 0 ? (
-                    sortedBookings.map((booking) => {
-                      const recurringDates =
-                        booking.recurring !== 'No' && booking.recurrenceEndDate
-                          ? calculateRecurringDates(booking.date, booking.recurring, booking.recurrenceEndDate)
-                          : [booking.date];
+                {currentBookings.length > 0 ? (
+              sortedBookings
+                .filter(booking =>
+                  `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.category} ${booking.meetingRoom} ${booking.building}`
+                    .toLowerCase()
+                    .includes(searchTerm.toLowerCase())
+                )
+                .map((booking) => {
+                  const recurringDates =
+                    booking.recurring !== 'No' && booking.recurrenceEndDate
+                      ? calculateRecurringDates(booking.date, booking.recurring, booking.recurrenceEndDate)
+                      : [booking.date];
 
-                      return (
+                  return (
                         <tr key={booking.id} className="hover:bg-gray-50 transition">
+                          <td className="px-4 py-2 border-b">{booking.title}</td>
                           <td className="px-4 py-2 border-b">
                             {`${booking.lastName}, ${booking.firstName}`}
                           </td>
                           <td className="px-4 py-2 border-b">{booking.department}</td>
-                          <td className="px-4 py-2 border-b">{booking.roomType}</td>
+                          <td className="px-4 py-2 border-b">{booking.category}</td>
                           <td className="px-4 py-2 border-b">{booking.meetingRoom}</td>
                           <td className="px-4 py-2 border-b">{booking.building}</td>
                           <td className="px-4 py-2 border-b">
@@ -339,7 +358,10 @@ const sortedBookings = [...getFilteredBookings()].sort((a, b) => {
                               <div key={index}>{formatDate(date)}</div>
                             ))}
                           </td>
-                          <td className="px-4 py-2 border-b">{booking.time}</td>
+                          <td className="px-4 py-2 border-b">
+                            {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
+                            {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
                           <td className="px-4 py-2 border-b">{booking.notes}</td>
                           <td className="px-4 py-2 border-b">
                             <div>

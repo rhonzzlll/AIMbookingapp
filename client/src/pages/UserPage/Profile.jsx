@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import Header from './Header';
+import AIMbg from "../../images/AIM_bldg.jpg";
 
 const Profile = () => {
   const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
@@ -227,15 +228,32 @@ const Profile = () => {
   }, [useLocalData, userId]);
 
   return (
-    <div className="bg-blue-200 p-10 w-full">
-      {/* Ensure the Header spans the full width */}
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-        <Header />
-      </div>  
+    <div className="relative min-h-screen w-full overflow-x-auto">
+          {/* Fixed Background Image and Overlay */}
+            <div className="fixed inset-0 z-0">
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundImage: `url(${AIMbg})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  backgroundRepeat: "no-repeat",
+                  backgroundAttachment: "fixed",
+                }}
+              />
+              <div className="absolute inset-0 bg-black bg-opacity-40" />
+            </div>
+    
+      
+          {/* Scrollable Foreground Layer */}
+          <div className="relative z-10 flex flex-col min-h-screen w-full">
+            {/* Fixed Header */}
+            <header className="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
+              <Header />
+            </header>
 
-        <div>
+            <div>
           <h1 className="text-2xl font-bold mb-6">Profile Information</h1>
-
           {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
           {success && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">{success}</div>}
           {useLocalData && (
@@ -244,7 +262,7 @@ const Profile = () => {
             </div>
           )}
 
-          <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+          <div className="bg-white bg-opacity-90 shadow-md rounded-lg p-6 mb-6">
             <div className="flex flex-col md:flex-row md:items-start">
               {/* Profile Image Section */}
               <div className="mb-6 md:mr-8 md:mb-0">
@@ -388,7 +406,7 @@ const Profile = () => {
           </div>
 
           {/* Change Password Section */}
-          <div className="bg-white shadow-md rounded-lg p-6">
+          <div className="bg-white bg-opacity-90 shadow-md rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Change Password</h2>
             <form onSubmit={handlePasswordSubmit}>
               <div className="mb-4">
@@ -437,7 +455,9 @@ const Profile = () => {
             </form>
           </div>
         </div>
-      </div>
+
+          </div>
+    </div>       
   );
 };
 

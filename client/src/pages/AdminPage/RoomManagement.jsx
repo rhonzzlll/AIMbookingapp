@@ -4,7 +4,6 @@ import RoomForm from './RoomForm';
 import DeleteConfirmation from './modals/DeleteConfirmation';
 import Toast from './Toast';
 import TopBar from '../../components/AdminComponents/TopBar';
-import imageCompression from 'browser-image-compression'; // Import the library
 
 const RoomManagement = () => {
   const [rooms, setRooms] = useState([]);
@@ -14,8 +13,10 @@ const RoomManagement = () => {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
-  const [isSubroomVisible, setIsSubroomVisible] = useState({});
+  const [isSubroomVisible, setIsSubroomVisible] = useState({}); 
   const API_BASE_URL = 'http://localhost:5000/api';
+  const [users, setUsers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchRooms();
@@ -39,6 +40,7 @@ const RoomManagement = () => {
       const data = await response.json();
       setRooms(data);
       console.log('Fetched Rooms:', data);
+
     } catch (error) {
       console.error('Error fetching rooms:', error);
       showToast('Failed to load rooms. Please try again.', 'error');
@@ -53,8 +55,8 @@ const RoomManagement = () => {
   };
 
   const handleEditRoom = (room) => {
-    setEditingRoom(room); // Set the room to be edited
-    setIsFormOpen(true); // Open the form
+    setEditingRoom(room);
+    setIsFormOpen(true);
   };
 
   const handleDeleteRoom = (room) => {
@@ -84,103 +86,60 @@ const RoomManagement = () => {
 
   const handleFormSubmit = async (roomData, imageFile) => {
     try {
-      let base64Image = null;
-
-      // Compress and convert image file to Base64 if provided
-      if (imageFile) {
-        const options = {
-          maxSizeMB: 2, // Set the maximum size to 1MB
-          useWebWorker: true, // Use a web worker for better performance
-        };
-
-        try {
-          const compressedFile = await imageCompression(imageFile, options);
-          const reader = new FileReader();
-          reader.readAsDataURL(compressedFile);
-          await new Promise((resolve, reject) => {
-            reader.onload = () => {
-              base64Image = reader.result.split(',')[1];
-              resolve();
-            };
-            reader.onerror = reject;
-          });
-        } catch (compressionError) {
-          console.error('Error compressing image:', compressionError);
-          showToast('Failed to process image. Please try again.', 'error');
-          return;
+      // Format subRooms if needed
+      let formattedSubRooms = [];
+      if (roomData.isQuadrant) {
+        formattedSubRooms = (roomData.subRooms || []).map((subRoom) => ({
+          roomName: subRoom.name,
+          capacity: subRoom.capacity,
+          description: subRoom.description || `${subRoom.name} description`,
+        }));
+  
+        if (formattedSubRooms.length === 0) {
+          formattedSubRooms = [
+            { roomName: `${roomData.roomName} - Subroom 1`, capacity: roomData.capacity / 2, description: 'Default Subroom 1' },
+            { roomName: `${roomData.roomName} - Subroom 2`, capacity: roomData.capacity / 2, description: 'Default Subroom 2' },
+          ];
         }
       }
-
-      // Handle subRooms with manually entered names
-      const formattedSubRooms = (roomData.subRooms || []).map((subRoom) => ({
-        roomName: subRoom.roomName, // Use manually entered name
-        capacity: subRoom.capacity,
-        description: subRoom.description || `${subRoom.roomName} description`, // Add a default description if missing
-      }));
-
-      // Construct the payload
-      const payload = {
-        ...roomData,
-        roomImage: base64Image,
-        subRooms: formattedSubRooms,
-      };
-
-      console.log('Payload:', payload); // Debugging
-
+  
+      const formData = new FormData();
+      formData.append('roomData', JSON.stringify({ ...roomData, subRooms: formattedSubRooms }));
+      if (imageFile) {
+        formData.append('image', imageFile);
+      }
+  
+      const method = editingRoom ? 'PUT' : 'POST';
+      const url = editingRoom
+        ? `${API_BASE_URL}/rooms/${editingRoom._id}`
+        : `${API_BASE_URL}/rooms`;
+  
+      const response = await fetch(url, {
+        method,
+        body: formData,
+      });
+  
+      if (!response.ok) {
+        throw new Error(`Failed to ${editingRoom ? 'update' : 'create'} room`);
+      }
+  
       if (editingRoom) {
-        // Update existing room
-        const updatePayload = { ...payload };
-        if (!imageFile) {
-          delete updatePayload.roomImage; // Remove roomImage if no new image is provided
-        }
-
-        const response = await fetch(`${API_BASE_URL}/rooms/${editingRoom._id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updatePayload),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to update room');
-        }
-
         const updatedRoom = await response.json();
-        setRooms(
-          rooms.map((room) =>
-            room._id === editingRoom._id ? updatedRoom : room
-          )
-        );
+        setRooms(rooms.map((room) => (room._id === updatedRoom._id ? updatedRoom : room)));
         showToast(`${updatedRoom.roomName} updated successfully`);
       } else {
-        // Create a new room
-        const response = await fetch(`${API_BASE_URL}/rooms`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to create room');
-        }
-
         await fetchRooms();
         showToast(`${roomData.roomName} added successfully`);
       }
-
+  
       setIsFormOpen(false);
       setEditingRoom(null);
     } catch (error) {
       console.error('Error saving room:', error);
-      showToast(
-        `Failed to ${editingRoom ? 'update' : 'create'} room. Please try again.`,
-        'error'
-      );
+      showToast(`Failed to ${editingRoom ? 'update' : 'create'} room. Please try again.`, 'error');
     }
   };
+  
 
   const handleDivideRoom = (roomId) => {
     const updatedRooms = rooms.map((room) => {
@@ -189,8 +148,8 @@ const RoomManagement = () => {
           ...room,
           isQuadrant: true,
           subRooms: [
-            { roomName: '', capacity: room.capacity / 2, description: '' },
-            { roomName: '', capacity: room.capacity / 2, description: '' },
+            { roomName: `${room.roomName} - Subroom 1`, capacity: room.capacity / 2 },
+            { roomName: `${room.roomName} - Subroom 2`, capacity: room.capacity / 2 },
           ],
         };
       }
@@ -218,20 +177,10 @@ const RoomManagement = () => {
           onClose={closeToast}
         />
       )}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 257,
-          width: 'calc(100% - 257px)',
-          zIndex: 500,
-          overflowY: 'auto',
-          height: '100vh',
-        }}
-      >
-        <TopBar />
-        <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4 mt-2 p-6 bg-gray-50">
-          <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
+    <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
+      <TopBar onSearch={setSearchTerm} />
+      <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4 mt-2 p-6 bg-gray-50">
+        <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
           <button
             onClick={handleAddRoom}
             className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
@@ -260,7 +209,10 @@ const RoomManagement = () => {
           </div>
         ) : (
           <RoomList
-            rooms={rooms}
+            rooms={rooms.filter(room =>
+              room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase()))
+            )}
             onEdit={handleEditRoom}
             onDelete={handleDeleteRoom}
             onDivide={handleDivideRoom}
@@ -271,7 +223,7 @@ const RoomManagement = () => {
 
         {isFormOpen && (
           <RoomForm
-            room={editingRoom} // Changed from initialData to room
+            initialData={editingRoom}
             onSubmit={handleFormSubmit}
             onCancel={() => setIsFormOpen(false)}
           />
@@ -289,7 +241,7 @@ const RoomManagement = () => {
           />
         )}
       </div>
-    </div>
+      </div> 
   );
 };
 
