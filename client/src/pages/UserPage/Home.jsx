@@ -148,15 +148,7 @@ const HomePage = () => {
                 </div>
               </div>
   
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="font-bold text-lg mb-4">Need Help?</h3>
-                <p className="text-gray-600 text-sm mb-4">
-                  Contact our support team for assistance with bookings or technical issues.
-                </p>
-                <button className="w-full bg-gray-100 text-gray-700 font-medium py-2 rounded-lg hover:bg-gray-200 transition-colors">
-                  Contact Support
-                </button>
-              </div>
+            
             </div>
   
             {/* Right Column - Bookings & Facilities */}

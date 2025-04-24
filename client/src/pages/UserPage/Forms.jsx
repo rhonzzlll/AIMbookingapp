@@ -7,6 +7,7 @@ import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { X, AlertCircle } from 'lucide-react';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
+import CancelBookingConfirmation from './modals/CancelBookingConfirmation';
  
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -107,10 +108,11 @@ const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
 
     for (let i = 1; i <= daysInMonth; i++) {
       const date = new Date(year, month, i);
+      const formattedDate = format(date, 'yyyy-MM-dd');
       days.push({
         day: i,
-        date: format(date, 'yyyy-MM-dd'),
-        hasBookings: bookings.some((booking) => booking.date === format(date, 'yyyy-MM-dd')),
+        date: formattedDate,
+        hasBookings: bookings.some((booking) => booking.date === formattedDate),
       });
     }
 
@@ -172,27 +174,34 @@ const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
 const DaySchedule = ({ selectedDate, bookings }) => {
   const generateTimeSlots = () => {
     const slots = [];
-    for (let hour = 8; hour < 20; hour++) {  // Business hours: 8 AM to 8 PM
-      for (let min = 0; min < 60; min += 30) {
-        const timeString = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-        slots.push(timeString);
-      }
-    }
-    return slots;
+    // Use the same time options as in BookingForm for consistency
+    const timeOptions = [
+      '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+      '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
+      '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
+      '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+    ];
+    return timeOptions;
   };
 
   const getBookingsForTimeSlot = (timeSlot) => {
     return bookings.filter(
-      (booking) => booking.date === selectedDate && booking.startTime <= timeSlot && booking.endTime > timeSlot
+      (booking) => {
+        return booking.date === selectedDate && 
+               booking.startTime <= timeSlot && 
+               booking.endTime > timeSlot;
+      }
     );
   };
 
   const timeSlots = generateTimeSlots();
-  const formattedDate = selectedDate ? format(parseISO(selectedDate), 'MMMM dd, yyyy') : '';
+  const formattedDate = selectedDate ? 
+    (selectedDate instanceof Date ? format(selectedDate, 'MMMM dd, yyyy') : 
+    format(parseISO(selectedDate), 'MMMM dd, yyyy')) : 'Select a date';
 
   return (
     <div className="bg-white rounded-lg shadow-md p-4 mt-4">
-      <h2 className="text-xl font-bold mb-4">{formattedDate || 'Select a date'}</h2>
+      <h2 className="text-xl font-bold mb-4">{formattedDate}</h2>
       <div className="overflow-y-auto max-h-96">
         {timeSlots.map((timeSlot, index) => {
           const slotBookings = getBookingsForTimeSlot(timeSlot);
@@ -217,20 +226,36 @@ const DaySchedule = ({ selectedDate, bookings }) => {
   );
 };
 
-const MyBookings = ({ bookings }) => {
+const MyBookings = ({ bookings, onCancelBooking }) => {
   const [activeTab, setActiveTab] = useState('upcoming');
   
   const filteredBookings = useMemo(() => {
     const now = new Date();
     
     if (activeTab === 'upcoming') {
-      return bookings.filter(booking => new Date(booking.date) >= now);
+      return bookings.filter(booking => {
+        // Handle booking.date as string or Date
+        const bookingDate = typeof booking.date === 'string' ? 
+          new Date(booking.date) : booking.date;
+        return bookingDate >= now;
+      });
     } else if (activeTab === 'past') {
-      return bookings.filter(booking => new Date(booking.date) < now);
+      return bookings.filter(booking => {
+        const bookingDate = typeof booking.date === 'string' ? 
+          new Date(booking.date) : booking.date;
+        return bookingDate < now;
+      });
     } else {
       return bookings;
     }
   }, [bookings, activeTab]);
+
+  // Handler for booking cancellation
+  const handleCancelBooking = (bookingId) => {
+    if (typeof onCancelBooking === 'function') {
+      onCancelBooking(bookingId);
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
@@ -261,7 +286,13 @@ const MyBookings = ({ bookings }) => {
       <div className="space-y-4">
         {filteredBookings.length > 0 ? (
           filteredBookings.map((booking, index) => {
-            const formattedDate = booking.date ? format(parseISO(booking.date), 'yyyy-MM-dd') : 'Invalid date';
+            // Handle date formatting safely
+            const formattedDate = booking.date ? 
+              (typeof booking.date === 'string' ? 
+                format(parseISO(booking.date), 'yyyy-MM-dd') :
+                format(booking.date, 'yyyy-MM-dd')) : 
+              'Invalid date';
+              
             return (
               <div key={index} className="border rounded-lg p-4">
                 <div className="flex justify-between items-start mb-2">
@@ -279,17 +310,27 @@ const MyBookings = ({ bookings }) => {
                       </p>
                     )}
                   </div>
-                  <span
-                    className={`px-2 py-1 text-xs rounded ${
-                      booking.status === 'approved'
-                        ? 'bg-green-100 text-green-600'
-                        : booking.status === 'pending'
-                        ? 'bg-yellow-100 text-yellow-600'
-                        : 'bg-red-100 text-red-600'
-                    }`}
-                  >
-                    {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-1 text-xs rounded ${
+                        booking.status === 'Confirmed'
+                          ? 'bg-green-100 text-green-600'
+                          : booking.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-600'
+                          : 'bg-red-100 text-red-600'
+                      }`}
+                    >
+                      {booking.status ? booking.status.charAt(0).toUpperCase() + booking.status.slice(1) : 'Unknown'}
+                    </span>
+                    {activeTab === 'upcoming' && (
+                      <button 
+                        onClick={() => handleCancelBooking(booking._id)}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -316,15 +357,27 @@ const BookingApp = () => {
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [pendingBooking, setPendingBooking] = useState(null);
+  const [bookingError, setBookingError] = useState(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState(null);
 
-  // Function to fetch existing bookings
+  // Fetch bookings from backend
   const fetchBookings = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/bookings`);
-      if (response.ok) {
-        const data = await response.json();
-        setBookings(data);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/bookings`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to fetch bookings:', response.statusText);
+        return;
       }
+      
+      const data = await response.json();
+      setBookings(data);
     } catch (error) {
       console.error('Error fetching bookings:', error);
     }
@@ -335,79 +388,165 @@ const BookingApp = () => {
     fetchBookings();
   }, []);
 
+  // Triggered when booking is submitted from form
   const handleBookingSubmit = (newBooking) => {
+    // Store the booking data which will be processed after privacy confirmation
     setPendingBooking(newBooking);
-    setIsPrivacyModalOpen(true); // Open PrivacyModal
+    setIsPrivacyModalOpen(true);
   };
 
   const handlePrivacyConfirm = async () => {
     setIsPrivacyModalOpen(false);
+    setBookingError(null);
 
-    if (pendingBooking) {
-      try {
-        const bookingWithStatus = {
-          ...pendingBooking,
-          status: 'pending',
-        };
+    if (!pendingBooking) return;
 
-        const response = await fetch(`${API_BASE_URL}/bookings`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-          body: JSON.stringify(bookingWithStatus),
-        });
+    try {
+      // Get user ID from localStorage
+      const userId = localStorage.getItem('_id');
+      const token = localStorage.getItem('token');
 
-        const savedBooking = await response.json();
-        setBookings((prev) => [...prev, savedBooking]);
-        setPendingBooking(null);
-        
-        // Show confirmation modal after successful booking
-        setIsConfirmationModalOpen(true);
-      } catch (error) {
-        console.error('Error submitting booking:', error);
-        alert('Failed to submit booking. Please try again.');
-      }
+      // The booking payload is already complete from BookingForm
+      const bookingPayload = {
+        ...pendingBooking,
+        userId: userId,
+      };
+
+      // Send the booking request to the server
+      const response = await fetch(`${API_BASE_URL}/bookings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(bookingPayload),
+      });
+  
+      // Skip error handling for required fields
+      const savedBooking = await response.json();
+  
+      // Update local bookings list with the new booking
+      setBookings((prev) => [...prev, savedBooking]);
+      setPendingBooking(null);
+  
+      // Show confirmation modal
+      setIsConfirmationModalOpen(true);
+  
+      // Refresh bookings to ensure we have the latest data
+      fetchBookings();
+    } catch (error) {
+      console.error('Error submitting booking:', error);
+  
+      
     }
   };
-
+  // For date picker or calendar input
   const handleDateSelect = (date) => {
     setSelectedDate(date);
   };
 
+  // Handle booking cancellation
+  const handleCancelBooking = (booking) => {
+    setBookingToCancel(booking);
+    setIsCancelModalOpen(true);
+  };
+
+  const confirmCancelBooking = async () => {
+    if (!bookingToCancel?._id) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingToCancel._id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to cancel booking');
+      }
+
+      // Remove the booking from local state
+      setBookings((prev) => prev.filter((booking) => booking._id !== bookingToCancel._id));
+      setIsCancelModalOpen(false);
+      setBookingToCancel(null);
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      alert(`Failed to cancel booking: ${error.message}`);
+    }
+  };
+
   return (
-    <div>
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
+    <div className="min-h-screen bg-gray-50">
+      <div className="fixed top-0 left-0 w-full z-50">
         <Header />
       </div>
-      <div style={{ paddingTop: '70px' }} className="flex flex-col md:flex-row gap-6 p-6">
-        <div className="w-full md:w-1/2">
-          <BookingForm onBookingSubmit={handleBookingSubmit} />
-        </div>
-        <div className="w-full md:w-1/2">
-          <Calendar
-            selectedDate={selectedDate}
-            onDateSelect={handleDateSelect}
-            bookings={bookings}
-          />
-          <DaySchedule selectedDate={selectedDate} bookings={bookings} />
-          <MyBookings bookings={bookings} />
+      
+      <div className="pt-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        {/* Error display */}
+        {bookingError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+            {bookingError}
+            <button 
+              className="ml-2 text-red-800 font-bold"
+              onClick={() => setBookingError(null)}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="w-full lg:w-1/2">
+            <BookingForm 
+              onBookingSubmit={handleBookingSubmit} 
+            />
+          </div>
+          
+          <div className="w-full lg:w-1/2">
+            <Calendar
+              selectedDate={selectedDate}
+              onDateSelect={handleDateSelect}
+              bookings={bookings}
+            />
+            <DaySchedule 
+              selectedDate={selectedDate} 
+              bookings={bookings} 
+            />
+            <MyBookings 
+              bookings={bookings} 
+              onCancelBooking={handleCancelBooking}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Privacy Modal */}
+      {/* Privacy Confirmation Modal */}
       <PrivacyModal
         isOpen={isPrivacyModalOpen}
         onOpenChange={setIsPrivacyModalOpen}
         onConfirm={handlePrivacyConfirm}
       />
 
-      {/* Confirmation Modal */}
+      {/* Booking Success Modal */}
       <ConfirmationModal
         isOpen={isConfirmationModalOpen}
         onOpenChange={setIsConfirmationModalOpen}
+        title="Booking Confirmed"
+        description="Your booking has been successfully submitted. You will receive a confirmation email shortly."
+        onConfirm={() => setIsConfirmationModalOpen(false)}
       />
+
+      {/* Cancel Booking Confirmation Modal */}
+      {isCancelModalOpen && (
+        <CancelBookingConfirmation
+          booking={bookingToCancel}
+          onConfirm={confirmCancelBooking}
+          onCancel={() => setIsCancelModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

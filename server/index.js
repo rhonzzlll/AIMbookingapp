@@ -37,7 +37,10 @@ connectDB();
 
 const app = express();
 app.use(cors());
-app.use(bodyParser.json());
+
+// Increase payload size limit for body-parser
+app.use(bodyParser.json({ limit: '10mb' })); // Adjust the limit as needed
+app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
 // Import routes
 const { router: authRoutes } = require('./routes/auth');
@@ -45,17 +48,12 @@ const userRoutes = require('./routes/users');
 const roomRoutes = require('./routes/roomRoutes');
 const bookingsRoutes = require('./routes/bookingsRoutes');
 const roomsRoutes = require('./routes/roomRoutes');
- 
+
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/rooms', roomsRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
-
-
-
-
-
 
 // Test route
 app.get('/', async (req, res) => {

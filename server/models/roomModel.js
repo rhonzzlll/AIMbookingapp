@@ -2,14 +2,16 @@ const mongoose = require('mongoose');
 
 const subRoomSchema = new mongoose.Schema({
   roomName: {
-    type: String, 
+    type: String,
     required: true,
   },
   capacity: {
     type: Number,
     required: true,
   },
-  roomImage: { type: [String] }, 
+  roomImage: { 
+    type: [String] 
+  }, 
   description: {
     type: String,
     maxlength: 100,
@@ -47,23 +49,22 @@ const roomSchema = new mongoose.Schema({
         } else if (this.building === "AIM Building") {
           return aimCategories.includes(value);
         }
-        return false; // Invalid if building is not recognized
+        return false;
       },
       message: (props) =>
         `${props.value} is not a valid category for the selected building.`,
     },
   },
   roomName: {
-    type: String, // Main room or quadrant name
+    type: String,
     required: true,
   },
   capacity: {
     type: Number,
     required: function () {
-      return !this.isQuadrant; // Required only if it's a standalone room
+      return !this.isQuadrant;
     },
   },
-
   isQuadrant: {
     type: Boolean,
     default: false,
@@ -71,6 +72,14 @@ const roomSchema = new mongoose.Schema({
   subRooms: {
     type: [subRoomSchema],
     default: [],
+  },
+  description: {
+    type: String,
+    maxlength: 100,
+    required: true,
+  },
+  roomImage: { 
+    type: [String] 
   },
 });
 

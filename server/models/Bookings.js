@@ -46,12 +46,13 @@ const bookingSchema = new mongoose.Schema({
     required: true,
   },
   startTime: {
-    type: Date,
+    type: String, // Changed to String
     required: true,
   },
   endTime: {
-    type: Date,
+    type: String, // Changed to String
     required: true,
+  
   },
   notes: {
     type: String,

@@ -15,7 +15,7 @@ const AccRooms = () => {
     fromTime: '09:00',
     toDate: format(new Date(), 'yyyy-MM-dd'),
     toTime: '10:00',
-    isRecurring: false
+    isRecurring: false,
   });
 
   const navigate = useNavigate();
@@ -41,17 +41,19 @@ const AccRooms = () => {
       }
       const data = await response.json();
 
-      // Filter rooms to include only those from the AIM building
-      const aimRooms = data.filter((room) => room.building === 'AIM Building');
+      // Filter rooms to include only those from the ACC Building
+      const accBuildingRooms = data.filter(
+        (room) => room.building && room.building === 'ACC Building'
+      );
 
       // Extract unique room types for filtering
-      const uniqueRoomTypes = [...new Set(aimRooms.map((room) => room.category))];
+      const uniqueRoomTypes = [...new Set(accBuildingRooms.map((room) => room.category))];
       setRoomTypes(uniqueRoomTypes);
 
-      setRooms(aimRooms);
-      setFilteredRooms(aimRooms); // Initially show all AIM rooms
+      setRooms(accBuildingRooms);
+      setFilteredRooms(accBuildingRooms); // Initially show all ACC Building rooms
     } catch (error) {
-      console.error('Error fetching AIM building rooms:', error);
+      console.error('Error fetching ACC Building rooms:', error);
     } finally {
       setLoading(false);
     }
@@ -76,17 +78,17 @@ const AccRooms = () => {
       toTime: searchParams.toTime || '10:00',
     };
 
-    // Construct the booking data payload
+    // Pass only the room ID and search parameters
     const bookingData = {
-      room: room,
-      searchParams: validatedSearchParams
+      roomId: room._id, // Save the room ID
+      searchParams: validatedSearchParams,
     };
 
     console.log('Navigating to booking form with data:', bookingData);
 
-    // Navigate to the booking form with the room and search parameters
+    // Navigate to the booking form with the room ID and search parameters
     navigate('/forms', {
-      state: { bookingData }
+      state: { bookingData },
     });
   };
 
@@ -94,7 +96,7 @@ const AccRooms = () => {
     const { name, value, type, checked } = e.target;
     setSearchParams({
       ...searchParams,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? checked : value,
     });
   };
 
@@ -115,10 +117,10 @@ const AccRooms = () => {
       <div className="pt-16 px-4 pb-8">
         {/* Centered Search Bar */}
         <div className="max-w-3xl mx-auto mb-8">
-          <SearchBar 
-            searchParams={searchParams} 
-            handleSearchChange={handleSearchChange} 
-            handleSearch={handleSearch} 
+          <SearchBar
+            searchParams={searchParams}
+            handleSearchChange={handleSearchChange}
+            handleSearch={handleSearch}
           />
         </div>
 

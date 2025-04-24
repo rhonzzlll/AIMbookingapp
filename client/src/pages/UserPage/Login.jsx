@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { MdEmail, MdLock } from 'react-icons/md';
 import AIMLogo from '../../images/AIM_Logo.png';
+import AIMlogotest from '../../images/AIM_bldg.jpg';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -58,17 +59,19 @@ const Login = () => {
   };
 
   return (
-    <div className="flex rounded-lg shadow-lg overflow-hidden">
+    <div className="absolute inset-0 bg-cover bg-center z-0r" style={{ backgroundImage: `url(${AIMlogotest})` }}>
+      <div className="flex items-center justify-center min-h-screen bg-black/50">
+      <div className="flex rounded-lg shadow-lg overflow-hidden bg-white/80 backdrop-blur-md">
       {/* Left: Logo */}
       <div className="hidden md:flex w-1/2 items-center justify-center bg-gradient-to-br from-blue-300 to-blue-100 shadow-lg">
-        <div className="flex flex-col items-center space-y-4">
-          <img src={AIMLogo} alt="Logo" className="w-350 h-auto object-contain" />
+        <div className="flex flex-col items-center space-y-4 p-6">
+          <img src={AIMLogo} alt="Logo" className="w-72 h-auto object-contain" />
           <h2 className="text-xl font-bold text-gray-700">Welcome to AIM Portal!</h2>
         </div>
       </div>
 
       {/* Right: Login Form */}
-      <div className="flex w-full md:w-1/2 items-center justify-center bg-blue-200 px-4 py-5">
+      <div className="flex w-full md:w-1/2 items-center justify-center px-4 py-6">
         <div className="w-full max-w-md">
           <div className="bg-white rounded-2xl shadow-xl p-10">
             <h1 className="text-4xl font-extrabold text-center text-gray-800 mb-4">Log In</h1>
@@ -143,6 +146,8 @@ const Login = () => {
           </div>
         </div>
       </div>
+    </div>
+    </div>
     </div>
   );
 };

@@ -41,17 +41,19 @@ const AimRooms = () => {
       }
       const data = await response.json();
 
-      // Filter rooms to include only those from the AIM building
-      const aimRooms = data.filter((room) => room.building === 'AIM Building');
+      // Filter rooms to include only those from the AIM Building
+      const aimBuildingRooms = data.filter(
+        (room) => room.building && room.building === 'AIM Building'
+      );
 
       // Extract unique room types for filtering
-      const uniqueRoomTypes = [...new Set(aimRooms.map((room) => room.category))];
+      const uniqueRoomTypes = [...new Set(aimBuildingRooms.map((room) => room.category))];
       setRoomTypes(uniqueRoomTypes);
 
-      setRooms(aimRooms);
-      setFilteredRooms(aimRooms); // Initially show all AIM rooms
+      setRooms(aimBuildingRooms);
+      setFilteredRooms(aimBuildingRooms); // Initially show all AIM Building rooms
     } catch (error) {
-      console.error('Error fetching AIM building rooms:', error);
+      console.error('Error fetching AIM Building rooms:', error);
     } finally {
       setLoading(false);
     }

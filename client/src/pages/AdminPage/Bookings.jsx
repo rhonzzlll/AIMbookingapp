@@ -117,31 +117,85 @@ const Bookings = () => {
   const fetchBookings = useCallback(async () => {
     setLoading(true);
     setError('');
-    
+  
     try {
-      const response = await axios.get(`${API_BASE_URL}/bookings`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const [bookingsRes, roomsRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/bookings`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_BASE_URL}/rooms`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+  
+      const allRooms = roomsRes.data.flatMap((room) => {
+        const baseRoom = {
+          _id: room._id,
+          roomName: room.roomName
+        };
+        const subRooms = room.subRooms?.map((sub, i) => ({
+          _id: `${room._id}-sub-${i}`,
+          roomName: sub.roomName
+        })) || [];
+        return [baseRoom, ...subRooms];
       });
-      setBookings(response.data);
+  
+      const roomMap = Object.fromEntries(allRooms.map(r => [r._id, r.roomName]));
+  
+      const enrichedBookings = bookingsRes.data.map(booking => ({
+        ...booking,
+        roomName: roomMap[booking.room] || booking.room
+      }));
+  
+      setBookings(enrichedBookings);
     } catch (err) {
-      console.error('Error fetching bookings:', err);
+      console.error('Error fetching bookings or rooms:', err);
       setError('Failed to load bookings. Please try again.');
     } finally {
       setLoading(false);
     }
   }, [token]);
+  
 
-  // Fetch rooms data
   const fetchRooms = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/rooms`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setRooms(response.data);
+  
+      const allRooms = response.data;
+  
+      // Flatten top-level rooms and their subrooms into one list
+      const flattenedRooms = allRooms.flatMap((room) => {
+        const baseRoom = {
+          _id: room._id,
+          building: room.building,
+          category: room.category,
+          roomName: room.roomName,
+          capacity: room.capacity,
+          isQuadrant: room.isQuadrant,
+          description: room.description
+        };
+  
+        const subRooms = room.subRooms?.map((sub, index) => ({
+          _id: `${room._id}-sub-${index}`,
+          building: room.building,
+          category: room.category,
+          roomName: sub.roomName,
+          capacity: sub.capacity,
+          description: sub.description,
+          parentId: room._id
+        })) || [];
+  
+        return [baseRoom, ...subRooms];
+      });
+  
+      setRooms(flattenedRooms);
     } catch (err) {
       console.error('Error fetching rooms:', err);
     }
   }, [token]);
+  
 
   // Fetch users data
   const fetchUsers = useCallback(async () => {
@@ -264,33 +318,40 @@ const Bookings = () => {
     setAvailableRooms([]);
   };
 
-  // Form input handlers
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
+  
     setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Reset dependent fields when changing building or category
+  
     if (name === 'building') {
-      setFormData(prev => ({ 
-        ...prev, 
-        [name]: value,
+      setFormData(prev => ({
+        ...prev,
+        building: value,
         category: '',
-        room: ''
+        room: '',
+        roomName: ''
       }));
-      
-      // Update available categories
       setCategories(BUILDING_CATEGORIES[value] || []);
       setAvailableRooms([]);
-    } 
-    else if (name === 'category') {
-      setFormData(prev => ({ 
+    }
+  
+    else if (name === 'room') {
+      const selectedRoom = availableRooms.find(r => r._id === value);
+      setFormData(prev => ({
         ...prev,
-        [name]: value,
-        room: ''
+        room: selectedRoom?._id || '',
+        roomName: selectedRoom?.roomName || ''
       }));
-      
-      // Update available rooms
+    }
+    
+  
+    else if (name === 'category') {
+      setFormData(prev => ({
+        ...prev,
+        category: value,
+        room: '',
+        roomName: ''
+      }));
       if (formData.building && value) {
         const filteredRooms = rooms.filter(
           room => room.building === formData.building && room.category === value
@@ -298,12 +359,8 @@ const Bookings = () => {
         setAvailableRooms(filteredRooms);
       }
     }
-    
-    // Clear related errors
-    if (name === 'firstName' || name === 'lastName') {
-      setFormError(prev => ({ ...prev, name: '' }));
-    }
   };
+    
 
   // Handle time selection
   const handleTimeChange = (field, value) => {
@@ -350,87 +407,90 @@ const Bookings = () => {
     }));
   };
 
-  // Form submission handler
-  const handleSubmit = async (e) => {
+ const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitLoading(true);
     setError('');
     setFormError({});
-    
-    // Form validation
+
+    const userId = localStorage.getItem('_id');
+    if (!userId) {
+      setError('User not authenticated. Please log in again.');
+      setSubmitLoading(false);
+      return;
+    }
+
     let hasError = false;
     const errors = {};
-    
+
     if (!formData.firstName || !formData.lastName) {
       errors.name = 'First name and last name are required';
       hasError = true;
     }
-    
+
     if (!formData.startTime || !formData.endTime) {
       errors.time = 'Start and end times are required';
       hasError = true;
     } else {
       const start = convertTo24HourFormat(formData.startTime);
       const end = convertTo24HourFormat(formData.endTime);
-      
       if (start >= end) {
         errors.time = 'Start time must be before end time';
         hasError = true;
       }
     }
-    
+
+    if (!formData.room) {
+      errors.room = 'Room selection is required';
+      hasError = true;
+    }
+
+    if (!formData.building) {
+      errors.building = 'Building is required';
+      hasError = true;
+    }
+
     if (formData.recurring !== 'No' && !formData.recurrenceEndDate) {
       errors.recurrence = 'Recurrence end date is required for recurring bookings';
       hasError = true;
     }
-    
+
     if (hasError) {
       setFormError(errors);
       setSubmitLoading(false);
       return;
     }
-    
+
     try {
-      // Retrieve userId from localStorage
-      const userId = localStorage.getItem('userId');
+      const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-      // Fetch user data using the API if userId exists
-      let userData = {};
-      if (userId) {
-        const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        userData = response.data;
-      }
+      const userData = response.data;
 
-      // Format dates for API
       const startTime24 = convertTo24HourFormat(formData.startTime);
       const endTime24 = convertTo24HourFormat(formData.endTime);
-
       const startDateTime = new Date(`${formData.date}T${startTime24}:00`);
       const endDateTime = new Date(`${formData.date}T${endTime24}:00`);
 
-      // Prepare payload
       const payload = {
         ...formData,
         startTime: startDateTime.toISOString(),
         endTime: endDateTime.toISOString(),
         recurrenceEndDate: formData.recurrenceEndDate ? new Date(formData.recurrenceEndDate).toISOString() : null,
-        userId: userId || null, // Include userId if it exists, otherwise set to null
-        bookedBy: userData.name || 'Admin', // Use fetched user data or default to 'Admin'
+        userId,
+        bookedBy: userData.name || 'Admin'
       };
 
       let responseBooking;
 
       if (isEditModalOpen && editBookingId) {
-        // Update existing booking
         responseBooking = await axios.put(
           `${API_BASE_URL}/bookings/${editBookingId}`,
           payload,
           { headers: { Authorization: `Bearer ${token}` } }
         );
       } else {
-        // Create new booking
         responseBooking = await axios.post(
           `${API_BASE_URL}/bookings`,
           payload,
@@ -438,14 +498,13 @@ const Bookings = () => {
         );
       }
 
-      // Reset and refresh
       resetForm();
       setIsAddModalOpen(false);
       setIsEditModalOpen(false);
       fetchBookings();
     } catch (err) {
-      console.error('Error submitting booking:', err);
-      if (err.response && err.response.data && err.response.data.message) {
+      console.error('Booking error:', err.response?.data || err.message);
+      if (err.response?.data?.message) {
         setError(err.response.data.message);
       } else {
         setError('Failed to save booking. Please try again.');
@@ -468,6 +527,61 @@ const Bookings = () => {
       (user.email && user.email.toLowerCase().includes(userSearchQuery.toLowerCase()))
     ).slice(0, 5); // Limit to 5 results
   }, [users, userSearchQuery]);
+
+  const getAvailableTimeOptions = (isStart) => {
+    const now = new Date();
+    const selectedDate = new Date(formData.date);
+    const isToday = now.toDateString() === selectedDate.toDateString();
+  
+    const allTimes = TIME_OPTIONS;
+  
+    if (!isToday) return allTimes;
+  
+    // Convert current time to minutes
+    const currentHour = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const currentTotalMinutes = currentHour * 60 + currentMinutes;
+  
+    return allTimes.filter((time) => {
+      const [timePart, modifier] = time.split(' ');
+      let [hours, minutes] = timePart.split(':').map(Number);
+  
+      if (modifier === 'PM' && hours !== 12) hours += 12;
+      if (modifier === 'AM' && hours === 12) hours = 0;
+  
+      const timeInMinutes = hours * 60 + minutes;
+      return timeInMinutes > currentTotalMinutes;
+    });
+  };
+  const getTimeInMinutes = (timeStr) => {
+    const [time, modifier] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+  
+    if (modifier === 'PM' && hours !== 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+  
+    return hours * 60 + minutes;
+  };
+  
+  const getFilteredStartTimes = () => {
+    const today = new Date().toISOString().split('T')[0];
+    if (formData.date !== today) return TIME_OPTIONS;
+  
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  
+    return TIME_OPTIONS.filter((time) => getTimeInMinutes(time) > currentMinutes);
+  };
+  
+  const getFilteredEndTimes = () => {
+    const startTime = formData.startTime;
+    if (!startTime) return TIME_OPTIONS;
+  
+    const startMinutes = getTimeInMinutes(startTime);
+    return TIME_OPTIONS.filter((time) => getTimeInMinutes(time) > startMinutes);
+  };
+  
+  
   
   // BookingForm component
   const BookingForm = React.memo(({ isEdit }) => {
@@ -490,44 +604,44 @@ const Bookings = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Booking Title</label>
             <input
-  type="text"
-  name="title"
-  defaultValue={formData.title} // Use defaultValue for uncontrolled input
-  onBlur={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))} // Update state on blur
-  onFocus={(e) => e.target.select()} // Retain focus
-  required
-  placeholder="Enter booking title"
-  autoComplete="off"
-  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-/>
+              type="text"
+              name="title"
+              defaultValue={formData.title} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))} // Update state on blur
+              onFocus={(e) => e.target.select()} // Retain focus
+              required
+              placeholder="Enter booking title"
+              autoComplete="off"
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
             <input
-  type="text"
-  name="firstName"
-  defaultValue={formData.firstName} // Use defaultValue for uncontrolled input
-  onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
-  required
-  placeholder="Enter first name"
-  autoComplete="off"
-  className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
-/>
+              type="text"
+              name="firstName"
+              defaultValue={formData.firstName} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
+              required
+              placeholder="Enter first name"
+              autoComplete="off"
+              className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
             <input
-  type="text"
-  name="lastName"
-  defaultValue={formData.lastName} // Use defaultValue for uncontrolled input
-  onBlur={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))} // Update state on blur
-  required
-  placeholder="Enter last name"
-  autoComplete="off"
-  className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
-/>
+              type="text"
+              name="lastName"
+              defaultValue={formData.lastName} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))} // Update state on blur
+              required
+              placeholder="Enter last name"
+              autoComplete="off"
+              className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+            />
           </div>
 
           <div>
@@ -593,7 +707,7 @@ const Bookings = () => {
             >
               <option value="">Select Room</option>
               {availableRooms.map((room) => (
-                <option key={room._id || room.id} value={room.roomName}>
+                <option key={room._id} value={room._id}>
                   {room.roomName}
                 </option>
               ))}
@@ -608,6 +722,7 @@ const Bookings = () => {
               value={formData.date}
               onChange={handleInputChange}
               required
+              min={new Date().toISOString().split('T')[0]} // disables past dates
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -620,13 +735,7 @@ const Bookings = () => {
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
             >
               <option value="">Select Start Time</option>
-              {[
-        
-                '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-                '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
-                '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-                '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
-              ].map((time) => (
+              {getFilteredStartTimes().map((time) => (
                 <option key={time} value={time}>
                   {time}
                 </option>
@@ -643,14 +752,7 @@ const Bookings = () => {
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
             >
               <option value="">Select End Time</option>
-              {[
-                 
-                
-                 '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-                 '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
-                 '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-                 '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
-              ].map((time) => (
+              {getFilteredEndTimes().map((time) => (
                 <option key={time} value={time}>
                   {time}
                 </option>
@@ -707,13 +809,13 @@ const Bookings = () => {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
           <textarea
-  name="notes"
-  defaultValue={formData.notes} // Use defaultValue for uncontrolled input
-  onBlur={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} // Update state on blur
-  rows="3"
-  placeholder="Add any additional notes here"
-  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-></textarea>
+            name="notes"
+            defaultValue={formData.notes} // Use defaultValue for uncontrolled input
+            onBlur={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} // Update state on blur
+            rows="3"
+            placeholder="Add any additional notes here"
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          ></textarea>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -873,7 +975,7 @@ const Bookings = () => {
                     <td className="px-4 py-2 border-b">{booking.lastName}</td>
                     <td className="px-4 py-2 border-b">{booking.department}</td>
                     <td className="px-4 py-2 border-b">{booking.category}</td>
-                    <td className="px-4 py-2 border-b">{booking.room}</td>
+                    <td className="px-4 py-2 border-b">{booking.roomName}</td>
                     <td className="px-4 py-2 border-b">{booking.building}</td>
                     <td className="px-4 py-2 border-b">
                       {booking.recurring !== 'No' && booking.recurrenceEndDate ? (
