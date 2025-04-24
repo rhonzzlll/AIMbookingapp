@@ -358,8 +358,8 @@ const Users = () => {
       {/* Add User Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-8 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
+          <div className="p-4 bg-gray-100 w-full flex flex-col">
+          <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Add New User</h2>
               <button
                 onClick={() => setShowAddModal(false)}

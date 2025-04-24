@@ -3,10 +3,9 @@ import axios from 'axios';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import Header from './Header';
-import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, Facebook, Instagram, Youtube, Linkedin } from 'lucide-react';
+import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail } from 'lucide-react';
 import AIMLogo from "../../images/AIM_Logo.png";
 import AIMbg from "../../images/AIM_bldg.jpg";
-
 
 const HomePage = () => {
   const userId = localStorage.getItem('_id'); // Retrieve userId from localStorage
@@ -23,10 +22,12 @@ const HomePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('upcoming');
+  const [visibleCount, setVisibleCount] = useState(5); // Limit to 5 bookings by default
 
   useEffect(() => {
     const fetchUserAndBookings = async () => {
       try {
+        // Fetch user data
         const userResponse = await axios.get(`http://localhost:5000/api/users/${userId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -41,59 +42,46 @@ const HomePage = () => {
           department: userData.department || '',
         });
 
-        // Simulate fetching bookings
-        setBookings([
-          {
-            id: 'book-001',
-            title: 'Conference Room A',
-            date: '2025-04-05',
-            startTime: '10:00 AM',
-            endTime: '12:00 PM',
-            room: 'Room A',
-            building: 'AIM Building',
-            floor: '3rd Floor',
-            status: 'confirmed',
-            participants: 12,
+        const bookingsResponse = await axios.get(`http://localhost:5000/api/bookings/user/${userId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
-          {
-            id: 'book-002',
-            title: 'Meeting Room B',
-            date: '2025-04-06',
-            startTime: '2:00 PM',
-            endTime: '4:00 PM',
-            room: 'Room B',
-            building: 'ACC Building',
-            floor: '2nd Floor',
-            status: 'pending',
-            participants: 8,
-          },
-          {
-            id: 'book-003',
-            title: 'Executive Boardroom',
-            date: '2025-04-10',
-            startTime: '9:00 AM',
-            endTime: '11:30 AM',
-            room: 'Boardroom',
-            building: 'AIM Building',
-            floor: '5th Floor',
-            status: 'confirmed',
-            participants: 6,
-          },
-        ]);
+        });
+
+        if (bookingsResponse.data && Array.isArray(bookingsResponse.data)) {
+          setBookings(bookingsResponse.data);
+        } else {
+          setBookings([]);
+        }
 
         setLoading(false);
       } catch (err) {
-        setError('Failed to fetch data');
-        setLoading(false);
+        console.error('Error fetching data:', err);
+        if (err.response && err.response.status === 404) {
+          setBookings([]);
+          setLoading(false);
+        } else {
+          setError('Failed to fetch data');
+          setLoading(false);
+        }
       }
     };
 
-    fetchUserAndBookings();
+    if (userId && token) {
+      fetchUserAndBookings();
+    } else {
+      setError('User not authenticated');
+      setLoading(false);
+    }
   }, [userId, token]);
 
   // Filter bookings based on active tab
   const filteredBookings = bookings.filter((booking) => {
-    const bookingDate = new Date(booking.date);
+    const bookingDate = booking.date ? new Date(booking.date) : 
+                        booking.startTime ? new Date(booking.startTime) : null;
+
+    if (!bookingDate) return false;
+
     const today = new Date();
 
     if (activeTab === 'upcoming') {
@@ -104,36 +92,37 @@ const HomePage = () => {
     return true; // all tab
   });
 
+  // Limit bookings to 5 for "upcoming" and "past" tabs
+  const displayedBookings =
+    activeTab === 'all' ? filteredBookings : filteredBookings.slice(0, visibleCount);
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
-
-  console.log("AIMbg path:", AIMbg);
 
   return (
     <div className="relative min-h-screen w-full overflow-x-auto">
       {/* Fixed Background Image and Overlay */}
-        <div className="fixed inset-0 z-0">
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `url(${AIMbg})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              backgroundRepeat: "no-repeat",
-              backgroundAttachment: "fixed",
-            }}
-          />
-          <div className="absolute inset-0 bg-black bg-opacity-40" />
-        </div>
+      <div className="fixed inset-0 z-0">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${AIMbg})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            backgroundAttachment: "fixed",
+          }}
+        />
+        <div className="absolute inset-0 bg-black bg-opacity-40" />
+      </div>
 
-  
       {/* Scrollable Foreground Layer */}
       <div className="relative z-10 flex flex-col min-h-screen w-full">
         {/* Fixed Header */}
         <header className="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
           <Header />
         </header>
-  
+
         {/* Main content with dark overlay */}
         <main className="pt-16 text-white flex-grow">
           {/* Hero Section */}
@@ -141,7 +130,7 @@ const HomePage = () => {
             <h1 className="text-4xl font-bold">Welcome, {user.firstName}!</h1>
             <p className="text-blue-100">Find and book your ideal meeting space today</p>
           </div>
-  
+
           {/* Dashboard Content */}
           <div className="container mx-auto px-4 pb-16">
             <div className="grid md:grid-cols-3 gap-8">
@@ -163,19 +152,8 @@ const HomePage = () => {
                     </div>
                   </div>
                 </div>
-  
-                {/* Help Card */}
-                <div className="bg-white bg-opacity-90 text-gray-800 rounded-xl shadow-sm p-6">
-                  <h3 className="font-bold text-lg mb-4">Need Help?</h3>
-                  <p className="text-gray-600 text-sm mb-4">
-                    Contact our support team for assistance with bookings or technical issues.
-                  </p>
-                  <button className="w-full bg-gray-100 text-gray-700 font-medium py-2 rounded-lg hover:bg-gray-200 transition-colors">
-                    Contact Support
-                  </button>
-                </div>
               </div>
-  
+
               {/* Right Column */}
               <div className="md:col-span-2 space-y-8">
                 {/* My Bookings */}
@@ -189,31 +167,43 @@ const HomePage = () => {
                           className={`px-4 py-1 text-sm ${
                             activeTab === tab ? "bg-blue-600 text-white" : "bg-white text-gray-700"
                           }`}
-                          onClick={() => setActiveTab(tab)}
+                          onClick={() => {
+                            setActiveTab(tab);
+                            if (tab === 'all') setVisibleCount(filteredBookings.length); // Show all bookings
+                          }}
                         >
                           {tab.charAt(0).toUpperCase() + tab.slice(1)}
                         </button>
                       ))}
                     </div>
                   </div>
-  
-                  <div className="space-y-4">
-                    {filteredBookings.length > 0 ? (
-                      filteredBookings.map((booking) => <BookingCard key={booking.id} booking={booking} />)
+
+                  <div
+                    className={`space-y-4 ${
+                      activeTab === 'all' ? 'max-h-96 overflow-y-auto' : ''
+                    }`}
+                  >
+                    {displayedBookings.length > 0 ? (
+                      displayedBookings.map((booking) => (
+                        <BookingCard key={booking._id} booking={booking} />
+                      ))
                     ) : (
                       <div className="text-center py-8">
                         <div className="text-gray-400 mb-2">
                           <AlertCircle size={32} className="mx-auto" />
                         </div>
                         <p className="text-gray-500">No bookings found</p>
-                        <button className="mt-4 text-blue-600 text-sm font-medium hover:underline">
+                        <Link
+                          to="/book-room"
+                          className="mt-4 text-blue-600 text-sm font-medium hover:underline block"
+                        >
                           Book a room now
-                        </button>
+                        </Link>
                       </div>
                     )}
                   </div>
                 </div>
-  
+
                 {/* Facilities */}
                 <div>
                   <h2 className="text-xl font-bold mb-4 text-white">Available Facilities</h2>
@@ -237,16 +227,15 @@ const HomePage = () => {
               </div>
             </div>
           </div>
-  
+
           {/* Footer */}
           <footer className="bg-blue-900 text-white w-full">
-            <div className="container mx-auto px-4 py-10">
+            <div className="px-4 py-10">
               <div className="mb-8 text-center">
                 <h2 className="font-serif text-3xl md:text-4xl font-light tracking-wide">
                   Lead. Inspire. Transform.
                 </h2>
               </div>
-  
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {/* Contact info */}
                 <div className="space-y-4">
@@ -264,7 +253,7 @@ const HomePage = () => {
                     <p>atirazona@aim.edu</p>
                   </div>
                 </div>
-  
+
                 {/* Logo */}
                 <div className="flex items-center justify-center">
                   <div className="h-32 p-2">
@@ -273,7 +262,7 @@ const HomePage = () => {
                 </div>
               </div>
             </div>
-  
+
             {/* Bottom Bar */}
             <div className="border-t border-purple-800 py-4 px-4 flex flex-col md:flex-row justify-between items-center">
               <div className="text-sm text-purple-200 mb-2 md:mb-0">
@@ -291,7 +280,6 @@ const HomePage = () => {
     </div>
   );
 }
-
 
 // Loading State Component
 const LoadingState = () => (
@@ -312,32 +300,98 @@ const ErrorState = ({ message }) => (
       </div>
       <h2 className="text-xl font-bold text-red-600 mb-2">Oops! Something went wrong</h2>
       <p className="text-gray-600 mb-4">{message}</p>
-      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-        Try Again
-      </button>
+      <Link to="/login" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-block">
+        Back to Login
+      </Link>
     </div>
   </div>
 );
 
 // Booking Card Component
 const BookingCard = ({ booking }) => {
+  // Function to format date from startTime (ISO format) to readable date
+  const formatBookingDate = (dateString) => {
+    try {
+      // Try to use startTime first, fall back to date field if available
+      const bookingDate = dateString ? new Date(dateString) : 
+                        booking.startTime ? new Date(booking.startTime) : null;
+      
+      if (!bookingDate || isNaN(bookingDate)) {
+        return { day: '', date: '', month: '' };
+      }
+      
+      return {
+        day: format(bookingDate, 'EEE'),
+        date: format(bookingDate, 'dd'),
+        month: format(bookingDate, 'MMM')
+      };
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return { day: '', date: '', month: '' };
+    }
+  };
+
+  // Format time from 24-hour format to 12-hour format
+  const formatTime = (timeString) => {
+    if (!timeString) return '';
+    
+    try {
+      // Handle ISO date strings
+      if (timeString.includes('T') || timeString.includes('Z')) {
+        const date = new Date(timeString);
+        if (isNaN(date)) return '';
+        return format(date, 'h:mm a');
+      }
+
+      // Handle 24-hour format (HH:MM)
+      if (timeString.includes(':')) {
+        const [hours, minutes] = timeString.split(':').map(Number);
+        const date = new Date();
+        date.setHours(hours, minutes);
+        return format(date, 'h:mm a');
+      }
+      
+      return timeString; // Return as is if format is unknown
+    } catch (error) {
+      console.error('Time formatting error:', error);
+      return timeString;
+    }
+  };
+
+  const { day, date, month } = formatBookingDate(booking.date);
+  
+  // Get room title (handle different property names)
+  const roomTitle = booking.title || booking.room || 'Untitled Booking';
+  
+  // Format start and end times
+  const startTimeFormatted = formatTime(booking.startTime);
+  const endTimeFormatted = formatTime(booking.endTime);
+  
+  // Get building and floor information
+  const buildingName = booking.building || '';
+  const roomName = booking.room || '';
+  const floorName = booking.floor || '';
+  
+  // Default to 'pending' if status is not provided
+  const status = booking.status || 'pending';
+
   return (
     <div className="border border-gray-200 rounded-lg hover:shadow-md transition-shadow overflow-hidden">
       <div className="flex flex-col md:flex-row">
         {/* Left side - Date */}
         <div
           className={`p-4 text-center flex-shrink-0 ${
-            booking.status === 'confirmed'
+            status === 'confirmed' || status === 'approved'
               ? 'bg-green-50'
-              : booking.status === 'pending'
+              : status === 'pending'
               ? 'bg-yellow-50'
               : 'bg-red-50'
           }`}
         >
           <div className="md:w-24">
-            <p className="text-sm font-medium text-gray-500">{format(new Date(booking.date), 'EEE')}</p>
-            <p className="text-2xl font-bold">{format(new Date(booking.date), 'dd')}</p>
-            <p className="text-sm font-medium">{format(new Date(booking.date), 'MMM')}</p>
+            <p className="text-sm font-medium text-gray-500">{day}</p>
+            <p className="text-2xl font-bold">{date}</p>
+            <p className="text-sm font-medium">{month}</p>
           </div>
         </div>
 
@@ -345,27 +399,27 @@ const BookingCard = ({ booking }) => {
         <div className="p-4 flex-grow">
           <div className="flex justify-between items-start">
             <div>
-              <h3 className="font-bold text-lg">{booking.title}</h3>
+              <h3 className="font-bold text-lg">{roomTitle}</h3>
               <div className="flex items-center text-gray-500 text-sm mt-1">
                 <Clock size={14} className="mr-1" />
-                {booking.startTime} - {booking.endTime}
+                {startTimeFormatted} - {endTimeFormatted}
               </div>
               <div className="flex items-center text-gray-500 text-sm mt-1">
                 <MapPin size={14} className="mr-1" />
-                {booking.building}, {booking.room}, {booking.floor}
+                {buildingName}{buildingName && roomName ? ', ' : ''}{roomName}{(buildingName || roomName) && floorName ? ', ' : ''}{floorName}
               </div>
             </div>
 
             <span
               className={`px-3 py-1 text-xs font-medium rounded-full ${
-                booking.status === 'confirmed'
+                status === 'confirmed' || status === 'approved'
                   ? 'bg-green-100 text-green-600'
-                  : booking.status === 'pending'
+                  : status === 'pending'
                   ? 'bg-yellow-100 text-yellow-600'
                   : 'bg-red-100 text-red-600'
               }`}
             >
-              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+              {status.charAt(0).toUpperCase() + status.slice(1)}
             </span>
           </div>
         </div>

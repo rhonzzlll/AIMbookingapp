@@ -23,14 +23,9 @@ exports.getAllBookings = async (req, res) => {
   }
 };
 
-// Get bookings by userId
 exports.getBookingsByUserId = async (req, res) => {
   try {
     const { userId } = req.params;
-
-    if (!userId) {
-      return res.status(400).json({ message: 'User ID is required.' });
-    }
 
     const bookings = await Booking.find({ userId }).sort({ date: 1, startTime: 1 });
 
@@ -39,8 +34,8 @@ exports.getBookingsByUserId = async (req, res) => {
     }
 
     res.status(200).json(bookings);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
 
@@ -73,7 +68,7 @@ exports.createBooking = async (req, res) => {
       return res.status(400).json({ message: 'Invalid start time or end time format.' });
     }
 
-    // Validate conflicts for the initial booking
+    // FIXED: Validate conflicts for the initial booking - look only for confirmed bookings
     const bufferStartTime = new Date(parsedStartTime.getTime() - 30 * 60 * 1000);
     const bufferEndTime = new Date(parsedEndTime.getTime() + 30 * 60 * 1000);
 
@@ -86,7 +81,8 @@ exports.createBooking = async (req, res) => {
         { startTime: { $gte: bufferStartTime }, endTime: { $lte: bufferEndTime } },
         { startTime: { $lte: bufferStartTime }, endTime: { $gte: bufferEndTime } },
       ],
-      status: { $in: ['approved', 'pending'] },
+      // FIXED: Only check for confirmed status (case-insensitive)
+      status: { $regex: new RegExp('^confirmed$', 'i') }
     });
 
     if (overlappingBooking) {
@@ -195,6 +191,7 @@ exports.updateBooking = async (req, res) => {
       const bufferStartTime = new Date(parsedStartTime.getTime() - 30 * 60 * 1000);
       const bufferEndTime = new Date(parsedEndTime.getTime() + 30 * 60 * 1000);
 
+      // FIXED: Only check for confirmed status bookings
       const overlappingBooking = await Booking.findOne({
         _id: { $ne: req.params.id },
         room,
@@ -205,7 +202,8 @@ exports.updateBooking = async (req, res) => {
           { startTime: { $gte: bufferStartTime }, endTime: { $lte: bufferEndTime } },
           { startTime: { $lte: bufferStartTime }, endTime: { $gte: bufferEndTime } },
         ],
-        status: { $in: ['approved', 'pending'] },
+        // FIXED: Only check for confirmed status (case-insensitive)
+        status: { $regex: new RegExp('^confirmed$', 'i') }
       });
 
       if (overlappingBooking) {
@@ -227,7 +225,7 @@ exports.updateBooking = async (req, res) => {
   }
 };
 
-// Delete a booking
+// Delete a booking 
 exports.deleteBooking = async (req, res) => {
   try {
     const booking = await Booking.findByIdAndDelete(req.params.id);
@@ -245,7 +243,7 @@ exports.checkAvailability = async (req, res) => {
   try {
     console.log('Received Payload for Availability Check:', req.body); // Debugging log
 
-    const { startTime, endTime, room, building, category } = req.body;
+    const { startTime, endTime, room, building, category, status } = req.body;
 
     if (!startTime || !endTime || !room || !building || !category) {
       return res.status(400).json({ message: 'All fields (startTime, endTime, room, building, category) are required for availability check.' });
@@ -261,29 +259,32 @@ exports.checkAvailability = async (req, res) => {
     const bufferStartTime = new Date(parsedStartTime.getTime() - 30 * 60 * 1000);
     const bufferEndTime = new Date(parsedEndTime.getTime() + 30 * 60 * 1000);
 
+    // FIXED: Use case-insensitive regex for status to handle both "confirmed" and "Confirmed"
+    const statusQuery = { $regex: new RegExp('^confirmed$', 'i') };
+
     const overlappingBooking = await Booking.findOne({
       room,
       building,
-      category, // Include category in the query if necessary
+      category,
       $or: [
         { startTime: { $lte: bufferStartTime }, endTime: { $gt: bufferStartTime } },
         { startTime: { $lt: bufferEndTime }, endTime: { $gte: bufferEndTime } },
         { startTime: { $gte: bufferStartTime }, endTime: { $lte: bufferEndTime } },
         { startTime: { $lte: bufferStartTime }, endTime: { $gte: bufferEndTime } },
       ],
-      status: { $in: ['approved', 'pending'] },
+      status: statusQuery  // Use the regex pattern for case-insensitive matching
     });
 
     if (overlappingBooking) {
       return res.status(200).json({
         available: false,
-        message: 'This time slot is unavailable due to the 30-minute buffer rule.',
+        message: 'This time slot is unavailable due to an already confirmed booking (30-minute buffer rule applies).',
       });
     }
 
     return res.status(200).json({ available: true, message: 'This time slot is available.' });
   } catch (error) {
-    console.error('Check Availability Error:', error); // Debugging log
+    console.error('Check Availability Error:', error);
     res.status(500).json({ message: 'Failed to check availability.' });
   }
 };

@@ -78,15 +78,15 @@ const AccRooms = () => {
       toTime: searchParams.toTime || '10:00',
     };
 
-    // Pass only the room ID and search parameters
+    // Construct the booking data payload
     const bookingData = {
-      roomId: room._id, // Save the room ID
+      room: room,
       searchParams: validatedSearchParams,
     };
 
     console.log('Navigating to booking form with data:', bookingData);
 
-    // Navigate to the booking form with the room ID and search parameters
+    // Navigate to the booking form with the room and search parameters
     navigate('/forms', {
       state: { bookingData },
     });
