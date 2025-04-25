@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
  
-import  Confirm from "../../components/ui/ConfirmationModal";  
+import Confirm from "../../components/ui/ConfirmationModal";  
 const API_BASE_URL = 'http://localhost:5000/api';
 
 const TIME_OPTIONS = [
@@ -199,11 +199,12 @@ const BookingForm = ({ onBookingSubmit }) => {
   const processBookingsForTimeSlots = (bookings) => {
     if (!bookings || !formData.building || !formData.room || !formData.date) return;
 
+    // FIXED: Filter only for confirmed status bookings (case-insensitive check)
     const relevantBookings = bookings.filter(booking => 
       booking.building === formData.building && 
       booking.room === formData.room &&
       new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
-      (booking.status === 'approved' || booking.status === 'pending')
+      (booking.status?.toLowerCase() === 'confirmed')
     );
 
     // Create an array of unavailable time slots including buffer times
@@ -224,7 +225,7 @@ const BookingForm = ({ onBookingSubmit }) => {
         const period = hours >= 12 ? 'PM' : 'AM';
         hours = hours % 12 || 12; // Convert to 12-hour format
         
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${period}`;
+        return `${hours}:${minutes.toString().padStart(2, '0')} ${period}`;
       };
       
       // Find relevant time slots in our options that fall within buffer zones
@@ -235,7 +236,7 @@ const BookingForm = ({ onBookingSubmit }) => {
         if (timeOptionDate >= bufferStart && timeOptionDate <= bufferEnd) {
           unavailable.push({
             time: timeOption,
-            reason: `Booking with 30min buffer: ${formatTimeToOption(bookingStart)} - ${formatTimeToOption(bookingEnd)}`
+            reason: `Booking: ${formatTimeToOption(bookingStart)} - ${formatTimeToOption(bookingEnd)} (Already booked)`
           });
         }
       });
@@ -387,9 +388,11 @@ const BookingForm = ({ onBookingSubmit }) => {
         {
           building: data.building,
           room: data.room,
-          category: data.category, // Include category
+          category: data.category,
           startTime: startDateTime.toISOString(),
           endTime: endDateTime.toISOString(),
+          // FIXED: Send "confirmed" in lowercase to match backend expectations
+          status: 'confirmed',
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -461,9 +464,11 @@ const BookingForm = ({ onBookingSubmit }) => {
         {
           building: formData.building,
           room: formData.room,
-          category: formData.category, // Include category
+          category: formData.category,
           startTime: startDateTime.toISOString(),
           endTime: endDateTime.toISOString(),
+          // FIXED: Use lowercase "confirmed" status
+          status: 'confirmed',
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -504,6 +509,7 @@ const BookingForm = ({ onBookingSubmit }) => {
       setLoading(false);
     }
   };
+
   
   return (
     <div className="bg-white rounded-lg shadow-md p-8">
@@ -515,7 +521,7 @@ const BookingForm = ({ onBookingSubmit }) => {
         {/* Booking Title */}
         <div className="mb-6">
           <label className="block text-gray-700 font-medium mb-2">
-            Booking Title <span className="text-red-500">*</span>
+            Booking Title <span className="text-red-500"></span>
           </label>
           <input
             type="text"
@@ -528,38 +534,65 @@ const BookingForm = ({ onBookingSubmit }) => {
           />
         </div>
 
-        {/* First Name Field */}
-        <div className="relative mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            First Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="firstName"
-            value={formData.firstName}
-            onChange={handleNameChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            autoComplete="off"
-          />
-          {showSuggestions && filteredUsers.length > 0 && (
-            <ul className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-              {filteredUsers.map((user) => (
-                <li
-                  key={user._id}
-                  onClick={() => handleSuggestionClick(user)}
-                  className="p-2 hover:bg-blue-100 cursor-pointer"
-                >
-                  {user.firstName} {user.lastName}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
+        <div className="mb-6">
+  <label className="block text-gray-700 font-medium mb-2">
+    <span className="text-red-500"></span>
+  </label>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="relative">
+      <input
+        type="text"
+        name="firstName"
+        value={formData.firstName}
+        onChange={handleNameChange}
+        placeholder="First Name"
+        className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        autoComplete="off"
+      />
+      {showSuggestions && filteredUsers.length > 0 && (
+        <ul className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+          {filteredUsers.map((user) => (
+            <li
+              key={user._id}
+              onClick={() => handleSuggestionClick(user)}
+              className="p-2 hover:bg-blue-100 cursor-pointer"
+            >
+              {user.firstName} {user.lastName}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+    <div className="relative">
+      <input
+        type="text"
+        name="lastName"
+        value={formData.lastName}
+        onChange={handleNameChange}
+        placeholder="Last Name"
+        className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        autoComplete="off"
+      />
+      {showSuggestions && filteredUsers.length > 0 && (
+        <ul className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+          {filteredUsers.map((user) => (
+            <li
+              key={user._id}
+              onClick={() => handleSuggestionClick(user)}
+              className="p-2 hover:bg-blue-100 cursor-pointer"
+            >
+              {user.firstName} {user.lastName}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </div>
+</div>
         {/* Last Name Field */}
         <div className="relative mb-6">
           <label className="block text-gray-700 font-medium mb-2">
-            Last Name <span className="text-red-500">*</span>
+            Last Name <span className="text-red-500"></span>
           </label>
           <input
             type="text"
@@ -587,10 +620,10 @@ const BookingForm = ({ onBookingSubmit }) => {
         {/* Email */}
         <div className="mb-6">
           <label className="block text-gray-700 font-medium mb-2">
-            Email <span className="text-red-500">*</span>
+    <span className="text-red-500"></span>
           </label>
           <input
-            type="email"
+            type="hidden"
             name="email"
             value={formData.email}
             onChange={handleChange}
@@ -599,79 +632,28 @@ const BookingForm = ({ onBookingSubmit }) => {
           />
         </div>
 
-        {/* Department Selection */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Department <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="department"
-            value={formData.department}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select Department</option>
-            {departments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
-        </div>
+        <input
+  type="hidden"
+  name="department"
+  value={formData.department}
+/>
+ 
+        <input
+  type="hidden"
+  name="building"
+  value={formData.building}
+/>
 
-        {/* Building Selection */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Building <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="building"
-            value={formData.building}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select Building</option>
-            {[...new Set(rooms.map((room) => room.building))].map((building) => (
-              <option key={building} value={building}>
-                {building}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Category Selection */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Category <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="category"
-            value={formData.category}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-            disabled={!formData.building}
-          >
-            <option value="">Select Category</option>
-            {formData.building &&
-              [...new Set(
-                rooms
-                  .filter((room) => room.building === formData.building)
-                  .map((room) => room.category)
-              )].map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-          </select>
-        </div>
+<input
+  type="hidden"
+  name="category"
+  value={formData.category}
+/>
 
         {/* Room Selection */}
         <div className="mb-6">
           <label className="block text-gray-700 font-medium mb-2">
-            Room <span className="text-red-500">*</span>
+            Meeting Room <span className="text-red-500"></span>
           </label>
           <select
             name="room"
@@ -694,7 +676,7 @@ const BookingForm = ({ onBookingSubmit }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div>
             <label className="block text-gray-700 font-medium mb-2">
-              Date <span className="text-red-500">*</span>
+              Date <span className="text-red-500"></span>
             </label>
             <input
               type="date"
@@ -707,7 +689,7 @@ const BookingForm = ({ onBookingSubmit }) => {
           </div>
           <div>
             <label className="block text-gray-700 font-medium mb-2">
-              Start Time <span className="text-red-500">*</span>
+              Start Time <span className="text-red-500"></span>
             </label>
             <select
               name="startTime"
@@ -724,14 +706,14 @@ const BookingForm = ({ onBookingSubmit }) => {
                   disabled={isTimeSlotUnavailable(time)} // Disable if the time slot is unavailable
                   title={getTimeSlotTooltip(time)} // Add a tooltip to explain why it's unavailable
                 >
-                  {isTimeSlotUnavailable(time) ? `${time} (Unavailable)` : time}
+                  {isTimeSlotUnavailable(time) ? `${time} (Already booked)` : time}
                 </option>
               ))}
             </select>
           </div>
           <div>
             <label className="block text-gray-700 font-medium mb-2">
-              End Time <span className="text-red-500">*</span>
+              End Time <span className="text-red-500"></span>
             </label>
             <select
               name="endTime"
@@ -748,7 +730,7 @@ const BookingForm = ({ onBookingSubmit }) => {
                   disabled={isTimeSlotUnavailable(time)} // Disable if the time slot is unavailable
                   title={getTimeSlotTooltip(time)} // Add a tooltip to explain why it's unavailable
                 >
-                  {isTimeSlotUnavailable(time) ? `${time} (Unavailable)` : time}
+                  {isTimeSlotUnavailable(time) ? `${time} (Already booked)` : time}
                 </option>
               ))}
             </select>

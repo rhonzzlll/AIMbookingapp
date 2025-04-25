@@ -5,7 +5,7 @@ const subRoomSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  capacity: {
+  capacity: {    
     type: Number,
     required: true,
   },
@@ -27,33 +27,7 @@ const roomSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    required: true,
-    validate: {
-      validator: function (value) {
-        const accCategories = [
-          "Hybrid Caseroom",
-          "Regular Caseroom",
-          "Flat Room",
-          "Meeting Room",
-          "Ministudio",
-        ];
-        const aimCategories = [
-          "Hybrid Caseroom",
-          "Flat Room",
-          "Open Area",
-          "Meeting Room",
-        ];
-
-        if (this.building === "ACC Building") {
-          return accCategories.includes(value);
-        } else if (this.building === "AIM Building") {
-          return aimCategories.includes(value);
-        }
-        return false;
-      },
-      message: (props) =>
-        `${props.value} is not a valid category for the selected building.`,
-    },
+    required: true, // Removed the validate property
   },
   roomName: {
     type: String,
@@ -83,4 +57,4 @@ const roomSchema = new mongoose.Schema({
   },
 });
 
-module.exports = mongoose.model('Room', roomSchema);
+module.exports = mongoose.model('Room', roomSchema); 
