@@ -290,14 +290,6 @@ const sortedBookings = [...getFilteredBookings()].sort((a, b) => {
                 </button>
               ))}
             </div>
-            <div>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                onClick={() => openModal && openModal()}
-              >
-                Add New Booking
-              </button>
-            </div>
           </div>
 
             <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">

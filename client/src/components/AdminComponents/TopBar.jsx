@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const TopBar = ({ openModal }) => {
+
+const TopBar = ({ openModal, onSearch }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const menuRef = useRef(null);
   const navigate = useNavigate();
 
@@ -10,6 +12,13 @@ const TopBar = ({ openModal }) => {
     setUserMenuOpen(prev => !prev);
   };
 
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    if (onSearch) {
+      onSearch(value); // Callback to parent or filter logic
+    }
+  };
   const handleLogout = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('_id');
@@ -17,7 +26,6 @@ const TopBar = ({ openModal }) => {
     navigate('/login');
   };
 
-  // 🔽 Close on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -32,26 +40,32 @@ const TopBar = ({ openModal }) => {
   }, []);
 
   return (
-    <div className="bg-white px-8 py-5 flex items-center justify-between shadow-md relative w-full">      {/* Search Bar */}
+    <div className="px-8 py-5 flex items-center justify-between shadow-md relative w-full bg-blue-100 text-white">
       <div className="relative w-72">
         <input
           type="text"
+          value={searchTerm}
+          onChange={handleSearchChange}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && onSearch) {
+              onSearch(searchTerm);
+            }
+          }}
           placeholder="Search"
-          className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-4 py-2 pr-10 bg-blue-800 text-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-blue-300"
           aria-label="Search"
         />
         <span
-          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-400"
           aria-hidden="true"
         >
           🔍
         </span>
       </div>
-
-      {/* Top Bar Actions */}
+  
       <div className="flex items-center gap-4 relative" ref={menuRef}>
         <button
-          className="text-gray-600 p-1 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
+          className="text-blue-700 p-1 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded transition-colors"
           onClick={toggleUserMenu}
           aria-label="User Menu"
         >
@@ -70,17 +84,11 @@ const TopBar = ({ openModal }) => {
             />
           </svg>
         </button>
-
+  
         {userMenuOpen && (
-          <div className="absolute right-0 mt-2 bg-white border border-gray-200 rounded-md shadow-lg w-48 z-10">
+          <div className="absolute right-[12px] mt-[16px] bg-white border border-blue-200 rounded-md shadow-lg w-48 z-10">
             <div
-              className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-              onClick={() => console.log('Profile clicked')}
-            >
-              Profile
-            </div>
-            <div
-              className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+              className="px-4 py-2 hover:bg-blue-100 text-blue-800 cursor-pointer"
               onClick={handleLogout}
             >
               Logout
@@ -89,7 +97,7 @@ const TopBar = ({ openModal }) => {
         )}
       </div>
     </div>
-  );
+  );  
 };
 
 export default TopBar;

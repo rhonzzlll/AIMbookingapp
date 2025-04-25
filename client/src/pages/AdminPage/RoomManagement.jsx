@@ -179,26 +179,14 @@ const RoomManagement = () => {
       )}
     <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
       <TopBar onSearch={setSearchTerm} />
-      <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4 mt-2 p-6 bg-gray-50">
-        <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
+      <div className="p-4 bg-gray-100 w-full flex flex-col">
+        <div className="flex justify-between items-center mb-4">  
+          <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
           <button
             onClick={handleAddRoom}
             className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
           >
-            <svg
-              className="w-5 h-5 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Add New Room
+            + Add New Room
           </button>
         </div>
 
@@ -241,7 +229,8 @@ const RoomManagement = () => {
           />
         )}
       </div>
-      </div> 
+    </div> 
+    </div> 
   );
 };
 
