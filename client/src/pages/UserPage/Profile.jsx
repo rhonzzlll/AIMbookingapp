@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import Header from './Header';
-import AIMbg from "../../images/AIM_bldg.jpg";
+// import AIMbg from '../../images/AIMbg.png';
+import home from "../../images/home.png";
+
 
 const Profile = () => {
   const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
@@ -228,20 +230,20 @@ const Profile = () => {
   }, [useLocalData, userId]);
 
   return (
-    <div className="relative min-h-screen w-full overflow-x-auto">
+    <div className="relative w-full overflow-x-auto">
           {/* Fixed Background Image and Overlay */}
             <div className="fixed inset-0 z-0">
               <div
                 className="absolute inset-0"
                 style={{
-                  backgroundImage: `url(${AIMbg})`,
+                  backgroundImage: `url(${home})`,
                   backgroundSize: "cover",
                   backgroundPosition: "center",
                   backgroundRepeat: "no-repeat",
                   backgroundAttachment: "fixed",
                 }}
               />
-              <div className="absolute inset-0 bg-black bg-opacity-40" />
+              <div className="absolute inset-0 bg-black bg-opacity-10" />
             </div>
     
       

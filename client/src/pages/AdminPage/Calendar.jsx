@@ -258,10 +258,11 @@ const BookingCalendar = () => {
               {day}
             </span>
             {hasBookings && (
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-500 text-white">
-                {dayBookings.length}
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-500 text-white whitespace-nowrap">
+                {dayBookings.length} {dayBookings.length === 1 ? 'booking' : 'bookings'}
               </span>
             )}
+
           </div>
 
           <div className="flex flex-col gap-1">
@@ -281,10 +282,9 @@ const BookingCalendar = () => {
                 )}
               </div>
             ))}
-            {dayBookings.length > 3 && (
-              <div className="text-xs text-gray-500">+{dayBookings.length - 3} more</div>
-            )}
           </div>
+
+
         </div>
       );
     }
@@ -389,7 +389,7 @@ const BookingCalendar = () => {
   
     const generateTimeSlots = () => {
       const slots = [];
-      for (let hour = 7; hour < 20; hour++) {
+      for (let hour = 7; hour < 24; hour++) {
         for (let minute = 0; minute < 60; minute += 30) {
           const formattedHour = hour % 12 || 12;
           const period = hour >= 12 ? 'PM' : 'AM';
@@ -420,9 +420,9 @@ const BookingCalendar = () => {
     
         {/* ✅ Only ONE timeSlots.map here */}
         <div className="flex-grow overflow-y-auto">
-        {dayBookings.length > 0 && (
-          <h3 className="font-semibold mb-4">Daily Schedule</h3>
-        )}
+          {dayBookings.length > 0 && (
+            <h3 className="font-semibold mb-4">Daily Schedule</h3>
+          )}
 
           {dayBookings.length === 0 && (
             <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center text-gray-500 italic">
@@ -464,8 +464,24 @@ const BookingCalendar = () => {
                   key={index}
                   className={`flex border-b ${isOddSlot ? 'bg-gray-50' : 'bg-white'} ${index === timeSlots.length - 1 ? 'border-b-0' : ''}`}
                 >
-                  <div className="w-24 py-3 px-2 text-right text-sm font-medium border-r">
-                    {timeSlot}
+                  <div className="w-36 border-r text-sm font-medium px-1">
+                    <div className="flex h-full items-center justify-end min-h-[90px]">
+                      {startingBookings.length > 0 ? (
+                        <div className="space-y-1 text-right">
+                          {startingBookings.map((booking, i) => {
+                            const start = new Date(booking.startTime);
+                            const end = new Date(booking.endTime);
+                            return (
+                              <div key={i}>
+                                {start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-right w-full">{timeSlot}</div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex-grow p-2">
                     {startingBookings.map((booking, idx) => {
@@ -480,29 +496,32 @@ const BookingCalendar = () => {
                       return (
                         <div
                           key={idx}
-                          className={`relative p-2 rounded-md text-sm text-gray-800 shadow-sm border border-blue-300 ${
+                          className={`relative p-3 rounded-md text-base text-gray-800 shadow-sm border border-blue-300 ${
                             departmentColors[booking.department] || 'bg-blue-100'
                           }`}
                         >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-medium text-base">{booking.roomName}</span>  {/* Room name */}
-                            <span className={`text-xs px-2 py-1 rounded-full text-white ${
-                              booking.status === 'confirmed' ? 'bg-green-500' : 'bg-red-500'
-                            }`}>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-semibold text-lg">{booking.roomName}</span>
+                            <span
+                              className={`text-sm px-2 py-1 rounded-full text-white ${
+                                booking.status === 'confirmed' ? 'bg-green-500' : 'bg-red-500'
+                              }`}
+                            >
                               {booking.status}
                             </span>
                           </div>
-                          <p className="text-sm font-semibold">{booking.title}</p>
-                          <p className="text-sm font-semibold">{booking.firstName} {booking.lastName}</p>
-                          <p className="text-xs text-gray-800">Building: {booking.building}</p>
-                          <p className="text-xs italic text-gray-700">
+                          <p className="text-base font-semibold">{booking.title}</p>
+                          <p className="text-base font-semibold">{booking.firstName} {booking.lastName}</p>
+                          <p className="text-sm text-gray-800">Building: {booking.building}</p>
+                          <p className="text-sm italic text-gray-700">
                             ⏰ {start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                           </p>
                           {booking.isRecurring && (
-                            <p className="text-xs italic text-gray-500">↻ Recurs: {booking.recurring}</p>
+                            <p className="text-sm italic text-gray-500">↻ Recurs: {booking.recurring}</p>
                           )}
                         </div>
                       );
+                      
                     })}
                   </div>
                 </div>

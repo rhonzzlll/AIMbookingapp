@@ -3,6 +3,7 @@ import axios from 'axios';
 import TopBar from '../../components/AdminComponents/TopBar';
 import DeleteConfirmation from './modals/DeleteConfirmation';
 import StatusModal from './modals/StatusModal';
+
 const formatDate = (date) => {
   const options = { year: 'numeric', month: 'short', day: 'numeric' };
   return new Date(date).toLocaleDateString(undefined, options);
@@ -77,8 +78,8 @@ const initialFormState = {
 const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
   '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
-  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM', 
+  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
 
 // Tab Button Component
@@ -115,7 +116,6 @@ const Bookings = () => {
   
   // Get token from localStorage
   const token = localStorage.getItem('token');
-
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedBookingId, setSelectedBookingId] = useState(null);
@@ -651,10 +651,12 @@ const Bookings = () => {
     const checkTime = new Date(`${formData.date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
   
     return bookings.some((booking) => {
+      // Skip the current booking when editing
+      if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;
+    
       const bookingDate = new Date(booking.date).toISOString().split('T')[0];
       const selectedDate = new Date(formData.date).toISOString().split('T')[0];
-  
-      // Check only same date
+    
       if (
         booking.roomName === selectedRoomName &&
         bookingDate === selectedDate &&
@@ -662,12 +664,23 @@ const Bookings = () => {
       ) {
         const bookingStart = new Date(booking.startTime);
         const bookingEnd = new Date(booking.endTime);
-        return checkTime >= bookingStart && checkTime < bookingEnd;
+    
+        if (type === 'start') {
+          const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);
+          return checkTime >= bookingStart && checkTime < bufferEnd;
+        }
+    
+        if (type === 'end') {
+          const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);
+          return checkTime >= bufferStart && checkTime < bookingEnd;
+        }
       }
-  
+    
       return false;
     });
+    
   };
+  
   
   const getFilteredStartTimes = () => {
     const today = new Date().toISOString().split('T')[0];
@@ -682,15 +695,45 @@ const Bookings = () => {
   };
   
   const getFilteredEndTimes = () => {
-    if (!formData.startTime) return [];
+    if (!formData.startTime || !formData.date) return [];
   
-    const startMinutes = getTimeInMinutes(formData.startTime);
+    const start24 = convertTo24HourFormat(formData.startTime);
+    const startDateTime = new Date(`${formData.date}T${start24}:00`);
+    const availableEndTimes = [];
   
-    return TIME_OPTIONS.filter((time) => {
-      const timeMinutes = getTimeInMinutes(time);
-      return timeMinutes > startMinutes && !isTimeSlotTaken(time, 'end');
-    });
+    for (const time of TIME_OPTIONS) {
+      const end24 = convertTo24HourFormat(time);
+      const endDateTime = new Date(`${formData.date}T${end24}:00`);
+      if (endDateTime <= startDateTime) continue;
+  
+      const bufferEnd = new Date(endDateTime.getTime() + 30 * 60 * 1000);
+  
+      const hasConflict = bookings.some((booking) => {
+        // 🛠️ Fix: skip current booking while editing
+        if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;
+  
+        const bookingDate = new Date(booking.date).toISOString().split('T')[0];
+        const selectedDate = new Date(formData.date).toISOString().split('T')[0];
+        const roomMatch = rooms.find(r => r._id === formData.room)?.roomName === booking.roomName;
+  
+        if (!roomMatch || bookingDate !== selectedDate || booking.status !== 'confirmed') return false;
+  
+        const bookingStart = new Date(booking.startTime);
+        const bookingEnd = new Date(booking.endTime);
+  
+        return startDateTime < bookingEnd && bufferEnd > bookingStart;
+      });
+  
+      if (hasConflict) break;
+  
+      availableEndTimes.push(time);
+    }
+  
+    return availableEndTimes;
   };
+  
+  
+  
   
   // BookingForm component
   const BookingForm = React.memo(({ isEdit }) => {
@@ -1046,7 +1089,6 @@ const Bookings = () => {
                 { key: 'building', label: 'Building' },
                 { key: 'date', label: 'Date' },
                 { key: 'startTime', label: 'Time' },
-                { key: 'notes', label: 'Notes' },
                 { key: 'status', label: 'Status' },
                 { key: 'recurring', label: 'Recurring' },
               ].map(({ key, label }) => (
@@ -1092,7 +1134,6 @@ const Bookings = () => {
                       {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
                       {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td className="px-4 py-2 border-b">{booking.notes}</td>
                     <td className="px-4 py-2 border-b">
                       <div>
                         <span

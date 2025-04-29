@@ -342,16 +342,42 @@ const Dashboard = ({ openModal }) => {
                     {day.date}
                   </div>
 
-                  {bookingsByDate[day.fullDate]?.map((booking, i) => (
-                    <div
-                      key={i}
-                      className="text-xs bg-blue-100 text-blue-600 rounded px-1 mt-1 truncate cursor-pointer"
-                      title={`${booking.title} (${booking.startTime} - ${booking.endTime})`}
-                      onClick={() => handleEditClick(booking)}
-                    >
-                      {booking.title}
-                    </div>
-                  ))}
+                  {(() => {
+                          const confirmedBookings = bookingsByDate[day.fullDate]
+                            ?.filter((booking) => booking.status === 'confirmed') || [];
+
+                          if (confirmedBookings.length === 0) {
+                            return (
+                              <div className="text-xs text-gray-400 mt-2 italic">
+                                No bookings
+                              </div>
+                            );
+                          }
+
+                          const visibleBookings = confirmedBookings.slice(0, 3);
+                          const remainingCount = confirmedBookings.length - visibleBookings.length;
+
+                          return (
+                            <>
+                              {visibleBookings.map((booking, i) => (
+                                <div
+                                  key={i}
+                                  className="text-xs bg-blue-100 text-blue-600 rounded px-1 mt-1 truncate cursor-pointer"
+                                  title={`${booking.title} (${booking.startTime} - ${booking.endTime})`}
+                                  onClick={() => handleEditClick(booking)}
+                                >
+                                  {booking.title}
+                                </div>
+                              ))}
+
+                              {remainingCount > 0 && (
+                                <div className="text-xs text-blue-500 mt-1 cursor-pointer hover:underline" onClick={() => {}}>
+                                  +{remainingCount} more
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                 </div>
               ))}
             </div>
@@ -395,7 +421,6 @@ const Dashboard = ({ openModal }) => {
                     { label: 'Building', key: 'building' },
                     { label: 'Date', key: 'date' },
                     { label: 'Time', key: 'startTime' },
-                    { label: 'Notes', key: 'notes' },
                     { label: 'Status', key: 'status' },
                     { label: 'Recurring', key: 'recurring' }
                   ].map(({ label, key }) => (
@@ -407,7 +432,6 @@ const Dashboard = ({ openModal }) => {
                       {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                     </th>
                   ))}
-                  <th className="px-4 py-2 border-b">Actions</th>
                 </tr>
               </thead>
 
@@ -444,7 +468,6 @@ const Dashboard = ({ openModal }) => {
                           {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
                           {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
-                        <td className="px-4 py-2 border-b">{booking.notes}</td>
                         <td className="px-4 py-2 border-b">
                           <div>
                             <span
@@ -464,14 +487,6 @@ const Dashboard = ({ openModal }) => {
                           </div>
                         </td>
                         <td className="px-4 py-2 border-b">{booking.recurring}</td>
-                        <td className="px-4 py-2 border-b">
-                          <button
-                            className="text-blue-600 hover:underline"
-                            onClick={() => handleEditClick(booking)}
-                          >
-                            view
-                          </button>
-                        </td>
                       </tr>
                     );
                   })

@@ -40,7 +40,7 @@ const TopBar = ({ openModal, onSearch }) => {
   }, []);
 
   return (
-    <div className="px-8 py-5 flex items-center justify-between shadow-md relative w-full bg-blue-100 text-white">
+    <div className="px-8 py-5 flex items-center justify-between shadow-md relative w-full text-black">
       <div className="relative w-72">
         <input
           type="text"
@@ -51,21 +51,30 @@ const TopBar = ({ openModal, onSearch }) => {
               onSearch(searchTerm);
             }
           }}
-          placeholder="Search"
-          className="w-full px-4 py-2 pr-10 bg-blue-800 text-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-blue-300"
+          placeholder=""
+          className="w-full px-4 py-2 pr-10 text-black border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
           aria-label="Search"
         />
+
+        {/* Label that looks like a placeholder */}
+        {!searchTerm && (
+          <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-black pointer-events-none">
+            Search
+          </span>
+        )}
+
         <span
-          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-400"
+          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-300"
           aria-hidden="true"
         >
           🔍
         </span>
       </div>
+
   
       <div className="flex items-center gap-4 relative" ref={menuRef}>
         <button
-          className="text-blue-700 p-1 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded transition-colors"
+          className="text-black 0 p-2 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded transition-colors"
           onClick={toggleUserMenu}
           aria-label="User Menu"
         >
