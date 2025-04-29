@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import TopBar from '../../components/AdminComponents/TopBar';
+import DeleteConfirmation from './modals/DeleteConfirmation';
+import StatusModal from './modals/StatusModal';
 
 const formatDate = (date) => {
   const options = { year: 'numeric', month: 'short', day: 'numeric' };
@@ -76,8 +78,8 @@ const initialFormState = {
 const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
   '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
-  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM', 
+  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
 
 // Tab Button Component
@@ -102,6 +104,7 @@ const Bookings = () => {
   const [itemsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
   
+  
   // State for modal controls
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -113,6 +116,42 @@ const Bookings = () => {
   
   // Get token from localStorage
   const token = localStorage.getItem('token');
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedBookingId, setSelectedBookingId] = useState(null);
+
+  useEffect(() => {
+    const fetchRoomsAndBookings = async () => {
+      try {
+        setLoading(true);
+        const roomRes = await axios.get('/api/rooms', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setRooms(roomRes.data); // Assume it's an array of rooms
+  
+        const bookingRes = await axios.get('/api/bookings', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const bookingsWithRoomName = bookingRes.data.bookings.map(booking => {
+          const room = roomRes.data.find(r => r._id === booking.room);
+          return {
+            ...booking,
+            roomName: room?.roomName || 'Unknown Room',
+            building: room?.building || 'Unknown Building',
+          };
+        });
+  
+        setBookings(bookingsWithRoomName);
+      } catch (err) {
+        console.error(err);
+        setError('Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+  
+    fetchRoomsAndBookings();
+  }, []);
 
   // Fetch bookings data
   const fetchBookings = useCallback(async () => {
@@ -253,41 +292,53 @@ const Bookings = () => {
     resetForm();
     setIsAddModalOpen(true);
   };
-
   const handleEditClick = (booking) => {
+    const selectedBuilding = booking.building;
+    const selectedCategory = booking.category;
+  
+    // Set categories and available rooms based on the booking's building and category
+    const selectedCategories = BUILDING_CATEGORIES[selectedBuilding] || [];
+    const matchedRooms = rooms.filter(
+      (room) => room.building === selectedBuilding && room.category === selectedCategory
+    );
+  
+    setCategories(selectedCategories);
+    setAvailableRooms(matchedRooms);
+  
+    // Fix: Format times properly using the TIME_OPTIONS format
+    const startDate = new Date(booking.startTime);
+    const endDate = new Date(booking.endTime);
+    
+    // Format to match the TIME_OPTIONS format (e.g., "8:00 AM")
+    const formatTimeFor12Hour = (date) => {
+      let hours = date.getHours();
+      const minutes = date.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      
+      hours = hours % 12;
+      hours = hours ? hours : 12; // the hour '0' should be '12'
+      const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+      
+      return `${hours}:${minutesStr} ${ampm}`;
+    };
+    
+    const formattedStartTime = formatTimeFor12Hour(startDate);
+    const formattedEndTime = formatTimeFor12Hour(endDate);
+  
+    // Prefill form
     setFormData({
       ...booking,
       date: parseISODate(booking.date),
-      startTime: new Date(booking.startTime).toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      }),
-      endTime: new Date(booking.endTime).toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      }),
+      startTime: formattedStartTime,
+      endTime: formattedEndTime,
       recurring: booking.recurring || 'No',
       recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
     });
-    
+  
     setEditBookingId(booking._id);
     setIsEditModalOpen(true);
-    
-    // Update available rooms based on selected building and category
-    if (booking.building) {
-      setCategories(BUILDING_CATEGORIES[booking.building] || []);
-      
-      if (booking.category) {
-        const availableRooms = rooms.filter(
-          room => room.building === booking.building && room.category === booking.category
-        );
-        setAvailableRooms(availableRooms);
-      }
-    }
   };
-
+  
   const handleDeleteBooking = async (bookingId) => {
     if (!window.confirm('Are you sure you want to delete this booking?')) {
       return;
@@ -302,6 +353,12 @@ const Bookings = () => {
       console.error('Error deleting booking:', err);
       setError('Failed to delete booking. Please try again.');
     }
+  };
+
+  const handleStatusChange = (bookingId, status) => {
+    setSelectedBookingId(bookingId);
+    setSelectedStatus(status);
+    setIsStatusModalOpen(true);
   };
 
   // Form states
@@ -456,6 +513,18 @@ const Bookings = () => {
       hasError = true;
     }
 
+    const userExists = users.some(
+      (user) =>
+        user.firstName.toLowerCase() === formData.firstName.toLowerCase() &&
+        user.lastName.toLowerCase() === formData.lastName.toLowerCase()
+    );
+    
+    if (!userExists) {
+      errors.name = 'User not found. Please enter a registered first and last name.';
+      hasError = true;
+    }
+    
+
     if (hasError) {
       setFormError(errors);
       setSubmitLoading(false);
@@ -563,24 +632,106 @@ const Bookings = () => {
   
     return hours * 60 + minutes;
   };
+
+  const isTimeSlotTaken = (timeStr, type = 'start') => {
+    if (!formData.room || !formData.date) return false;
+  
+    const selectedRoom = rooms.find(r => r._id === formData.room);
+    const selectedRoomName = selectedRoom?.roomName;
+    if (!selectedRoomName) return false;
+  
+    const [hourStr, minuteStr] = timeStr.split(' ')[0].split(':');
+    let hours = parseInt(hourStr, 10);
+    const minutes = parseInt(minuteStr, 10);
+    const modifier = timeStr.split(' ')[1];
+  
+    if (modifier === 'PM' && hours !== 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+  
+    const checkTime = new Date(`${formData.date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
+  
+    return bookings.some((booking) => {
+      // Skip the current booking when editing
+      if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;
+    
+      const bookingDate = new Date(booking.date).toISOString().split('T')[0];
+      const selectedDate = new Date(formData.date).toISOString().split('T')[0];
+    
+      if (
+        booking.roomName === selectedRoomName &&
+        bookingDate === selectedDate &&
+        booking.status === 'confirmed'
+      ) {
+        const bookingStart = new Date(booking.startTime);
+        const bookingEnd = new Date(booking.endTime);
+    
+        if (type === 'start') {
+          const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);
+          return checkTime >= bookingStart && checkTime < bufferEnd;
+        }
+    
+        if (type === 'end') {
+          const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);
+          return checkTime >= bufferStart && checkTime < bookingEnd;
+        }
+      }
+    
+      return false;
+    });
+    
+  };
+  
   
   const getFilteredStartTimes = () => {
     const today = new Date().toISOString().split('T')[0];
-    if (formData.date !== today) return TIME_OPTIONS;
-  
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
   
-    return TIME_OPTIONS.filter((time) => getTimeInMinutes(time) > currentMinutes);
+    return TIME_OPTIONS.filter((time) => {
+      const timeMinutes = getTimeInMinutes(time);
+      const isToday = formData.date === today;
+      return (!isToday || timeMinutes > currentMinutes) && !isTimeSlotTaken(time, 'start');
+    });
   };
   
   const getFilteredEndTimes = () => {
-    const startTime = formData.startTime;
-    if (!startTime) return TIME_OPTIONS;
+    if (!formData.startTime || !formData.date) return [];
   
-    const startMinutes = getTimeInMinutes(startTime);
-    return TIME_OPTIONS.filter((time) => getTimeInMinutes(time) > startMinutes);
+    const start24 = convertTo24HourFormat(formData.startTime);
+    const startDateTime = new Date(`${formData.date}T${start24}:00`);
+    const availableEndTimes = [];
+  
+    for (const time of TIME_OPTIONS) {
+      const end24 = convertTo24HourFormat(time);
+      const endDateTime = new Date(`${formData.date}T${end24}:00`);
+      if (endDateTime <= startDateTime) continue;
+  
+      const bufferEnd = new Date(endDateTime.getTime() + 30 * 60 * 1000);
+  
+      const hasConflict = bookings.some((booking) => {
+        // 🛠️ Fix: skip current booking while editing
+        if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;
+  
+        const bookingDate = new Date(booking.date).toISOString().split('T')[0];
+        const selectedDate = new Date(formData.date).toISOString().split('T')[0];
+        const roomMatch = rooms.find(r => r._id === formData.room)?.roomName === booking.roomName;
+  
+        if (!roomMatch || bookingDate !== selectedDate || booking.status !== 'confirmed') return false;
+  
+        const bookingStart = new Date(booking.startTime);
+        const bookingEnd = new Date(booking.endTime);
+  
+        return startDateTime < bookingEnd && bufferEnd > bookingStart;
+      });
+  
+      if (hasConflict) break;
+  
+      availableEndTimes.push(time);
+    }
+  
+    return availableEndTimes;
   };
+  
   
   
   
@@ -891,8 +1042,8 @@ const Bookings = () => {
   return (
     <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
       <TopBar onSearch={setSearchTerm} />
-      <div className="p-2 bg-gray-50 min-h-screen">
-        <div className="flex justify-between items-center mb-6">
+      <div className="p-4 bg-gray-100 w-full flex flex-col">
+        <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Bookings</h2>
           <button
             onClick={handleAddNewClick}
@@ -938,7 +1089,6 @@ const Bookings = () => {
                 { key: 'building', label: 'Building' },
                 { key: 'date', label: 'Date' },
                 { key: 'startTime', label: 'Time' },
-                { key: 'notes', label: 'Notes' },
                 { key: 'status', label: 'Status' },
                 { key: 'recurring', label: 'Recurring' },
               ].map(({ key, label }) => (
@@ -984,7 +1134,6 @@ const Bookings = () => {
                       {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
                       {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td className="px-4 py-2 border-b">{booking.notes}</td>
                     <td className="px-4 py-2 border-b">
                       <div>
                         <span
@@ -1010,13 +1159,19 @@ const Bookings = () => {
                           className="text-blue-600 hover:underline"
                           onClick={() => handleEditClick(booking)}
                         >
-                          Edit
+                          View
+                        </button>
+                        <button
+                          className="text-green-600 hover:underline"
+                          onClick={() => handleStatusChange(booking._id, 'confirmed')}
+                        >
+                          Confirm
                         </button>
                         <button
                           className="text-red-600 hover:underline"
-                          onClick={() => handleDeleteBooking(booking._id || booking.id)}
+                          onClick={() => handleStatusChange(booking._id, 'declined')}
                         >
-                          Delete
+                          Decline
                         </button>
                       </div>
                     </td>
@@ -1069,6 +1224,26 @@ const Bookings = () => {
       <Modal isOpen={isEditModalOpen} title="Edit Booking">
         <BookingForm isEdit={true} />
       </Modal>
+
+      {/* Status Modal */}
+      <StatusModal
+        isOpen={isStatusModalOpen}
+        currentStatus={selectedStatus}
+        onClose={() => setIsStatusModalOpen(false)}
+        onConfirm={async () => {
+          try {
+            await axios.put(
+              `${API_BASE_URL}/bookings/${selectedBookingId}`,
+              { status: selectedStatus },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            fetchBookings(); // Refresh bookings
+            setIsStatusModalOpen(false);
+          } catch (err) {
+            console.error('Error updating status:', err);
+          }
+        }}
+      />
     </div>
   );
 };

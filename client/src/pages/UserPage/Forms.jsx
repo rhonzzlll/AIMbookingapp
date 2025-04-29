@@ -7,90 +7,12 @@ import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { X, AlertCircle } from 'lucide-react';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
+import PrivacyModal from '../../components/ui/PrivacyModal';
 import CancelBookingConfirmation from './modals/CancelBookingConfirmation';
+import { parse, add } from 'date-fns'; // Add this at the top if not already imported
+
  
 const API_BASE_URL = 'http://localhost:5000/api';
-
-export function PrivacyModal({ isOpen, onOpenChange, onConfirm }) {
-  const [isAgreed, setIsAgreed] = useState(false);
-
-  const handleConfirm = () => {
-    if (isAgreed) {
-      onConfirm();
-    }
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader className="flex items-center justify-between">
-          <DialogTitle>Data Privacy Confirmation</DialogTitle>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100"
-            onClick={() => onOpenChange(false)}
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </Button>
-        </DialogHeader>
-
-        <div className="mt-2">
-          <p className="text-sm text-muted-foreground">
-            Before proceeding with your booking, please review and agree to our data privacy terms.
-          </p>
-
-          <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>Your personal information will be securely stored and processed</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>We will only use your data for booking and related communication</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>Your data will not be shared with third parties without consent</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>You can request data deletion at any time</span>
-            </li>
-          </ul>
-
-          <div className="mt-6 flex items-start space-x-2">
-            <Checkbox
-              id="privacy-agreement"
-              checked={isAgreed}
-              onChange={(e) => setIsAgreed(e.target.checked)}
-            />
-            <label
-              htmlFor="privacy-agreement"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              I agree to the data privacy terms
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end space-x-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={!isAgreed}
-            className={!isAgreed ? 'opacity-50 cursor-not-allowed' : ''}
-          >
-            Confirm Booking
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -128,7 +50,7 @@ const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4">
+    <div className="relative bg-white rounded-lg shadow-md p-4">
       <div className="flex justify-between items-center mb-4">
         <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-gray-100">
           ◀
@@ -172,27 +94,85 @@ const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
 };
 
 const DaySchedule = ({ selectedDate, bookings }) => {
+  const [roomMap, setRoomMap] = useState({});
   const generateTimeSlots = () => {
     const slots = [];
     // Use the same time options as in BookingForm for consistency
-    const timeOptions = [
-      '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-      '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
-      '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-      '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
-    ];
-    return timeOptions;
   };
 
   const getBookingsForTimeSlot = (timeSlot) => {
-    return bookings.filter(
-      (booking) => {
-        return booking.date === selectedDate && 
-               booking.startTime <= timeSlot && 
-               booking.endTime > timeSlot;
-      }
-    );
+    return bookings.filter((booking) => {
+      if (booking.date !== selectedDate) return false;
+  
+      const bookingStart = parseISO(booking.startTime);
+      const bookingEnd = parseISO(booking.endTime);
+      const slotTime = parse(timeSlot, 'h:mm a', new Date(selectedDate));
+  
+      return bookingStart <= slotTime && slotTime < bookingEnd;
+    });
   };
+  
+  const formatTime = (timeString) => {
+    if (!timeString) return '';
+    
+    try {
+      // Handle ISO date strings
+      if (timeString.includes('T') || timeString.includes('Z')) {
+        const date = new Date(timeString);
+        if (isNaN(date)) return '';
+        return format(date, 'h:mm a');
+      }
+
+      // Handle 24-hour format (HH:MM)
+      if (timeString.includes(':')) {
+        const [hours, minutes] = timeString.split(':').map(Number);
+        const date = new Date();
+        date.setHours(hours, minutes);
+        return format(date, 'h:mm a');
+      }
+      
+      return timeString; // Return as is if format is unknown
+    } catch (error) {
+      console.error('Time formatting error:', error);
+      return timeString;
+    }
+  };
+
+  useEffect(() => {
+    const fetchRooms = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/rooms`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+  
+        if (!response.ok) {
+          console.error('Failed to fetch rooms:', response.statusText);
+          return;
+        }
+  
+        const rooms = await response.json();
+  
+        const map = {};
+        rooms.forEach(room => {
+          map[room._id] = room.roomName;
+          if (room.subRooms) {
+            room.subRooms.forEach((sub, idx) => {
+              map[`${room._id}-sub-${idx}`] = sub.roomName;
+            });
+          }
+        });
+  
+        setRoomMap(map);
+      } catch (error) {
+        console.error('Error fetching rooms:', error);
+      }
+    };
+  
+    fetchRooms();
+  }, []);
 
   const timeSlots = generateTimeSlots();
   const formattedDate = selectedDate ? 
@@ -200,150 +180,33 @@ const DaySchedule = ({ selectedDate, bookings }) => {
     format(parseISO(selectedDate), 'MMMM dd, yyyy')) : 'Select a date';
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 mt-4">
-      <h2 className="text-xl font-bold mb-4">{formattedDate}</h2>
+    <div className="relative bg-white rounded-lg shadow-md p-4 mt-4">
+        <h2 className="text-xl font-bold mb-4">
+          Confirmed bookings for {formattedDate}
+        </h2>
       <div className="overflow-y-auto max-h-96">
-        {timeSlots.map((timeSlot, index) => {
-          const slotBookings = getBookingsForTimeSlot(timeSlot);
-          return (
-            <div key={index} className="flex py-2 border-b last:border-b-0">
-              <div className="w-16 text-gray-500 font-medium">{timeSlot}</div>
-              <div className="flex-1">
-                {slotBookings.map((booking, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-blue-500 text-white p-2 rounded mb-1"
-                  >
-                    {booking.title} - {booking.room}
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-const MyBookings = ({ bookings, onCancelBooking }) => {
-  const [activeTab, setActiveTab] = useState('upcoming');
-  
-  const filteredBookings = useMemo(() => {
-    const now = new Date();
-    
-    if (activeTab === 'upcoming') {
-      return bookings.filter(booking => {
-        // Handle booking.date as string or Date
-        const bookingDate = typeof booking.date === 'string' ? 
-          new Date(booking.date) : booking.date;
-        return bookingDate >= now;
-      });
-    } else if (activeTab === 'past') {
-      return bookings.filter(booking => {
-        const bookingDate = typeof booking.date === 'string' ? 
-          new Date(booking.date) : booking.date;
-        return bookingDate < now;
-      });
-    } else {
-      return bookings;
-    }
-  }, [bookings, activeTab]);
-
-  // Handler for booking cancellation
-  const handleCancelBooking = (bookingId) => {
-    if (typeof onCancelBooking === 'function') {
-      onCancelBooking(bookingId);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold">My Bookings</h2>
-        <div className="flex rounded-lg overflow-hidden border">
-          <button
-            className={`px-4 py-1 text-sm ${activeTab === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
-            onClick={() => setActiveTab('upcoming')}
-          >
-            Upcoming
-          </button>
-          <button
-            className={`px-4 py-1 text-sm ${activeTab === 'past' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
-            onClick={() => setActiveTab('past')}
-          >
-            Past
-          </button>
-          <button
-            className={`px-4 py-1 text-sm ${activeTab === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
-            onClick={() => setActiveTab('all')}
-          >
-            All
-          </button>
-        </div>
-      </div>
-      
-      <div className="space-y-4">
-        {filteredBookings.length > 0 ? (
-          filteredBookings.map((booking, index) => {
-            // Handle date formatting safely
-            const formattedDate = booking.date ? 
-              (typeof booking.date === 'string' ? 
-                format(parseISO(booking.date), 'yyyy-MM-dd') :
-                format(booking.date, 'yyyy-MM-dd')) : 
-              'Invalid date';
-              
-            return (
-              <div key={index} className="border rounded-lg p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-bold">{booking.title}</h3>
-                    <p className="text-sm text-gray-600">
-                      {formattedDate} · {booking.startTime || 'N/A'} - {booking.endTime || 'N/A'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Booked by: {booking.firstName} {booking.lastName}
-                    </p>
-                    {booking.building && (
-                      <p className="text-xs text-gray-500">
-                        Location: {booking.building}, {booking.room}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-2 py-1 text-xs rounded ${
-                        booking.status === 'Confirmed'
-                          ? 'bg-green-100 text-green-600'
-                          : booking.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-600'
-                          : 'bg-red-100 text-red-600'
-                      }`}
-                    >
-                      {booking.status ? booking.status.charAt(0).toUpperCase() + booking.status.slice(1) : 'Unknown'}
-                    </span>
-                    {activeTab === 'upcoming' && (
-                      <button 
-                        onClick={() => handleCancelBooking(booking._id)}
-                        className="text-xs text-red-500 hover:text-red-700"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
+        {bookings && bookings.length > 0 ? (
+          bookings
+            .sort((a, b) => a.startTime.localeCompare(b.startTime)) // sort by time
+            .map((booking, index) => (
+              <div
+                key={index}
+                className="bg-blue-100 text-gray-800 rounded-md p-4 mb-4 shadow"
+              >
+                <div className="font-semibold text-lg">
+                  {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+                </div>
+                <div className="text-sm mt-1">
+                  Name: {booking.firstName} {booking.lastName}
+                </div>
+                <div className="text-sm">
+                Room: { booking.roomName || 'Unknown Room' }
                 </div>
               </div>
-            );
-          })
+            ))
         ) : (
-          <div className="text-center py-8">
-            <div className="text-gray-400 mb-2">
-              <AlertCircle size={32} className="mx-auto" />
-            </div>
-            <p className="text-gray-500">No bookings found</p>
-            <button className="mt-4 text-blue-600 text-sm font-medium hover:underline">
-              Book a room now
-            </button>
+          <div className="text-center text-gray-500 py-10">
+            No bookings for this day.
           </div>
         )}
       </div>
@@ -361,27 +224,43 @@ const BookingApp = () => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState(null);
 
-  // Fetch bookings from backend
   const fetchBookings = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/bookings`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to fetch bookings:', response.statusText);
-        return;
+      const [bookingRes, roomRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/bookings`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }),
+        fetch(`${API_BASE_URL}/rooms`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+      ]);
+  
+      if (!bookingRes.ok || !roomRes.ok) {
+        throw new Error('Failed to fetch bookings or rooms');
       }
-      
-      const data = await response.json();
-      setBookings(data);
+  
+      const bookings = await bookingRes.json();
+      const rooms = await roomRes.json();
+  
+      const roomMap = {};
+      rooms.forEach(room => {
+        roomMap[room._id] = room.roomName;
+        room.subRooms?.forEach((sub, idx) => {
+          roomMap[`${room._id}-sub-${idx}`] = sub.roomName;
+        });
+      });
+  
+      const processed = bookings.map(b => ({
+        ...b,
+        roomName: roomMap[b.room] || b.room
+      }));
+  
+      setBookings(processed);
     } catch (error) {
       console.error('Error fetching bookings:', error);
     }
-  };
+  };  
 
   // Fetch bookings when component mounts
   useEffect(() => {
@@ -395,51 +274,43 @@ const BookingApp = () => {
     setIsPrivacyModalOpen(true);
   };
 
-  const handlePrivacyConfirm = async () => {
-    setIsPrivacyModalOpen(false);
-    setBookingError(null);
+const handlePrivacyConfirm = async () => {
+  setIsPrivacyModalOpen(false);
+  setBookingError(null);
 
-    if (!pendingBooking) return;
+  if (!pendingBooking) return;
 
-    try {
-      // Get user ID from localStorage
-      const userId = localStorage.getItem('_id');
-      const token = localStorage.getItem('token');
+  try {
+    const userId = localStorage.getItem('_id');
+    const token = localStorage.getItem('token');
 
-      // The booking payload is already complete from BookingForm
-      const bookingPayload = {
-        ...pendingBooking,
-        userId: userId,
-      };
+    const bookingPayload = {
+      ...pendingBooking,
+      userId: userId,
+    };
 
-      // Send the booking request to the server
-      const response = await fetch(`${API_BASE_URL}/bookings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(bookingPayload),
-      });
+    const response = await fetch(`${API_BASE_URL}/bookings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(bookingPayload),
+    });
+
+    await response.json(); // No need to manually push into setBookings
+
+    setPendingBooking(null);
+    setIsConfirmationModalOpen(true);
+
+    // ✅ Wait for server to give back full and clean booking data (with populated rooms)
+    await fetchBookings(); // Ensure fresh and full booking data is loaded
+  } catch (error) {
+    console.error('Error submitting booking:', error);
+  }
+};
+
   
-      // Skip error handling for required fields
-      const savedBooking = await response.json();
-  
-      // Update local bookings list with the new booking
-      setBookings((prev) => [...prev, savedBooking]);
-      setPendingBooking(null);
-  
-      // Show confirmation modal
-      setIsConfirmationModalOpen(true);
-  
-      // Refresh bookings to ensure we have the latest data
-      fetchBookings();
-    } catch (error) {
-      console.error('Error submitting booking:', error);
-  
-      
-    }
-  };
   // For date picker or calendar input
   const handleDateSelect = (date) => {
     setSelectedDate(date);
@@ -478,8 +349,25 @@ const BookingApp = () => {
     }
   };
 
+  const confirmedBookings = useMemo(() => {
+    return bookings.filter(b => b.status?.toLowerCase() === 'confirmed');
+  }, [bookings]);
+  
+  const bookingsForSelectedDate = useMemo(() => {
+    const formattedSelectedDate = format(
+      typeof selectedDate === 'string' ? parseISO(selectedDate) : selectedDate,
+      'yyyy-MM-dd'
+    );
+  
+    return bookings.filter(
+      (booking) =>
+        format(parseISO(booking.date), 'yyyy-MM-dd') === formattedSelectedDate &&
+        booking.status?.toLowerCase() === 'confirmed'
+    );
+  }, [bookings, selectedDate]);  
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="relative min-h-screen bg-gray-50">
       <div className="fixed top-0 left-0 w-full z-50">
         <Header />
       </div>
@@ -498,7 +386,7 @@ const BookingApp = () => {
           </div>
         )}
         
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="relative flex flex-col lg:flex-row gap-6">
           <div className="w-full lg:w-1/2">
             <BookingForm 
               onBookingSubmit={handleBookingSubmit} 
@@ -509,15 +397,11 @@ const BookingApp = () => {
             <Calendar
               selectedDate={selectedDate}
               onDateSelect={handleDateSelect}
-              bookings={bookings}
+              bookings={confirmedBookings}
             />
             <DaySchedule 
               selectedDate={selectedDate} 
-              bookings={bookings} 
-            />
-            <MyBookings 
-              bookings={bookings} 
-              onCancelBooking={handleCancelBooking}
+              bookings={bookingsForSelectedDate} 
             />
           </div>
         </div>

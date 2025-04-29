@@ -5,11 +5,14 @@ const bookingsController = require('../Controllers/bookingsController');
 // Route to get all bookings
 router.get('/', bookingsController.getAllBookings);
 
+// ✅ Route to get bookings by user ID
+router.get('/user/:userId', bookingsController.getBookingsByUserId);
+
+// Route to get a specific booking by booking ID
+router.get('/:id', bookingsController.getBookingById);
+
 // Route to create a new booking
 router.post('/', bookingsController.createBooking);
-
-// Route to get a specific booking by ID
-router.get('/:id', bookingsController.getBookingById);
 
 // Route to update a booking by ID
 router.put('/:id', bookingsController.updateBooking);

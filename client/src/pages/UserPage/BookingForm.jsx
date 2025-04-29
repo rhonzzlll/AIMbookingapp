@@ -1,34 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import axios from 'axios';
+import bg from '../../images/bg.png';
 import { useLocation } from 'react-router-dom';
- 
-import  Confirm from "../../components/ui/ConfirmationModal";  
+import Confirm from "../../components/ui/ConfirmationModal";  
 const API_BASE_URL = 'http://localhost:5000/api';
+import { useNavigate } from 'react-router-dom'; 
 
 const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
   '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
   '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
+  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
 
-const convertTo24HourFormat = (time) => {
-  const [timePart, modifier] = time.split(' ');
-  let [hours, minutes] = timePart.split(':').map(Number);
-
-  if (modifier === 'PM' && hours !== 12) {
-    hours += 12;
-  } else if (modifier === 'AM' && hours === 12) {
-    hours = 0;
+const convertTo24HourFormat = (time12h) => {
+  if (!time12h) return '';
+  
+  const [time, modifier] = time12h.split(' ');
+  let [hours, minutes] = time.split(':');
+  
+  if (hours === '12') {
+    hours = modifier === 'PM' ? '12' : '00';
+  } else {
+    hours = modifier === 'PM' ? String(parseInt(hours, 10) + 12) : hours.padStart(2, '0');
   }
-
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  
+  return `${hours}:${minutes}`;
 };
 
 const BookingForm = ({ onBookingSubmit }) => {
   const location = useLocation();
   const bookingData = location.state?.bookingData;
+  const navigate = useNavigate(); // Initialize the navigate function
+
+  // Other state and useEffect hooks
+
+  const handleGoBack = () => {
+    navigate(-1); // Navigate to the previous page
+  };
   
   const [formData, setFormData] = useState({
     title: '',
@@ -61,6 +71,10 @@ const BookingForm = ({ onBookingSubmit }) => {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [roomMap, setRoomMap] = useState({});
+  const [blockedTimes, setBlockedTimes] = useState([]);
+
+
 
   const userId = localStorage.getItem('_id');
   const token = localStorage.getItem('token');
@@ -150,15 +164,26 @@ const BookingForm = ({ onBookingSubmit }) => {
     const fetchRooms = async () => {
       try {
         const response = await axios.get(`${API_BASE_URL}/rooms`);
-        setRooms(response.data);
+        setRooms(response.data); 
+  
+        // Create a map of room IDs to room data
+        const newRoomMap = {};
+        response.data.forEach(room => {
+          newRoomMap[room._id] = {
+            roomName: room.roomName,
+            building: room.building,
+          };
+        });
+        setRoomMap(newRoomMap); // ✅ Now we have roomMap properly set
       } catch (err) {
         console.error('Error fetching rooms:', err);
         setError('Failed to fetch rooms. Please try again.');
       }
     };
-
+  
     fetchRooms();
   }, []);
+  
 
   // Fetch users from the API
   useEffect(() => {
@@ -177,73 +202,82 @@ const BookingForm = ({ onBookingSubmit }) => {
   }, [token]);
 
   // Fetch existing bookings
+  const fetchBookings = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/bookings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const bookings = response.data.bookings || response.data;
+  
+      const enrichedBookings = bookings.map(booking => {
+        const roomData = roomMap[booking.room];
+        return {
+          ...booking,
+          roomName: roomData?.roomName || booking.room,
+          building: roomData?.building || booking.building,
+        };
+      });
+  
+      setExistingBookings(enrichedBookings);
+      processBookingsForTimeSlots(enrichedBookings); // 🛠️ ADD THIS LINE!!!
+    } catch (err) {
+      console.error('Error fetching bookings:', err);
+    }
+  };
+
   useEffect(() => {
-    const fetchBookings = async () => {
-      try {
-        const response = await axios.get(`${API_BASE_URL}/bookings`);
-        setExistingBookings(response.data);
-        
-        // Process bookings to determine unavailable time slots
-        if (formData.building && formData.room && formData.date) {
-          processBookingsForTimeSlots(response.data);
-        }
-      } catch (err) {
-        console.error('Error fetching bookings:', err);
-      }
-    };
+    if (formData.building && formData.room && formData.date && rooms.length > 0) {
+      fetchBookings(); // Fetch bookings data for all rooms
+    }
+  }, [formData.building, formData.room, formData.date, rooms]);  // Ensure this is called when rooms change   
 
-    fetchBookings();
-  }, [formData.building, formData.room, formData.date]);
-
-  // Process bookings to determine unavailable time slots
   const processBookingsForTimeSlots = (bookings) => {
     if (!bookings || !formData.building || !formData.room || !formData.date) return;
-
-    const relevantBookings = bookings.filter(booking => 
-      booking.building === formData.building && 
-      booking.room === formData.room &&
+  
+    // 🔄 Clear previous unavailable time slots
+    setUnavailableTimeSlots([]);
+  
+    // ✅ Filter bookings for the selected building and room
+    const relevantBookings = bookings.filter(booking =>
+      booking.building === formData.building &&
       new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
-      (booking.status === 'approved' || booking.status === 'pending')
+      booking.status?.toLowerCase() === 'confirmed'
     );
-
-    // Create an array of unavailable time slots including buffer times
+  
     const unavailable = [];
-    
+  
     relevantBookings.forEach(booking => {
       const bookingStart = new Date(booking.startTime);
       const bookingEnd = new Date(booking.endTime);
-      
-      // Add buffer times (30 minutes before and after)
-      const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);
-      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);
-      
-      // Format time objects to match our time options format
+      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000); // 30min buffer
+  
       const formatTimeToOption = (date) => {
         let hours = date.getHours();
         const minutes = date.getMinutes();
         const period = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12 || 12; // Convert to 12-hour format
-        
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${period}`;
+        hours = hours % 12 || 12;
+        return `${hours}:${minutes.toString().padStart(2, '0')} ${period}`;
       };
-      
-      // Find relevant time slots in our options that fall within buffer zones
+  
       TIME_OPTIONS.forEach(timeOption => {
         const timeOption24 = convertTo24HourFormat(timeOption);
         const timeOptionDate = new Date(`${formData.date}T${timeOption24}:00`);
-        
-        if (timeOptionDate >= bufferStart && timeOptionDate <= bufferEnd) {
+  
+        // Check if the time slot is already unavailable
+        if (timeOptionDate >= bookingStart && timeOptionDate < bufferEnd) {
           unavailable.push({
             time: timeOption,
-            reason: `Booking with 30min buffer: ${formatTimeToOption(bookingStart)} - ${formatTimeToOption(bookingEnd)}`
+            reason: `Booking: ${formatTimeToOption(bookingStart)} - ${formatTimeToOption(bookingEnd)} (Already booked)`
           });
         }
       });
     });
-    
+  
+    // ✅ Update unavailable time slots
     setUnavailableTimeSlots(unavailable);
   };
-
+  
+  
   // Filter rooms based on building and category
   useEffect(() => {
     if (formData.building && formData.category) {
@@ -387,9 +421,11 @@ const BookingForm = ({ onBookingSubmit }) => {
         {
           building: data.building,
           room: data.room,
-          category: data.category, // Include category
+          category: data.category,
           startTime: startDateTime.toISOString(),
           endTime: endDateTime.toISOString(),
+          // FIXED: Send "confirmed" in lowercase to match backend expectations
+          status: 'confirmed',
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -415,6 +451,107 @@ const BookingForm = ({ onBookingSubmit }) => {
   const getTimeSlotTooltip = (time) => {
     const unavailableSlot = unavailableTimeSlots.find(slot => slot.time === time);
     return unavailableSlot ? unavailableSlot.reason : '';
+  };
+
+  const getAvailableStartTimes = () => {
+    const now = new Date();
+    const selectedDate = new Date(formData.date);
+  
+    return TIME_OPTIONS.filter((time) => {
+      if (isTimeBlocked(time)) return false;
+  
+      // Prevent selecting past times for today
+      if (selectedDate.toDateString() === now.toDateString()) {
+        const time24 = convertTo24HourFormat(time);
+        const [hours, minutes] = time24.split(':').map(Number);
+        const optionDate = new Date(formData.date);
+        optionDate.setHours(hours);
+        optionDate.setMinutes(minutes);
+  
+        if (optionDate.getTime() < now.getTime()) {
+          return false;
+        }
+      }
+  
+      // Prevent selecting a start time that overlaps with an existing booking
+      const time24 = convertTo24HourFormat(time);
+      const [hours, minutes] = time24.split(':').map(Number);
+      const optionStartDate = new Date(formData.date);
+      optionStartDate.setHours(hours);
+      optionStartDate.setMinutes(minutes);
+  
+      for (const booking of blockedTimes) {
+        const bookingStart = new Date(`${booking.date}T${convertTo24HourFormat(booking.startTime)}:00`);
+        const bookingEnd = new Date(`${booking.date}T${convertTo24HourFormat(booking.endTime)}:00`);
+  
+        // If the selected start time falls within a blocked range, reject it
+        if (optionStartDate >= bookingStart && optionStartDate < bookingEnd) {
+          return false;
+        }
+      }
+  
+      return true;
+    });
+  };
+  
+  const isTimeBlocked = (time) => {
+    if (!unavailableTimeSlots.length) return false;
+  
+    const time24 = convertTo24HourFormat(time);
+    const timeDate = new Date(`${formData.date}T${time24}:00`);
+  
+    return unavailableTimeSlots.some(slot => {
+      const slotTime24 = convertTo24HourFormat(slot.time);
+      const slotDate = new Date(`${formData.date}T${slotTime24}:00`);
+      return timeDate.getTime() === slotDate.getTime();
+    });
+  };
+  
+  const getFilteredEndTimes = () => {
+    // If no start time is selected, allow all end times to be available
+    if (!formData.startTime) {
+      return TIME_OPTIONS; // Return all end time options if no start time
+    }
+  
+    const startIndex = TIME_OPTIONS.findIndex(
+      (time) => time === formData.startTime
+    );
+  
+    if (startIndex === -1) {
+      return TIME_OPTIONS; // Fallback if start time not found
+    }
+  
+    const startTime24 = convertTo24HourFormat(formData.startTime);
+    const startTimeDate = new Date(`${formData.date}T${startTime24}:00`);
+  
+    // Find the earliest upcoming blocked time AFTER the start time
+    const upcomingBlockedTime = TIME_OPTIONS.slice(startIndex + 1).find((time) => {
+      if (!isTimeBlocked(time)) return false;
+  
+      const blockedTime24 = convertTo24HourFormat(time);
+      const blockedTimeDate = new Date(`${formData.date}T${blockedTime24}:00`);
+  
+      return blockedTimeDate > startTimeDate;
+    });
+  
+    return TIME_OPTIONS.slice(startIndex + 1).filter((time) => {
+      if (isTimeBlocked(time)) return false;
+  
+      const endTime24 = convertTo24HourFormat(time);
+      const endTimeDate = new Date(`${formData.date}T${endTime24}:00`);
+  
+      if (endTimeDate <= startTimeDate) return false;
+  
+      // Cut off options if we found a blocked time after the start time
+      if (upcomingBlockedTime) {
+        const blockedTime24 = convertTo24HourFormat(upcomingBlockedTime);
+        const blockedTimeDate = new Date(`${formData.date}T${blockedTime24}:00`);
+  
+        return endTimeDate < blockedTimeDate;
+      }
+  
+      return true;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -461,9 +598,11 @@ const BookingForm = ({ onBookingSubmit }) => {
         {
           building: formData.building,
           room: formData.room,
-          category: formData.category, // Include category
+          category: formData.category,
           startTime: startDateTime.toISOString(),
           endTime: endDateTime.toISOString(),
+          // FIXED: Use lowercase "confirmed" status
+          status: 'confirmed',
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -491,8 +630,34 @@ const BookingForm = ({ onBookingSubmit }) => {
       const response = await axios.post(`${API_BASE_URL}/bookings`, bookingPayload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-  
+      
+      await fetchBookings();  // ✅ Fetch updated bookings
+
+      if (formData.building && formData.room && formData.date) {
+        processBookingsForTimeSlots(existingBookings); 
+      }      
+            
       onBookingSubmit(response.data); // Notify parent component of successful booking
+
+      setFormData({
+        title: '',
+        firstName: '',
+        lastName: '',
+        email: '',
+        building: '',
+        category: '',
+        room: '',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        startTime: '09:00 AM',
+        endTime: '10:00 AM',
+        department: '',
+        isRecurring: false,
+        recurrenceType: '',
+        recurrenceDays: [],
+        endRecurrenceDate: '',
+        notes: '',
+      });
+      
     } catch (err) {
       if (err.response && err.response.status === 400) {
         setError(err.response.data.message);
@@ -504,344 +669,298 @@ const BookingForm = ({ onBookingSubmit }) => {
       setLoading(false);
     }
   };
+
   
   return (
-    <div className="bg-white rounded-lg shadow-md p-8">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
-      
-     
-  
-      <form onSubmit={handleSubmit}>
-        {/* Booking Title */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Booking Title <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            placeholder="Enter a title for your booking"
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
+    <div className="font-sans">
+
+      <div className="px-4 pb-8">
+        {/* Background */}
+        <div className="fixed inset-0 z-0">
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: `url(${bg})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+              backgroundAttachment: "fixed",
+            }}
           />
+          <div className="absolute inset-0 bg-black bg-opacity-10" />
         </div>
 
-        {/* First Name Field */}
-        <div className="relative mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            First Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="firstName"
-            value={formData.firstName}
-            onChange={handleNameChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            autoComplete="off"
-          />
-          {showSuggestions && filteredUsers.length > 0 && (
-            <ul className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-              {filteredUsers.map((user) => (
-                <li
-                  key={user._id}
-                  onClick={() => handleSuggestionClick(user)}
-                  className="p-2 hover:bg-blue-100 cursor-pointer"
-                >
-                  {user.firstName} {user.lastName}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <div className="relative bg-white rounded-lg shadow-md p-8">
+          <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
+          <form onSubmit={handleSubmit}>
+            {/* Booking Title */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                Booking Title <span className="text-red-500"></span>
+              </label>
+              <input
+                type="text"
+                name="title"
+                value={formData.title}
+                onChange={handleChange}
+                placeholder="Enter a title for your booking"
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-        {/* Last Name Field */}
-        <div className="relative mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Last Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="lastName"
-            value={formData.lastName}
-            onChange={handleNameChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            autoComplete="off"
-          />
-          {showSuggestions && filteredUsers.length > 0 && (
-            <ul className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-              {filteredUsers.map((user) => (
-                <li
-                  key={user._id}
-                  onClick={() => handleSuggestionClick(user)}
-                  className="p-2 hover:bg-blue-100 cursor-pointer"
-                >
-                  {user.firstName} {user.lastName}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                First Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="firstName"
+                value={formData.firstName}
+                onChange={handleNameChange}
+                placeholder="Enter your first name"
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoComplete="off"
+                required
+              />
+            </div>
 
-        {/* Email */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Email <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            readOnly
-          />
-        </div>
+            {/* Last Name Field */}
+            <div className="relative mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                Last Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="lastName"
+                value={formData.lastName}
+                onChange={handleNameChange}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoComplete="off"
+                required
+              />
+              {showSuggestions && filteredUsers.length > 0 && (
+                <ul className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+                  {filteredUsers.map((user) => (
+                    <li
+                      key={user._id}
+                      onClick={() => handleSuggestionClick(user)}
+                      className="p-2 hover:bg-blue-100 cursor-pointer"
+                    >
+                      {user.firstName} {user.lastName}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
-        {/* Department Selection */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Department <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="department"
-            value={formData.department}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select Department</option>
-            {departments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
-        </div>
+            {/* Email */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+              <span className="text-red-500"></span>
+              </label>
+              <input
+                type="hidden"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                readOnly
+              />
+            </div>
 
-        {/* Building Selection */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Building <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="building"
-            value={formData.building}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select Building</option>
-            {[...new Set(rooms.map((room) => room.building))].map((building) => (
-              <option key={building} value={building}>
-                {building}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Category Selection */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Category <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="category"
-            value={formData.category}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-            disabled={!formData.building}
-          >
-            <option value="">Select Category</option>
-            {formData.building &&
-              [...new Set(
-                rooms
-                  .filter((room) => room.building === formData.building)
-                  .map((room) => room.category)
-              )].map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-          </select>
-        </div>
-
-        {/* Room Selection */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Room <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="room"
-            value={formData.room}
-            onChange={handleChange}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-            disabled={!formData.category}
-          >
-            <option value="">Select Room</option>
-            {filteredRooms.map((room) => (
-              <option key={room._id} value={room.roomName}>
-                {room.roomName}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Date and Time */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              Date <span className="text-red-500">*</span>
-            </label>
             <input
-              type="date"
-              name="date"
-              value={formData.date}
-              onChange={handleChange}
-              className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+              type="hidden"
+              name="department"
+              value={formData.department}
             />
-          </div>
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              Start Time <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="startTime"
-              value={formData.startTime}
-              onChange={handleChange}
-              className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              <option value="">Select Start Time</option>
-              {TIME_OPTIONS.map((time) => (
-                <option
-                  key={time}
-                  value={time}
-                  disabled={isTimeSlotUnavailable(time)} // Disable if the time slot is unavailable
-                  title={getTimeSlotTooltip(time)} // Add a tooltip to explain why it's unavailable
-                >
-                  {isTimeSlotUnavailable(time) ? `${time} (Unavailable)` : time}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              End Time <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="endTime"
-              value={formData.endTime}
-              onChange={handleChange}
-              className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              <option value="">Select End Time</option>
-              {TIME_OPTIONS.map((time) => (
-                <option
-                  key={time}
-                  value={time}
-                  disabled={isTimeSlotUnavailable(time)} // Disable if the time slot is unavailable
-                  title={getTimeSlotTooltip(time)} // Add a tooltip to explain why it's unavailable
-                >
-                  {isTimeSlotUnavailable(time) ? `${time} (Unavailable)` : time}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        
-
-        {/* Recurring Booking Options */}
-        <div className="mb-6">
-          <div className="flex items-center mb-2">
+            
             <input
-              type="checkbox"
-              id="isRecurring"
-              name="isRecurring"
-              checked={formData.isRecurring}
-              onChange={handleChange}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              type="hidden"
+              name="building"
+              value={formData.building}
             />
-            <label htmlFor="isRecurring" className="ml-2 text-gray-700 font-medium">
-              Make this a recurring booking
-            </label>
-          </div>
-          
-          {formData.isRecurring && (
-            <div className="pl-6 border-l-2 border-gray-200 mt-3 space-y-4">
+
+            <input
+              type="hidden"
+              name="category"
+              value={formData.category}
+            />
+
+            {/* Room Selection */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                Meeting Room <span className="text-red-500"></span>
+              </label>
+              <select
+                name="room"
+                value={formData.room}
+                onChange={handleChange}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+                disabled={!formData.category}
+              >
+                <option value="">Select Room</option>
+                {filteredRooms.map((room) => (
+                  <option key={room._id} value={room.roomName}>
+                    {room.roomName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date and Time */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
-                  Recurrence Type
-                </label>
-                <select
-                  name="recurrenceType"
-                  value={formData.recurrenceType}
-                  onChange={handleChange}
-                  className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Type</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-gray-700 font-medium mb-2">
-                  End Recurrence Date
+                  Date <span className="text-red-500"></span>
                 </label>
                 <input
                   type="date"
-                  name="endRecurrenceDate"
-                  value={formData.endRecurrenceDate}
+                  name="date"
+                  value={formData.date}
+                  min={format(new Date(), 'yyyy-MM-dd')}   // 🔥 Disallow past dates
                   onChange={handleChange}
                   className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  Start Time <span className="text-red-500"></span>
+                </label>
+                <select
+                  name="startTime"
+                  value={formData.startTime}
+                  onChange={handleChange}
+                  className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select Start Time</option>
+                  {getAvailableStartTimes().map((time) => (
+                  <option
+                    key={time}
+                    value={time}
+                  >
+                    {time}
+                  </option>
+                ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  End Time <span className="text-red-500"></span>
+                </label>
+                <select
+                  name="endTime"
+                  value={formData.endTime}
+                  onChange={handleChange}
+                  className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  disabled={!formData.startTime}  // Disable until start time is selected
+                >
+                  <option value="">Select End Time</option>
+                  {getFilteredEndTimes().map((time) => (
+                    <option key={time} value={time}>
+                      {time}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* Additional Notes */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">Special Instructions</label>
-          <textarea
-            name="notes"
-            value={formData.notes}
-            onChange={handleChange}
-            placeholder="Any special requirements or information..."
-            rows="4"
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+            
 
-        {/* Form Actions */}
-        <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className={`px-6 py-3 ${
-              availabilityStatus?.available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'
-            } text-white rounded-lg`}
-            disabled={loading || isCheckingAvailability || availabilityStatus?.available === false}
-          >
-            {loading ? 'Submitting...' : isCheckingAvailability ? 'Checking Availability...' : 'Submit Booking'}
-          </button>
+            {/* Recurring Booking Options */}
+            <div className="mb-6">
+              <div className="flex items-center mb-2">
+                <input
+                  type="checkbox"
+                  id="isRecurring"
+                  name="isRecurring"
+                  checked={formData.isRecurring}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="isRecurring" className="ml-2 text-gray-700 font-medium">
+                  Make this a recurring booking
+                </label>
+              </div>
+              
+              {formData.isRecurring && (
+                <div className="pl-6 border-l-2 border-gray-200 mt-3 space-y-4">
+                  <div>
+                    <label className="block text-gray-700 font-medium mb-2">
+                      Recurrence Type
+                    </label>
+                    <select
+                      name="recurrenceType"
+                      value={formData.recurrenceType}
+                      onChange={handleChange}
+                      className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Type</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-gray-700 font-medium mb-2">
+                      End Recurrence Date
+                    </label>
+                    <input
+                      type="date"
+                      name="endRecurrenceDate"
+                      value={formData.endRecurrenceDate}
+                      onChange={handleChange}
+                      className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Additional Notes */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">Special Instructions</label>
+              <textarea
+                name="notes"
+                value={formData.notes}
+                onChange={handleChange}
+                placeholder="Any special requirements or information..."
+                rows="4"
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Form Actions */}
+            <div className="flex justify-end gap-4">
+              <button
+                type="button"
+                onClick={handleGoBack}  // Add the onClick handler
+                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Go Back
+              </button>
+              <button
+                type="submit"
+                className={`px-6 py-3 ${
+                  availabilityStatus?.available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'
+                } text-white rounded-lg`}
+                disabled={loading || isCheckingAvailability || !availabilityStatus?.available}
+              >
+                {loading ? 'Submitting...' : isCheckingAvailability ? 'Checking Availability...' : 'Submit Booking'}
+              </button>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
     </div>
   );
 };
 
 export default BookingForm;
+
+
