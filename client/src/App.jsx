@@ -7,6 +7,11 @@ import Calendar from './pages/AdminPage/Calendar';
 import Dashboard from './pages/AdminPage/DashBoard';
 import Rooms from './pages/AdminPage/RoomManagement';
 import Users from './pages/AdminPage/Users';
+
+
+import Buildings from './pages/AdminPage/building';
+import Categories from './pages/AdminPage/category';
+ 
 import AdminSidebar from './components/AdminComponents/admin-sidebar';
 
 // User Pages
@@ -38,8 +43,12 @@ const AppContent = () => {
                         <Route path="/admin/dashboard" element={<Dashboard />} />
                         <Route path="/admin/bookings" element={<Bookings />} />
                         <Route path="/admin/calendar" element={<Calendar />} />
-                        <Route path="/admin/rooms" element={<Rooms />} />
-                        <Route path="/admin/users" element={<Users />} />
+                        {/* Admin Routes */}
+<Route path="/admin/rooms" element={<Rooms />} />           // Parent: rooms path="/admin/rooms"
+<Route path="/admin/building" element={<Buildings />} />    // Child: building path="/admin/building"
+<Route path="/admin/category" element={<Categories />} />   // Child: category path="/admin/category" 
+    // Child: room path="/admin/room"
+                        <Route path="/admin/users" element={<Users />} />   
 
                         {/* User Routes */}
                         <Route path="/Home" element={<Home />} />

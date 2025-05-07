@@ -32,11 +32,18 @@ const Login = () => {
       const url = 'http://localhost:5000/api/auth';
       const { data: res } = await axios.post(url, formData);
 
-      // Save auth details
-      localStorage.setItem('_id', res._id);
+      // Debug response
+      console.log('Login response:', res);
+      console.log('User role from server:', res.role);
+
+      // Save auth details - updating to use userId instead of _id
+      localStorage.setItem('userId', res.userId);
       localStorage.setItem('token', res.token);
       localStorage.setItem('role', res.role);
 
+      // Debug saved role
+      console.log('Role saved to localStorage:', res.role);
+      
       // Save or clear remembered email
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', formData.email);
@@ -44,10 +51,15 @@ const Login = () => {
         localStorage.removeItem('rememberedEmail');
       }
 
-      // Navigate by role
-      if (res.role === 'Admin') {
+      // Navigate by role - using more explicit check for admin
+      const userRole = res.role ? res.role.toLowerCase() : '';
+      console.log('Normalized role for navigation check:', userRole);
+      
+      if (userRole === 'admin') {
+        console.log('Navigating to admin dashboard');
         navigate('/admin/dashboard');
       } else {
+        console.log('Navigating to home');
         navigate('/home');
       }
     } catch (error) {

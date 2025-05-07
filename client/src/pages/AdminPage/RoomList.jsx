@@ -2,6 +2,14 @@ import React, { useState, useMemo } from 'react';
 
 const RoomList = ({ rooms, onEdit, onDelete }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'roomName', direction: 'asc' });
+  const [expandedRooms, setExpandedRooms] = useState({});
+
+  const toggleRoomExpansion = (roomId) => {
+    setExpandedRooms(prev => ({
+      ...prev,
+      [roomId]: !prev[roomId]
+    }));
+  };
 
   const handleSort = (key) => {
     setSortConfig((prev) => {
@@ -72,10 +80,30 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                 ? `data:image/jpeg;base64,${room.roomImage}`
                 : localStorage.getItem(`roomImage_${room.roomName}`);
 
+              const hasSubRooms = room.isQuadrant && room.subRooms && room.subRooms.length > 0;
+              const isExpanded = expandedRooms[room._id] || false;
+
               return (
                 <React.Fragment key={room._id}>
                   <tr className="hover:bg-gray-50">
-                    <td className="py-3 px-4 font-semibold">{room.roomName}</td>
+                    <td className="py-3 px-4 font-semibold">
+                      <div className="flex items-center">
+                        {hasSubRooms && (
+                          <button 
+                            onClick={() => toggleRoomExpansion(room._id)}
+                            className="mr-2 text-gray-500 focus:outline-none w-5"
+                          >
+                            {isExpanded ? '▼' : '►'}
+                          </button>
+                        )}
+                        {room.roomName}
+                        {hasSubRooms && (
+                          <span className="ml-2 text-xs text-gray-500">
+                            ({room.subRooms.length} subrooms)
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-3 px-4">{room.building}</td>
                     <td className="py-3 px-4">{room.category}</td>
                     <td className="py-3 px-4">{room.capacity}</td>
@@ -109,11 +137,11 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                     </td>
                   </tr>
 
-                  {room.isQuadrant &&
+                  {hasSubRooms && isExpanded &&
                     room.subRooms.map((subRoom, index) => {
                       const subRoomImage = localStorage.getItem(`roomImage_${subRoom.roomName}`);
                       return (
-                        <tr key={`${room._id}-sub-${index}`} className="hover:bg-gray-50">
+                        <tr key={`${room._id}-sub-${index}`} className="bg-gray-50">
                           <td className="py-3 px-4 pl-8 text-gray-600 flex items-center">
                             <span className="mr-2">↳</span> {subRoom.roomName}
                           </td>

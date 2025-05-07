@@ -4,7 +4,11 @@ import RoomForm from './RoomForm';
 import DeleteConfirmation from './modals/DeleteConfirmation';
 import Toast from './Toast';
 import TopBar from '../../components/AdminComponents/TopBar';
-import imageCompression from 'browser-image-compression'; // Import the library
+import imageCompression from 'browser-image-compression';
+import AdminContentTemplate from './AdminContentTemplate';
+import Pagination from '@mui/material/Pagination';
+import PaginationItem from '@mui/material/PaginationItem';
+import Stack from '@mui/material/Stack';
 
 const RoomManagement = () => {
   const [rooms, setRooms] = useState([]);
@@ -18,7 +22,10 @@ const RoomManagement = () => {
   const API_BASE_URL = 'http://localhost:5000/api';
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-
+  
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [roomsPerPage] = useState(5);
 
   useEffect(() => {
     fetchRooms();
@@ -56,8 +63,8 @@ const RoomManagement = () => {
   };
 
   const handleEditRoom = (room) => {
-    setEditingRoom(room); // Set the room to be edited
-    setIsFormOpen(true); // Open the form
+    setEditingRoom(room); 
+    setIsFormOpen(true); 
   };
 
   const handleDeleteRoom = (room) => {
@@ -89,11 +96,10 @@ const RoomManagement = () => {
     try {
       let base64Image = null;
 
-      // Compress and convert image file to Base64 if provided
       if (imageFile) {
         const options = {
-          maxSizeMB: 2, // Set the maximum size to 1MB
-          useWebWorker: true, // Use a web worker for better performance
+          maxSizeMB: 2,
+          useWebWorker: true,
         };
 
         try {
@@ -114,27 +120,25 @@ const RoomManagement = () => {
         }
       }
 
-      // Handle subRooms with manually entered names
+      // Fix: Properly format subRooms to match server expectations
       const formattedSubRooms = (roomData.subRooms || []).map((subRoom) => ({
-        roomName: subRoom.roomName, // Use manually entered name
-        capacity: subRoom.capacity,
-        description: subRoom.description || `${subRoom.roomName} description`, // Add a default description if missing
+        roomName: subRoom.name || '', // Changed from subRoom.roomName to subRoom.name
+        capacity: parseInt(subRoom.capacity) || 0,
+        description: subRoom.description || '',
       }));
 
-      // Construct the payload
       const payload = {
         ...roomData,
         roomImage: base64Image,
         subRooms: formattedSubRooms,
       };
 
-      console.log('Payload:', payload); // Debugging
+      console.log('Payload:', payload);
 
       if (editingRoom) {
-        // Update existing room
         const updatePayload = { ...payload };
         if (!imageFile) {
-          delete updatePayload.roomImage; // Remove roomImage if no new image is provided
+          delete updatePayload.roomImage;
         }
 
         const response = await fetch(`${API_BASE_URL}/rooms/${editingRoom._id}`, {
@@ -146,7 +150,8 @@ const RoomManagement = () => {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to update room');
+          const errorData = await response.json();
+          throw new Error(`Failed to update room: ${errorData.message || errorData.error || ''}`);
         }
 
         const updatedRoom = await response.json();
@@ -157,7 +162,6 @@ const RoomManagement = () => {
         );
         showToast(`${updatedRoom.roomName} updated successfully`);
       } else {
-        // Create a new room
         const response = await fetch(`${API_BASE_URL}/rooms`, {
           method: 'POST',
           headers: {
@@ -172,7 +176,7 @@ const RoomManagement = () => {
 
         await fetchRooms();
         showToast(`${roomData.roomName} added successfully`);
-        window.location.reload(); // Reload the window after addition
+        window.location.reload();
       }
 
       setIsFormOpen(false);
@@ -203,7 +207,7 @@ const RoomManagement = () => {
 
     setRooms(updatedRooms);
     showToast('Room has been divided into subrooms.');
-    setIsSubroomVisible((prev) => ({ ...prev, [roomId]: true })); // Make subrooms visible
+    setIsSubroomVisible((prev) => ({ ...prev, [roomId]: true }));
   };
 
   const toggleSubroomVisibility = (roomId) => {
@@ -212,81 +216,122 @@ const RoomManagement = () => {
       [roomId]: !prev[roomId],
     }));
   };
+  
+  // Pagination handler
+  const handlePageChange = (event, value) => {
+    setPage(value);
+  };
+  
+  // Filter rooms based on search term
+  const filteredRooms = rooms.filter(room =>
+    room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+  
+  // Calculate pagination
+  const indexOfLastRoom = page * roomsPerPage;
+  const indexOfFirstRoom = indexOfLastRoom - roomsPerPage;
+  const currentRooms = filteredRooms.slice(indexOfFirstRoom, indexOfLastRoom);
+  const totalPages = Math.ceil(filteredRooms.length / roomsPerPage);
 
   return (
-    <div className="p-2 md:p-4 max-w-7xl mx-auto">
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={closeToast}
-        />
-      )}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 257,
-          width: 'calc(100% - 257px)',
-          zIndex: 500,
-          overflowY: 'auto',
-          height: '100vh',
-        }}
-      >
-       <TopBar onSearch={setSearchTerm} />
-       <div className="p-4 bg-gray-100 w-full flex flex-col">
-       <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
-          <button
-            onClick={handleAddRoom}
-            className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
-          >
-            + Add New Room
-          </button>
-        </div>
+    <AdminContentTemplate>
+      <div className="p-2 md:p-4 max-w-7xl mx-auto">
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={closeToast}
+          />
+        )}
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 257,
+            width: 'calc(100% - 257px)',
+            zIndex: 500,
+            overflowY: 'auto',
+            height: '100vh',
+          }}
+        >
+          <TopBar onSearch={setSearchTerm} />
+          <div className="p-4 bg-gray-100 w-full flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
+              <button
+                onClick={handleAddRoom}
+                className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
+              >
+                + Add New Room
+              </button>
+            </div>
 
-        {loading ? (
-          <div className="text-center py-16">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-            <p className="mt-4 text-gray-600">Loading rooms...</p>
+            {loading ? (
+              <div className="text-center py-16">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+                <p className="mt-4 text-gray-600">Loading rooms...</p>
+              </div>
+            ) : (
+              <>
+
+
+
+              
+                <RoomList
+                  rooms={currentRooms}
+                  onEdit={handleEditRoom}
+                  onDelete={handleDeleteRoom}
+                  onDivide={handleDivideRoom}
+                  toggleSubroomVisibility={toggleSubroomVisibility}
+                  isSubroomVisible={isSubroomVisible}
+                />
+                
+                {filteredRooms.length > 0 && (
+                  <div className="mt-6 flex justify-center">
+                    <Stack spacing={2}>
+                      <Pagination
+                        count={totalPages}
+                        page={page}
+                        onChange={handlePageChange}
+                        showFirstButton 
+                        showLastButton
+                      />
+                    </Stack>
+                  </div>
+                )}
+                
+                {filteredRooms.length === 0 && !loading && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No rooms found matching your search criteria.</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {isFormOpen && (
+              <RoomForm
+                room={editingRoom}
+                onSubmit={handleFormSubmit}
+                onCancel={() => setIsFormOpen(false)}
+              />
+            )}
+
+            {isDeleteModalOpen && (
+              <DeleteConfirmation
+                title="Delete Room"
+                message={`Are you sure you want to delete "${roomToDelete.roomName}"? This action cannot be undone.`}
+                onConfirm={confirmDelete}
+                onCancel={() => {
+                  setIsDeleteModalOpen(false);
+                  setRoomToDelete(null);
+                }}
+              />
+            )}
           </div>
-        ) : (
-          <RoomList
-          rooms={rooms.filter(room =>
-            room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase()))
-          )}
-          onEdit={handleEditRoom}
-          onDelete={handleDeleteRoom}
-          onDivide={handleDivideRoom}
-          toggleSubroomVisibility={toggleSubroomVisibility}
-          isSubroomVisible={isSubroomVisible}
-        />
-        )}
-
-        {isFormOpen && (
-          <RoomForm
-            room={editingRoom} // Changed from initialData to room
-            onSubmit={handleFormSubmit}
-            onCancel={() => setIsFormOpen(false)}
-          />
-        )}
-
-        {isDeleteModalOpen && (
-          <DeleteConfirmation
-            title="Delete Room"
-            message={`Are you sure you want to delete "${roomToDelete.roomName}"? This action cannot be undone.`}
-            onConfirm={confirmDelete}
-            onCancel={() => {
-              setIsDeleteModalOpen(false);
-              setRoomToDelete(null);
-            }}
-          />
-        )}
+        </div>
       </div>
-    </div>
-    </div>
-
+    </AdminContentTemplate>
   );
 };
 

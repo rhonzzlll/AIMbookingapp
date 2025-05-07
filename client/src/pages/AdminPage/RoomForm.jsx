@@ -242,6 +242,8 @@ const RoomForm = ({ room, onSubmit, onCancel }) => {
     formData.building === 'ACC Building' ? accCategories : aimCategories;
 
   return (
+
+   
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-screen overflow-y-auto">
         <div className="p-6">

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import Header from './Header';
-import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail } from 'lucide-react';
+import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, User } from 'lucide-react';
 import AIMLogo from "../../images/AIM_Logo.png";
 //import AIMbg from "../../images/AIM_bldg.jpng";
 import home from "../../images/home.png";
@@ -12,8 +12,8 @@ import ACCImage from '../../images/ACC.png';
 import FacilityModal from '../../components/FacilityModal';
 
 const HomePage = () => {
-  const userId = localStorage.getItem('_id');
-  const token = localStorage.getItem('token');  
+  const userId = localStorage.getItem('userId'); // Retrieve userId from localStorage
+  const token = localStorage.getItem('token'); // Get token for authenticated requests
 
   const [user, setUser] = useState({
     firstName: '',
@@ -27,7 +27,7 @@ const HomePage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('upcoming');
   const [visibleCount, setVisibleCount] = useState(5); // Limit to 5 bookings by default
-  const [showFacilityModal, setShowFacilityModal] = useState(false);
+
   useEffect(() => {
     const fetchUserAndBookings = async () => {
       try {
@@ -81,24 +81,19 @@ const HomePage = () => {
 
   // Filter bookings based on active tab
   const filteredBookings = bookings.filter((booking) => {
-    const bookingDate = booking.date 
-      ? new Date(booking.date)
-      : booking.startTime 
-      ? new Date(booking.startTime)
-      : null;
-  
+    const bookingDate = booking.date ? new Date(booking.date) : 
+                        booking.startTime ? new Date(booking.startTime) : null;
+
     if (!bookingDate) return false;
-  
-    // Strip time to compare just the date part
-    const bookingDay = new Date(bookingDate.toDateString());
-    const todayDay = new Date(new Date().toDateString());
-  
+
+    const today = new Date();
+
     if (activeTab === 'upcoming') {
-      return bookingDay >= todayDay;
+      return bookingDate >= today;
     } else if (activeTab === 'past') {
-      return bookingDay < todayDay;
+      return bookingDate < today;
     }
-    return true; // 'all'
+    return true; // all tab
   });
 
   // Limit bookings to 5 for "upcoming" and "past" tabs
@@ -124,7 +119,6 @@ const HomePage = () => {
         />
         <div className="absolute inset-0 bg-black bg-opacity-10" />
       </div>
-
       {/* Scrollable Foreground Layer */}
       <div className="relative z-10 flex flex-col min-h-screen w-full">
         {/* Fixed Header */}
@@ -133,7 +127,7 @@ const HomePage = () => {
         </header>
 
         {/* Main content with dark overlay */}
-        <main className="pt-24 text-white flex-grow">
+        <main className="pt-16 text-white flex-grow">
           {/* Hero Section */}
           <div className="container mx-auto px-4 pb-4 text-center">
             <h1 className="text-4xl font-bold">Welcome, {user.firstName}!</h1>
@@ -141,14 +135,14 @@ const HomePage = () => {
           </div>
 
           {/* Dashboard Content */}
-          <div className=" mx-auto px-4 pb-6">
+          <div className="container mx-auto px-4 pb-16">
             <div className="grid md:grid-cols-3 gap-8">
               {/* Left Column */}
-              <div className="space-y-8">
+              <div className="space-y-6">
                 {/* User Info Card */}
                 <div className="bg-white bg-opacity-90 text-gray-800 rounded-xl shadow-sm p-6">
                   <div className="flex items-center space-x-4">
-                    <div className="h-16 w-24 rounded-full overflow-hidden">
+                    <div className="h-16 w-16 rounded-full overflow-hidden">
                       <img
                         src={user.profileImage || "/placeholder.svg"}
                         alt={`${user.firstName} ${user.lastName}`}
@@ -178,7 +172,7 @@ const HomePage = () => {
                           }`}
                           onClick={() => {
                             setActiveTab(tab);
-                            if (tab === 'all') setVisibleCount(filteredBookings.length); // Show all bookings
+                            if (tab === 'all') setVisibleCount(filteredBookings.length);  
                           }}
                         >
                           {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -189,12 +183,12 @@ const HomePage = () => {
 
                   <div
                     className={`space-y-4 ${
-                      activeTab === 'all' ? 'max-h-96 overflow-y-auto' : ''
+                      displayedBookings.length > 3 ? 'max-h-96 overflow-y-auto' : ''
                     }`}
                   >
                     {displayedBookings.length > 0 ? (
                       displayedBookings.map((booking) => (
-                      <BookingCard key={booking._id} booking={booking} />
+                        <BookingCard key={booking._id} booking={booking} />
                       ))
                     ) : (
                       <div className="text-center py-8">
@@ -202,12 +196,12 @@ const HomePage = () => {
                           <AlertCircle size={32} className="mx-auto" />
                         </div>
                         <p className="text-gray-500">No bookings found</p>
-                        <button
-                          onClick={() => setShowFacilityModal(true)}
-                          className="mt-4 text-blue-600 text-sm font-medium hover:underline"
+                        <Link
+                          to="/book-room"
+                          className="mt-4 text-blue-600 text-sm font-medium hover:underline block"
                         >
                           Book a room now
-                        </button>
+                        </Link>
                       </div>
                     )}
                   </div>
@@ -222,25 +216,22 @@ const HomePage = () => {
                       title="Asian Institute of Management Building"
                       description="Contemporary venue perfect for conferences, workshops, and high-level discussions."
                       bookingLink="/aim-rooms"
-                      features={["Minimal outside noise", "Air conditioning", "Creative Atmosphere"]}
+                   
                     />
                     <FacilityCard
                       imageSrc={ACCImage}
                       title="Asian Institute of Management Conference Center Building"
                       description="Modern space for meetings, seminars, and executive discussions."
                       bookingLink="/acc-rooms"
-                      features={["Tech-Ready", "Quiet and Private", "Modern and Bright", "Air conditioning"]}
+                      
                     />
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          {showFacilityModal && (
-            <FacilityModal onClose={() => setShowFacilityModal(false)} />
-          )}
-        </main>
-        {/* Footer */}
+
+          {/* Footer */}
           <footer className="bg-blue-900 text-white w-full">
             <div className="px-4 py-10">
               <div className="mb-8 text-center">
@@ -287,6 +278,7 @@ const HomePage = () => {
               </div>
             </div>
           </footer>
+        </main>
       </div>
     </div>
   );
@@ -320,13 +312,17 @@ const ErrorState = ({ message }) => (
 
 // Booking Card Component
 const BookingCard = ({ booking }) => {
-  // Format date from startTime or date field
+  // Function to format date from startTime (ISO format) to readable date
   const formatBookingDate = (dateString) => {
     try {
-      const bookingDate = dateString ? new Date(dateString) : booking.startTime ? new Date(booking.startTime) : null;
+      // Try to use startTime first, fall back to date field if available
+      const bookingDate = dateString ? new Date(dateString) : 
+                        booking.startTime ? new Date(booking.startTime) : null;
+      
       if (!bookingDate || isNaN(bookingDate)) {
         return { day: '', date: '', month: '' };
       }
+      
       return {
         day: format(bookingDate, 'EEE'),
         date: format(bookingDate, 'dd'),
@@ -338,22 +334,27 @@ const BookingCard = ({ booking }) => {
     }
   };
 
-  // Format time from ISO or 24-hour time
+  // Format time from 24-hour format to 12-hour format
   const formatTime = (timeString) => {
     if (!timeString) return '';
+    
     try {
+      // Handle ISO date strings
       if (timeString.includes('T') || timeString.includes('Z')) {
         const date = new Date(timeString);
         if (isNaN(date)) return '';
         return format(date, 'h:mm a');
       }
+
+      // Handle 24-hour format (HH:MM)
       if (timeString.includes(':')) {
         const [hours, minutes] = timeString.split(':').map(Number);
         const date = new Date();
         date.setHours(hours, minutes);
         return format(date, 'h:mm a');
       }
-      return timeString;
+      
+      return timeString; // Return as is if format is unknown
     } catch (error) {
       console.error('Time formatting error:', error);
       return timeString;
@@ -361,18 +362,21 @@ const BookingCard = ({ booking }) => {
   };
 
   const { day, date, month } = formatBookingDate(booking.date);
+  
+  // Get room title (handle different property names)
+  const roomTitle = booking.title || booking.room || 'Untitled Booking';
+  
+  // Format start and end times
   const startTimeFormatted = formatTime(booking.startTime);
   const endTimeFormatted = formatTime(booking.endTime);
-
-  // Correct way to get Room Title
-  const roomTitle = booking.title || booking.room || 'Untitled Booking';
-
-  // Get building and floor if available
+  
+  // Get building and floor information
   const buildingName = booking.building || '';
+  const roomName = booking.room || '';
   const floorName = booking.floor || '';
-
+  
+  // Default to 'pending' if status is not provided
   const status = booking.status || 'pending';
-
   return (
     <div className="border border-gray-200 rounded-lg hover:shadow-md transition-shadow overflow-hidden">
       <div className="flex flex-col md:flex-row">
@@ -393,7 +397,7 @@ const BookingCard = ({ booking }) => {
           </div>
         </div>
 
-        {/* Right side - Booking Details */}
+        {/* Right side - Details */}
         <div className="p-4 flex-grow">
           <div className="flex justify-between items-start">
             <div>
@@ -405,12 +409,21 @@ const BookingCard = ({ booking }) => {
               <div className="flex items-center text-gray-500 text-sm mt-1">
                 <MapPin size={14} className="mr-1" />
                 {buildingName}
-                {buildingName && floorName ? ', ' : ''}
+                {buildingName && (floorName || roomName) ? ', ' : ''}
                 {floorName}
+                {floorName && roomName ? ', ' : ''}
+                {roomName && <span className="font-medium">{roomName}</span>}
               </div>
+              
+              {/* Add this new section for the admin who changed the status */}
+              {booking.bookedBy && (
+                <div className="flex items-center text-gray-500 text-sm mt-1">
+                  <User size={14} className="mr-1" />
+                  changed by {booking.bookedBy}
+                </div>
+              )}
             </div>
 
-            {/* Status badge */}
             <span
               className={`px-3 py-1 text-xs font-medium rounded-full ${
                 status === 'confirmed' || status === 'approved'
@@ -428,7 +441,6 @@ const BookingCard = ({ booking }) => {
     </div>
   );
 };
-
 
 // Facility Card Component
 const FacilityCard = ({ imageSrc, title, description, bookingLink, features }) => {
@@ -461,7 +473,5 @@ const FacilityCard = ({ imageSrc, title, description, bookingLink, features }) =
     </div>
   );
 };
-
-
 
 export default HomePage;

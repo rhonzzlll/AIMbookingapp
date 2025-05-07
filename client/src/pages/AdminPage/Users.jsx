@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TopBar from '../../components/AdminComponents/TopBar'; // Adjust the path as needed
 
 const Users = () => {
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -21,31 +23,42 @@ const Users = () => {
 
   const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
 
-  // Fetch users from the backend when the component mounts
+  // Check if user is admin on component mount
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await fetch('http://localhost:5000/api/users', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch users');
-        }
-
-        const data = await response.json();
-        setUsers(data);
-      } catch (error) {
-        console.error('Error fetching users:', error.message);
-        alert(error.message);
-      }
-    };
+    const role = localStorage.getItem('role');
+    if (!role || role.toLowerCase() !== 'admin') {
+      navigate('/login');
+      return;
+    }
 
     fetchUsers();
-  }, []);
+  }, [navigate]);
+
+  // Fetch users with proper auth header
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        throw new Error('Authentication token missing');
+      }
+
+      const response = await fetch('http://localhost:5000/api/users', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch users');
+      }
+
+      const data = await response.json();
+      setUsers(data);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -85,8 +98,6 @@ const Users = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  
-
   // Open add user modal
   const handleAddUser = () => {
     setFormData({
@@ -123,18 +134,23 @@ const Users = () => {
   // Save new user
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     try {
       const token = localStorage.getItem('token');
+
+      if (!token) {
+        throw new Error('Authentication token missing');
+      }
+
       const response = await fetch('http://localhost:5000/api/users', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`, 
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(formData),
       });
@@ -165,18 +181,24 @@ const Users = () => {
   };
 
   // Update existing user
-  const handleUpdateUser = async () => {
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+
     if (!validateForm()) {
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/users/${currentUser._id}`, {
+      if (!token) {
+        throw new Error('Authentication token missing');
+      }
+
+      const response = await fetch(`http://localhost:5000/api/users/${currentUser.userId || currentUser._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(formData),
       });
@@ -188,7 +210,9 @@ const Users = () => {
 
       const updatedUser = await response.json();
       setUsers((prevUsers) =>
-        prevUsers.map((user) => (user._id === updatedUser._id ? updatedUser : user))
+        prevUsers.map((user) =>
+          (user.userId || user._id) === (updatedUser.userId || updatedUser._id) ? updatedUser : user
+        )
       );
       setShowEditModal(false);
     } catch (error) {
@@ -199,7 +223,7 @@ const Users = () => {
 
   // Toggle user active status
   const toggleUserStatus = async (userId) => {
-    const user = users.find((u) => u._id === userId);
+    const user = users.find((u) => u._id === userId || u.userId === userId);
     if (!user) return;
 
     try {
@@ -214,12 +238,13 @@ const Users = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update user status');
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to update user status');
       }
 
       const updatedUser = await response.json();
       setUsers((prevUsers) =>
-        prevUsers.map((u) => (u._id === updatedUser._id ? updatedUser : u))
+        prevUsers.map((u) => ((u._id === userId || u.userId === userId) ? updatedUser : u))
       );
     } catch (error) {
       console.error('Error toggling user status:', error.message);
@@ -227,33 +252,32 @@ const Users = () => {
     }
   };
 
-  
   useEffect(() => {
     if (showAddModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
-  
+
     return () => {
       document.body.style.overflow = '';
     };
   }, [showAddModal]);
-  
+
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   const sortedUsers = [...users].sort((a, b) => {
     const { key, direction } = sortConfig;
     if (!key) return 0;
-  
+
     const valA = a[key];
     const valB = b[key];
-  
+
     // Sort numbers or strings
     if (typeof valA === 'number' && typeof valB === 'number') {
       return direction === 'asc' ? valA - valB : valB - valA;
     }
-  
+
     return direction === 'asc'
       ? String(valA).localeCompare(String(valB))
       : String(valB).localeCompare(String(valA));
@@ -270,11 +294,9 @@ const Users = () => {
       return { key, direction: 'asc' };
     });
   };
-  
-
 
   return (
-      <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh' }}>
+    <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh' }}>
       <TopBar onSearch={setSearchTerm} />
       <div className="p-4 bg-gray-100 w-full flex flex-col">
         {/* Header with Add User button */}
@@ -291,65 +313,64 @@ const Users = () => {
         {/* Users Table */}
         <div className="bg-white rounded-lg shadow-md border border-gray-200 w-full overflow-hidden">
           <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-100">
-              <th onClick={() => handleSort('firstName')} className="cursor-pointer px-4 py-2 border-b w-1/6">
-                First Name {sortConfig.key === 'firstName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('lastName')} className="cursor-pointer px-4 py-2 border-b w-1/6">
-                Last Name {sortConfig.key === 'lastName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('email')} className="cursor-pointer px-4 py-2 border-b w-1/4">
-                Email {sortConfig.key === 'email' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th onClick={() => handleSort('department')} className="cursor-pointer px-4 py-2 border-b w-1/6">
-                Department {sortConfig.key === 'department' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-              </th>
-              <th className="px-4 py-2 border-b w-1/6">Status</th>
-              <th className="px-4 py-2 border-b w-1/6">Actions</th>
-            </tr>
-          </thead>
+            <thead>
+              <tr className="bg-gray-100">
+                <th onClick={() => handleSort('firstName')} className="cursor-pointer px-4 py-2 border-b w-1/6">
+                  First Name {sortConfig.key === 'firstName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </th>
+                <th onClick={() => handleSort('lastName')} className="cursor-pointer px-4 py-2 border-b w-1/6">
+                  Last Name {sortConfig.key === 'lastName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </th>
+                <th onClick={() => handleSort('email')} className="cursor-pointer px-4 py-2 border-b w-1/4">
+                  Email {sortConfig.key === 'email' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </th>
+                <th onClick={() => handleSort('department')} className="cursor-pointer px-4 py-2 border-b w-1/6">
+                  Department {sortConfig.key === 'department' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                </th>
+                <th className="px-4 py-2 border-b w-1/6">Status</th>
+                <th className="px-4 py-2 border-b w-1/6">Actions</th>
+              </tr>
+            </thead>
 
             <tbody>
-            {sortedUsers
-              .filter(user =>
-                `${user.firstName} ${user.lastName} ${user.email} ${user.department}`
-                  .toLowerCase()
-                  .includes(searchTerm.toLowerCase())
-              )
-              .map((user) => (
-                <tr key={user._id} className="hover:bg-gray-50 transition">
-                  <td className="px-4 py-2 border-b">{user.firstName}</td>
-                  <td className="px-4 py-2 border-b">{user.lastName}</td>
-                  <td className="px-4 py-2 border-b">{user.email}</td>
-                  <td className="px-4 py-2 border-b">{user.department}</td>
-                  <td className="px-4 py-2 border-b">
-                    <div className="flex items-center">
-                      <span className={`mr-2 ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </span>
+              {sortedUsers
+                .filter(user =>
+                  `${user.firstName} ${user.lastName} ${user.email} ${user.department}`
+                    .toLowerCase()
+                    .includes(searchTerm.toLowerCase())
+                )
+                .map((user) => (
+                  <tr key={user._id} className="hover:bg-gray-50 transition">
+                    <td className="px-4 py-2 border-b">{user.firstName}</td>
+                    <td className="px-4 py-2 border-b">{user.lastName}</td>
+                    <td className="px-4 py-2 border-b">{user.email}</td>
+                    <td className="px-4 py-2 border-b">{user.department}</td>
+                    <td className="px-4 py-2 border-b">
+                      <div className="flex items-center">
+                        <span className={`mr-2 ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        <button
+                          onClick={() => toggleUserStatus(user._id || user.userId)}
+                          className={`relative inline-flex items-center h-6 rounded-full w-11 ${user.isActive ? 'bg-green-600' : 'bg-gray-300'}`}
+                        >
+                          <span
+                            className={`absolute ${user.isActive ? 'translate-x-6' : 'translate-x-1'
+                              } inline-block h-4 w-4 transform rounded-full bg-white transition`}
+                          />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 border-b">
                       <button
-                        onClick={() => toggleUserStatus(user._id)}
-                        className={`relative inline-flex items-center h-6 rounded-full w-11 ${user.isActive ? 'bg-green-600' : 'bg-gray-300'
-                          }`}
+                        onClick={() => handleEditUser(user)}
+                        className="text-blue-600 hover:text-blue-800 hover:underline mr-2"
                       >
-                        <span
-                          className={`absolute ${user.isActive ? 'translate-x-6' : 'translate-x-1'
-                            } inline-block h-4 w-4 transform rounded-full bg-white transition`}
-                        />
+                        Edit
                       </button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 border-b">
-                    <button
-                      onClick={() => handleEditUser(user)}
-                      className="text-blue-600 hover:text-blue-800 hover:underline mr-2"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
@@ -364,7 +385,7 @@ const Users = () => {
               <button
                 onClick={() => setShowAddModal(false)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
+              >
                 ✕
               </button>
             </div>
@@ -519,10 +540,7 @@ const Users = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              handleUpdateUser();
-            }}>
+            <form onSubmit={handleEditSubmit}>
               <div className="mb-4">
                 <label className="block mb-1 font-medium">First Name</label>
                 <input
@@ -619,6 +637,5 @@ const Users = () => {
     </div>
   );
 };
-
 
 export default Users;

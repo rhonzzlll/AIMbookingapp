@@ -3,6 +3,7 @@ import axios from 'axios';
 import TopBar from '../../components/AdminComponents/TopBar';
 import DeleteConfirmation from './modals/DeleteConfirmation';
 import StatusModal from './modals/StatusModal';
+import ExportCSV from '../../components/AdminComponents/ExportCSV';
 
 const formatDate = (date) => {
   const options = { year: 'numeric', month: 'short', day: 'numeric' };
@@ -29,50 +30,12 @@ const convertTo24HourFormat = (time12h) => {
   
   return `${hours}:${minutes}`;
 };
- 
 
 // Base API URL
 const API_BASE_URL = 'http://localhost:5000/api';
 
 // Predefined options for dropdowns
 const DEPARTMENTS = ['Engineering', 'Marketing', 'HR', 'Finance', 'Sales', 'IT', 'ICT'];
-const BUILDINGS = ['ACC Building', 'AIM Building'];
-
-// Room categories by building
-const BUILDING_CATEGORIES = {
-  'ACC Building': [
-    'Hybrid Caseroom',
-    'Regular Caseroom',
-    'Flat Room',
-    'Meeting Room',
-    'Ministudio',
-  ],
-  'AIM Building': [
-    'Hybrid Caseroom',
-    'Flat Room',
-    'Open Area',
-    'Meeting Room',
-  ]
-};
-
-// Initial form state
-const initialFormState = {
-  title: '',
-  firstName: '',
-  lastName: '',
-  email: '',
-  department: '',
-  category: '',
-  room: '',
-  building: '',
-  date: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
-  startTime: null,
-  endTime: null,
-  notes: '',
-  recurring: 'No',
-  recurrenceEndDate: '',
-  status: 'pending',
-};
 
 // Time options for dropdowns
 const TIME_OPTIONS = [
@@ -81,6 +44,30 @@ const TIME_OPTIONS = [
   '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM', 
   '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
+
+// Initial form state matching the Sequelize model
+const initialFormState = {
+  title: '',
+  firstName: '', // For UI only, not in model
+  lastName: '', // For UI only, not in model
+  email: '', // For UI only, not in model
+  userId: '', // Maps to userId in model
+  roomId: '', // Maps to roomId in model
+  department: '', // Not directly in model but useful for UI
+  category: '', // Not directly in model but useful for UI
+  building: '', // Not directly in model but useful for filtering rooms
+  date: new Date().toISOString().split('T')[0], // Maps to date in model
+  startTime: null, // Maps to startTime in model
+  endTime: null, // Maps to endTime in model
+  notes: '', // Maps to notes in model
+  isRecurring: false, // Maps to isRecurring in model, replaces 'recurring'
+  isMealRoom: false, // Maps to isMealRoom in model
+  isBreakRoom: false, // Maps to isBreakRoom in model
+  recurrenceEndDate: '', // Maps to recurrenceEndDate in model
+  status: 'pending', // Maps to status in model
+  bookingCapacity: 1, // Maps to bookingCapacity in model
+  remarks: '', // Maps to remarks in model
+};
 
 // Tab Button Component
 const TabButton = ({ label, active, onClick }) => (
@@ -103,55 +90,83 @@ const Bookings = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
-  
+  const [unavailableTimeSlots, setUnavailableTimeSlots] = useState([]);
   
   // State for modal controls
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editBookingId, setEditBookingId] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [bookingToDelete, setBookingToDelete] = useState(null);
   
   // State for room data
   const [rooms, setRooms] = useState([]);
   const [users, setUsers] = useState([]);
-  
-  // Get token from localStorage
+  const [buildings, setBuildings] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [availableRooms, setAvailableRooms] = useState([]);
+
+  // Get token and userId from localStorage
   const token = localStorage.getItem('token');
+  const userId = localStorage.getItem('_id');
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedBookingId, setSelectedBookingId] = useState(null);
+  const [adminName, setAdminName] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
 
-  useEffect(() => {
-    const fetchRoomsAndBookings = async () => {
-      try {
-        setLoading(true);
-        const roomRes = await axios.get('/api/rooms', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setRooms(roomRes.data); // Assume it's an array of rooms
-  
-        const bookingRes = await axios.get('/api/bookings', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const bookingsWithRoomName = bookingRes.data.bookings.map(booking => {
-          const room = roomRes.data.find(r => r._id === booking.room);
-          return {
-            ...booking,
-            roomName: room?.roomName || 'Unknown Room',
-            building: room?.building || 'Unknown Building',
-          };
-        });
-  
-        setBookings(bookingsWithRoomName);
-      } catch (err) {
-        console.error(err);
-        setError('Failed to load data');
-      } finally {
-        setLoading(false);
+  // Fetch buildings data
+  const fetchBuildings = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/buildings`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setBuildings(response.data);
+    } catch (err) {
+      console.error('Error fetching buildings:', err);
+    }
+  }, [token]);
+
+  // Fetch categories data
+  const fetchCategories = useCallback(async (buildingId = null) => {
+    try {
+      let url = `${API_BASE_URL}/categories`;
+      if (buildingId) {
+        url += `?buildingId=${buildingId}`;
       }
-    };
-  
-    fetchRoomsAndBookings();
-  }, []);
+      
+      const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setCategories(response.data);
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+    }
+  }, [token]);
+
+  // Fetch rooms data
+  const fetchRooms = useCallback(async (buildingId = null, categoryId = null) => {
+    try {
+      let url = `${API_BASE_URL}/rooms`;
+      const queryParams = [];
+      
+      if (buildingId) queryParams.push(`buildingId=${buildingId}`);
+      if (categoryId) queryParams.push(`categoryId=${categoryId}`);
+      
+      if (queryParams.length > 0) {
+        url += `?${queryParams.join('&')}`;
+      }
+      
+      const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setRooms(response.data);
+    } catch (err) {
+      console.error('Error fetching rooms:', err);
+    }
+  }, [token]);
 
   // Fetch bookings data
   const fetchBookings = useCallback(async () => {
@@ -159,83 +174,54 @@ const Bookings = () => {
     setError('');
   
     try {
-      const [bookingsRes, roomsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/bookings`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`${API_BASE_URL}/rooms`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      ]);
-  
-      const allRooms = roomsRes.data.flatMap((room) => {
-        const baseRoom = {
-          _id: room._id,
-          roomName: room.roomName
-        };
-        const subRooms = room.subRooms?.map((sub, i) => ({
-          _id: `${room._id}-sub-${i}`,
-          roomName: sub.roomName
-        })) || [];
-        return [baseRoom, ...subRooms];
+      const bookingsRes = await axios.get(`${API_BASE_URL}/bookings`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
   
-      const roomMap = Object.fromEntries(allRooms.map(r => [r._id, r.roomName]));
-  
-      const enrichedBookings = bookingsRes.data.map(booking => ({
-        ...booking,
-        roomName: roomMap[booking.room] || booking.room
-      }));
+      // Enrich booking data with room and user information
+      const enrichedBookings = await Promise.all(
+        bookingsRes.data.map(async (booking) => {
+          let roomData = {};
+          let userData = {};
+          
+          try {
+            // Fetch room data for this booking
+            if (booking.roomId) {
+              const roomRes = await axios.get(`${API_BASE_URL}/rooms/${booking.roomId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              roomData = roomRes.data;
+            }
+            
+            // Fetch user data for this booking
+            if (booking.userId) {
+              const userRes = await axios.get(`${API_BASE_URL}/users/${booking.userId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              userData = userRes.data;
+            }
+          } catch (err) {
+            console.error('Error fetching related data for booking:', err);
+          }
+          
+          return {
+            ...booking,
+            roomName: roomData.roomName || 'Unknown Room',
+            building: roomData.building?.name || 'Unknown Building',
+            category: roomData.category?.name || 'Unknown Category',
+            userName: userData ? `${userData.firstName} ${userData.lastName}` : 'Unknown User'
+          };
+        })
+      );
   
       setBookings(enrichedBookings);
     } catch (err) {
-      console.error('Error fetching bookings or rooms:', err);
+      console.error('Error fetching bookings:', err);
       setError('Failed to load bookings. Please try again.');
     } finally {
       setLoading(false);
     }
   }, [token]);
-  
-
-  const fetchRooms = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/rooms`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-  
-      const allRooms = response.data;
-  
-      // Flatten top-level rooms and their subrooms into one list
-      const flattenedRooms = allRooms.flatMap((room) => {
-        const baseRoom = {
-          _id: room._id,
-          building: room.building,
-          category: room.category,
-          roomName: room.roomName,
-          capacity: room.capacity,
-          isQuadrant: room.isQuadrant,
-          description: room.description
-        };
-  
-        const subRooms = room.subRooms?.map((sub, index) => ({
-          _id: `${room._id}-sub-${index}`,
-          building: room.building,
-          category: room.category,
-          roomName: sub.roomName,
-          capacity: sub.capacity,
-          description: sub.description,
-          parentId: room._id
-        })) || [];
-  
-        return [baseRoom, ...subRooms];
-      });
-  
-      setRooms(flattenedRooms);
-    } catch (err) {
-      console.error('Error fetching rooms:', err);
-    }
-  }, [token]);
-  
 
   // Fetch users data
   const fetchUsers = useCallback(async () => {
@@ -249,25 +235,69 @@ const Bookings = () => {
     }
   }, [token]);
 
+  // Fetch current user data
+  const fetchCurrentUser = useCallback(async () => {
+    if (!token || !userId) {
+      console.error('No authentication token or user ID found');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      setCurrentUser(response.data);
+      setAdminName(`${response.data.firstName} ${response.data.lastName}`);
+    } catch (err) {
+      console.error('Error fetching current user details:', err);
+    }
+  }, [token, userId]);
+
   // Initialize data on component mount
   useEffect(() => {
     fetchBookings();
+    fetchBuildings();
+    fetchCategories();
     fetchRooms();
     fetchUsers();
-  }, [fetchBookings, fetchRooms, fetchUsers]);
+    fetchCurrentUser();
+  }, [fetchBookings, fetchBuildings, fetchCategories, fetchRooms, fetchUsers, fetchCurrentUser]);
 
   // Filter bookings based on active tab
   const filteredBookings = useMemo(() => {
-    if (activeBookingTab === 'all') return bookings;
-    
-    return bookings.filter(booking => {
-      if (activeBookingTab === 'pending') return booking.status === 'pending';
-      if (activeBookingTab === 'approved') return booking.status === 'confirmed';
-      if (activeBookingTab === 'declined') return booking.status === 'declined';
-      return true;
-    });
-  }, [bookings, activeBookingTab]);
+    let filtered = bookings;
+  
+    if (activeBookingTab === 'all') {
+      // Sort by date descending for "All" tab
+      filtered = bookings.sort((a, b) => new Date(b.date) - new Date(a.date));
+    } else if (activeBookingTab === 'pending') {
+      filtered = bookings.filter(booking => booking.status === 'pending');
+    } else if (activeBookingTab === 'approved') {
+      filtered = bookings.filter(booking => booking.status === 'confirmed');
+    } else if (activeBookingTab === 'declined') {
+      filtered = bookings.filter(booking => booking.status === 'declined');
+    } else if (activeBookingTab === 'recent') {
+      // Sort by created date in descending order for recent bookings
+      filtered = bookings.sort((a, b) => new Date(b.timeSubmitted || b.date) - new Date(a.timeSubmitted || a.date));
+    }
 
+    // Apply search filter if present
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(booking => 
+        (booking.title && booking.title.toLowerCase().includes(term)) || 
+        (booking.userName && booking.userName.toLowerCase().includes(term)) ||
+        (booking.roomName && booking.roomName.toLowerCase().includes(term)) ||
+        (booking.building && booking.building.toLowerCase().includes(term))
+      );
+    }
+  
+    return filtered;
+  }, [bookings, activeBookingTab, searchTerm]);
+  
   // Calculate pagination
   const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
   const indexOfLastBooking = currentPage * itemsPerPage;
@@ -292,20 +322,13 @@ const Bookings = () => {
     resetForm();
     setIsAddModalOpen(true);
   };
+
   const handleEditClick = (booking) => {
-    const selectedBuilding = booking.building;
-    const selectedCategory = booking.category;
+    // Fetch related data for the selected building and category
+    fetchCategories(booking.buildingId);
+    fetchRooms(booking.buildingId, booking.categoryId);
   
-    // Set categories and available rooms based on the booking's building and category
-    const selectedCategories = BUILDING_CATEGORIES[selectedBuilding] || [];
-    const matchedRooms = rooms.filter(
-      (room) => room.building === selectedBuilding && room.category === selectedCategory
-    );
-  
-    setCategories(selectedCategories);
-    setAvailableRooms(matchedRooms);
-  
-    // Fix: Format times properly using the TIME_OPTIONS format
+    // Format times properly using the TIME_OPTIONS format
     const startDate = new Date(booking.startTime);
     const endDate = new Date(booking.endTime);
     
@@ -325,29 +348,42 @@ const Bookings = () => {
     const formattedStartTime = formatTimeFor12Hour(startDate);
     const formattedEndTime = formatTimeFor12Hour(endDate);
   
+    // Find user details
+    const user = users.find(u => u.userId === booking.userId) || {};
+  
     // Prefill form
     setFormData({
       ...booking,
       date: parseISODate(booking.date),
       startTime: formattedStartTime,
       endTime: formattedEndTime,
-      recurring: booking.recurring || 'No',
+      isRecurring: !!booking.isRecurring,
       recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      email: user.email || '',
+      department: user.department || '',
     });
   
-    setEditBookingId(booking._id);
+    setEditBookingId(booking.bookingId);
     setIsEditModalOpen(true);
   };
   
-  const handleDeleteBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to delete this booking?')) {
-      return;
-    }
+  const openDeleteModal = (booking) => {
+    setBookingToDelete(booking);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteBooking = async () => {
+    if (!bookingToDelete) return;
     
     try {
-      await axios.delete(`${API_BASE_URL}/bookings/${bookingId}`, {
+      await axios.delete(`${API_BASE_URL}/bookings/${bookingToDelete.bookingId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      setIsDeleteModalOpen(false);
+      setBookingToDelete(null);
       fetchBookings(); // Refresh the bookings list
     } catch (err) {
       console.error('Error deleting booking:', err);
@@ -355,18 +391,59 @@ const Bookings = () => {
     }
   };
 
-  const handleStatusChange = (bookingId, status) => {
+  const handleStatusChange = async (bookingId, status) => {
     setSelectedBookingId(bookingId);
     setSelectedStatus(status);
+    
+    // We already have the current user info, so we can use it directly
+    if (currentUser) {
+      const name = `${currentUser.firstName} ${currentUser.lastName}`;
+      setAdminName(name);
+    } else {
+      // As a fallback, try to fetch the user info again
+      try {
+        const userResponse = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        const userData = userResponse.data;
+        const name = `${userData.firstName} ${userData.lastName}`;
+        setAdminName(name);
+      } catch (err) {
+        console.error('Error fetching admin information:', err);
+        setAdminName('Admin User'); // Default fallback
+      }
+    }
+    
     setIsStatusModalOpen(true);
+  };
+
+  const confirmStatusChange = async () => {
+    if (!selectedBookingId || !selectedStatus) return;
+    
+    try {
+      await axios.patch(
+        `${API_BASE_URL}/bookings/${selectedBookingId}/status`, 
+        { 
+          status: selectedStatus,
+          changedBy: adminName,
+          remarks: formData.remarks || ''
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setIsStatusModalOpen(false);
+      fetchBookings(); // Refresh bookings after status change
+    } catch (err) {
+      console.error('Error updating booking status:', err);
+      setError('Failed to update booking status. Please try again.');
+    }
   };
 
   // Form states
   const [formData, setFormData] = useState({ ...initialFormState });
   const [formError, setFormError] = useState({});
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [categories, setCategories] = useState([]);
-  const [availableRooms, setAvailableRooms] = useState([]);
 
   // Reset form to initial state
   const resetForm = () => {
@@ -382,43 +459,58 @@ const Bookings = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   
     if (name === 'building') {
+      // Reset dependent fields
       setFormData(prev => ({
         ...prev,
         building: value,
         category: '',
-        room: '',
+        roomId: '',
         roomName: ''
       }));
-      setCategories(BUILDING_CATEGORIES[value] || []);
+      
+      // Fetch categories for selected building
+      fetchCategories(value);
       setAvailableRooms([]);
-    }
-  
-    else if (name === 'room') {
-      const selectedRoom = availableRooms.find(r => r._id === value);
-      setFormData(prev => ({
-        ...prev,
-        room: selectedRoom?._id || '',
-        roomName: selectedRoom?.roomName || ''
-      }));
-    }
-    
-  
-    else if (name === 'category') {
+
+    } else if (name === 'category') {
+      // Reset room selection
       setFormData(prev => ({
         ...prev,
         category: value,
-        room: '',
+        roomId: '',
         roomName: ''
       }));
+      
+      // Fetch rooms for selected building and category
       if (formData.building && value) {
-        const filteredRooms = rooms.filter(
-          room => room.building === formData.building && room.category === value
-        );
-        setAvailableRooms(filteredRooms);
+        fetchRooms(formData.building, value);
       }
+      
+    } else if (name === 'roomId') {
+      const selectedRoom = rooms.find(r => r.roomId.toString() === value);
+      setFormData(prev => ({
+        ...prev,
+        roomId: selectedRoom?.roomId || '',
+        roomName: selectedRoom?.roomName || ''
+      }));
+    } else if (name === 'isRecurring') {
+      setFormData(prev => ({
+        ...prev,
+        isRecurring: value === 'Yes'
+      }));
+    } else if (name === 'isMealRoom' || name === 'isBreakRoom') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: e.target.checked
+      }));
     }
   };
-    
+
+  // Handle checkbox changes
+  const handleCheckboxChange = (e) => {
+    const { name, checked } = e.target;
+    setFormData(prev => ({ ...prev, [name]: checked }));
+  };
 
   // Handle time selection
   const handleTimeChange = (field, value) => {
@@ -458,6 +550,7 @@ const Bookings = () => {
   const handleUserSelect = (user) => {
     setFormData(prev => ({
       ...prev,
+      userId: user.userId,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
@@ -465,14 +558,14 @@ const Bookings = () => {
     }));
   };
 
- const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitLoading(true);
     setError('');
     setFormError({});
 
-    const userId = localStorage.getItem('_id');
-    if (!userId) {
+    const adminUserId = localStorage.getItem('_id');
+    if (!adminUserId) {
       setError('User not authenticated. Please log in again.');
       setSubmitLoading(false);
       return;
@@ -481,8 +574,14 @@ const Bookings = () => {
     let hasError = false;
     const errors = {};
 
-    if (!formData.firstName || !formData.lastName) {
-      errors.name = 'First name and last name are required';
+    // Validation
+    if (!formData.title) {
+      errors.title = 'Title is required';
+      hasError = true;
+    }
+
+    if (!formData.userId && (!formData.firstName || !formData.lastName)) {
+      errors.name = 'User information is required';
       hasError = true;
     }
 
@@ -498,7 +597,7 @@ const Bookings = () => {
       }
     }
 
-    if (!formData.room) {
+    if (!formData.roomId) {
       errors.room = 'Room selection is required';
       hasError = true;
     }
@@ -508,22 +607,32 @@ const Bookings = () => {
       hasError = true;
     }
 
-    if (formData.recurring !== 'No' && !formData.recurrenceEndDate) {
+    if (formData.isRecurring && !formData.recurrenceEndDate) {
       errors.recurrence = 'Recurrence end date is required for recurring bookings';
       hasError = true;
     }
 
-    const userExists = users.some(
-      (user) =>
-        user.firstName.toLowerCase() === formData.firstName.toLowerCase() &&
-        user.lastName.toLowerCase() === formData.lastName.toLowerCase()
-    );
-    
-    if (!userExists) {
-      errors.name = 'User not found. Please enter a registered first and last name.';
-      hasError = true;
+    // If user not pre-selected, check if they exist
+    if (!formData.userId) {
+      const userExists = users.some(
+        (user) =>
+          user.firstName.toLowerCase() === formData.firstName.toLowerCase() &&
+          user.lastName.toLowerCase() === formData.lastName.toLowerCase()
+      );
+      
+      if (!userExists) {
+        errors.name = 'User not found. Please enter a registered first and last name.';
+        hasError = true;
+      } else {
+        // Find the user ID if the user exists
+        const matchedUser = users.find(
+          (user) =>
+            user.firstName.toLowerCase() === formData.firstName.toLowerCase() &&
+            user.lastName.toLowerCase() === formData.lastName.toLowerCase()
+        );
+        formData.userId = matchedUser?.userId;
+      }
     }
-    
 
     if (hasError) {
       setFormError(errors);
@@ -532,24 +641,36 @@ const Bookings = () => {
     }
 
     try {
-      const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const userData = response.data;
-
+      // Format times for API
       const startTime24 = convertTo24HourFormat(formData.startTime);
       const endTime24 = convertTo24HourFormat(formData.endTime);
-      const startDateTime = new Date(`${formData.date}T${startTime24}:00`);
-      const endDateTime = new Date(`${formData.date}T${endTime24}:00`);
+      const startDateTime = `${formData.date}T${startTime24}:00`;
+      const endDateTime = `${formData.date}T${endTime24}:00`;
+      
+      // Format the current time for timeSubmitted
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const timeSubmitted = `${hours}:${minutes}:${seconds}`;
 
       const payload = {
-        ...formData,
-        startTime: startDateTime.toISOString(),
-        endTime: endDateTime.toISOString(),
-        recurrenceEndDate: formData.recurrenceEndDate ? new Date(formData.recurrenceEndDate).toISOString() : null,
-        userId,
-        bookedBy: userData.name || 'Admin'
+        title: formData.title,
+        roomId: formData.roomId,
+        userId: formData.userId,
+        date: formData.date,
+        startTime: startTime24,
+        endTime: endTime24,
+        notes: formData.notes,
+        isRecurring: formData.isRecurring,
+        isMealRoom: formData.isMealRoom || false,
+        isBreakRoom: formData.isBreakRoom || false,
+        recurrenceEndDate: formData.isRecurring ? formData.recurrenceEndDate : null,
+        status: 'pending',
+        bookingCapacity: formData.bookingCapacity || 1,
+        timeSubmitted: timeSubmitted,
+        changedBy: adminName,
+        remarks: formData.remarks || ''
       };
 
       let responseBooking;
@@ -598,6 +719,7 @@ const Bookings = () => {
     ).slice(0, 5); // Limit to 5 results
   }, [users, userSearchQuery]);
 
+  // Time slot availability helpers
   const getAvailableTimeOptions = (isStart) => {
     const now = new Date();
     const selectedDate = new Date(formData.date);
@@ -623,6 +745,7 @@ const Bookings = () => {
       return timeInMinutes > currentTotalMinutes;
     });
   };
+
   const getTimeInMinutes = (timeStr) => {
     const [time, modifier] = timeStr.split(' ');
     let [hours, minutes] = time.split(':').map(Number);
@@ -634,11 +757,10 @@ const Bookings = () => {
   };
 
   const isTimeSlotTaken = (timeStr, type = 'start') => {
-    if (!formData.room || !formData.date) return false;
+    if (!formData.roomId || !formData.date) return false;
   
-    const selectedRoom = rooms.find(r => r._id === formData.room);
-    const selectedRoomName = selectedRoom?.roomName;
-    if (!selectedRoomName) return false;
+    const selectedRoom = rooms.find(r => r.roomId.toString() === formData.roomId.toString());
+    if (!selectedRoom) return false;
   
     const [hourStr, minuteStr] = timeStr.split(' ')[0].split(':');
     let hours = parseInt(hourStr, 10);
@@ -650,35 +772,78 @@ const Bookings = () => {
   
     const checkTime = new Date(`${formData.date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
   
+    // Check for conflicts for the specific room
     return bookings.some((booking) => {
-      // Skip the current booking when editing
-      if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;
-    
+      if (isEditModalOpen && editBookingId && booking.bookingId === editBookingId) return false;  // Skip the current booking when editing
+  
       const bookingDate = new Date(booking.date).toISOString().split('T')[0];
       const selectedDate = new Date(formData.date).toISOString().split('T')[0];
-    
+  
       if (
-        booking.roomName === selectedRoomName &&
-        bookingDate === selectedDate &&
+        booking.roomId.toString() === formData.roomId.toString() && 
+        bookingDate === selectedDate && 
         booking.status === 'confirmed'
       ) {
-        const bookingStart = new Date(booking.startTime);
-        const bookingEnd = new Date(booking.endTime);
-    
+        const bookingStart = new Date(`${booking.date}T${booking.startTime}`);
+        const bookingEnd = new Date(`${booking.date}T${booking.endTime}`);
+  
         if (type === 'start') {
-          const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);
+          const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);  // Buffer time
           return checkTime >= bookingStart && checkTime < bufferEnd;
         }
-    
+  
         if (type === 'end') {
-          const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);
+          const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);  // Buffer time
           return checkTime >= bufferStart && checkTime < bookingEnd;
         }
       }
-    
+  
       return false;
     });
-    
+  };  
+
+  const processBookingsForTimeSlots = (bookings) => {
+    if (!bookings || !formData.building || !formData.room || !formData.date) return;
+  
+    // Clear previous unavailable time slots
+    setUnavailableTimeSlots([]);
+  
+    const relevantBookings = bookings.filter(booking =>
+      booking.building === formData.building &&
+      new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
+      booking.status?.toLowerCase() === 'confirmed'
+    );
+  
+    const unavailable = [];
+  
+    relevantBookings.forEach(booking => {
+      const bookingStart = new Date(booking.startTime);
+      const bookingEnd = new Date(booking.endTime);
+      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000); // 30 min buffer time
+  
+      const formatTimeToOption = (date) => {
+        let hours = date.getHours();
+        const minutes = date.getMinutes();
+        const period = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        return `${hours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      };
+  
+      TIME_OPTIONS.forEach(timeOption => {
+        const timeOption24 = convertTo24HourFormat(timeOption);
+        const timeOptionDate = new Date(`${formData.date}T${timeOption24}:00`);
+  
+        // Check for overlapping time slots across all rooms in the building
+        if (timeOptionDate >= bookingStart && timeOptionDate < bufferEnd) {
+          unavailable.push({
+            time: timeOption,
+            reason: `Booking: ${formatTimeToOption(bookingStart)} - ${formatTimeToOption(bookingEnd)} (Already booked)`
+          });
+        }
+      });
+    });
+  
+    setUnavailableTimeSlots(unavailable);
   };
   
   
@@ -1022,22 +1187,26 @@ const Bookings = () => {
     });
   };
   
-  const sortedBookings = [...currentBookings].sort((a, b) => {
+  const sortedBookings = useMemo(() => {
+    const bookingsToSort = currentBookings;  // Sort only the current page's bookings
+  
     const { key, direction } = sortConfig;
-    if (!key) return 0;
   
-    const valA = a[key];
-    const valB = b[key];
+    if (!key) return bookingsToSort;  // If no sort key, return the current bookings
   
-    // Handle dates, numbers, or strings
-    const aVal = typeof valA === 'string' || valA instanceof Date ? String(valA) : valA;
-    const bVal = typeof valB === 'string' || valB instanceof Date ? String(valB) : valB;
+    return bookingsToSort.sort((a, b) => {
+      const valA = a[key];
+      const valB = b[key];
   
-    return direction === 'asc'
-      ? aVal.localeCompare(bVal)
-      : bVal.localeCompare(aVal);
-  });
- 
+      const aVal = typeof valA === 'string' || valA instanceof Date ? String(valA) : valA;
+      const bVal = typeof valB === 'string' || valB instanceof Date ? String(valB) : valB;
+  
+      return direction === 'asc'
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
+    });
+  }, [currentBookings, sortConfig]);  
+
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
@@ -1045,18 +1214,21 @@ const Bookings = () => {
       <div className="p-4 bg-gray-100 w-full flex flex-col">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Bookings</h2>
-          <button
-            onClick={handleAddNewClick}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            + Add New Booking
-          </button>
+          <div className="flex gap-2">
+            <ExportCSV bookings={bookings} />
+            <button
+              onClick={handleAddNewClick}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              + Add New Booking
+            </button>
+          </div>
         </div>
 
         {/* Filter Buttons */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-4">
-            {['All', 'Pending', 'Approved', 'Declined'].map((status) => (
+            {['All', 'Pending', 'Confirmed', 'Declined'].map((status) => (
               <TabButton
                 key={status}
                 label={status}
@@ -1147,9 +1319,15 @@ const Bookings = () => {
                         >
                           {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                         </span>
-                        <small className="block text-gray-500 mt-1">
-                          Changed by {booking.bookedBy || ': '}
-                        </small>
+                        
+                        {/* Display admin name who changed the status */}
+                        {booking.bookedBy && (
+                          <div className="mt-1 text-xs">
+                            <span className="text-gray-500">
+                              changed by {booking.bookedBy}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-2 border-b">{booking.recurring}</td>
@@ -1229,12 +1407,20 @@ const Bookings = () => {
       <StatusModal
         isOpen={isStatusModalOpen}
         currentStatus={selectedStatus}
+        adminName={adminName} // Pass the admin name here
         onClose={() => setIsStatusModalOpen(false)}
         onConfirm={async () => {
           try {
+            // Log the payload to verify what's being sent
+            const payload = { 
+              status: selectedStatus,
+              bookedBy: adminName || 'Admin User'  // Ensure default if somehow missing
+            };
+            console.log('Updating booking status with payload:', payload);
+            
             await axios.put(
               `${API_BASE_URL}/bookings/${selectedBookingId}`,
-              { status: selectedStatus },
+              payload,
               { headers: { Authorization: `Bearer ${token}` } }
             );
             fetchBookings(); // Refresh bookings

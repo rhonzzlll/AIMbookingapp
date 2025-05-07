@@ -57,10 +57,14 @@ const BookingForm = ({ onBookingSubmit }) => {
     recurrenceDays: [],
     endRecurrenceDate: '',
     notes: '',
+    needsMealRoom: false,
+    needsBreakoutRoom: false
   });
 
   const [rooms, setRooms] = useState([]);
   const [filteredRooms, setFilteredRooms] = useState([]);
+  const [buildings, setBuildings] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [useLocalData, setUseLocalData] = useState(false);
@@ -73,8 +77,6 @@ const BookingForm = ({ onBookingSubmit }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [roomMap, setRoomMap] = useState({});
   const [blockedTimes, setBlockedTimes] = useState([]);
-
-
 
   const userId = localStorage.getItem('_id');
   const token = localStorage.getItem('token');
@@ -165,7 +167,11 @@ const BookingForm = ({ onBookingSubmit }) => {
       try {
         const response = await axios.get(`${API_BASE_URL}/rooms`);
         setRooms(response.data); 
-  
+        
+        // Extract unique buildings and categories
+        const uniqueBuildings = [...new Set(response.data.map(room => room.building))];
+        setBuildings(uniqueBuildings);
+        
         // Create a map of room IDs to room data
         const newRoomMap = {};
         response.data.forEach(room => {
@@ -174,7 +180,7 @@ const BookingForm = ({ onBookingSubmit }) => {
             building: room.building,
           };
         });
-        setRoomMap(newRoomMap); // ✅ Now we have roomMap properly set
+        setRoomMap(newRoomMap);
       } catch (err) {
         console.error('Error fetching rooms:', err);
         setError('Failed to fetch rooms. Please try again.');
@@ -184,6 +190,16 @@ const BookingForm = ({ onBookingSubmit }) => {
     fetchRooms();
   }, []);
   
+  // Update categories when building changes
+  useEffect(() => {
+    if (formData.building && rooms.length > 0) {
+      const buildingRooms = rooms.filter(room => room.building === formData.building);
+      const uniqueCategories = [...new Set(buildingRooms.map(room => room.category))];
+      setCategories(uniqueCategories);
+    } else {
+      setCategories([]);
+    }
+  }, [formData.building, rooms]);
 
   // Fetch users from the API
   useEffect(() => {
@@ -219,7 +235,7 @@ const BookingForm = ({ onBookingSubmit }) => {
       });
   
       setExistingBookings(enrichedBookings);
-      processBookingsForTimeSlots(enrichedBookings); // 🛠️ ADD THIS LINE!!!
+      processBookingsForTimeSlots(enrichedBookings);
     } catch (err) {
       console.error('Error fetching bookings:', err);
     }
@@ -343,38 +359,6 @@ const BookingForm = ({ onBookingSubmit }) => {
         [name]: type === 'checkbox' ? checked : value,
       });
     }
-  };
-
-  // Handle input change for first name and last name
-  const handleNameChange = (e) => {
-    const { name, value } = e.target;
-
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-
-    // Filter users based on input
-    if (value.trim() !== '') {
-      const filtered = users.filter((user) =>
-        user[name]?.toLowerCase().startsWith(value.toLowerCase())
-      );
-      setFilteredUsers(filtered);
-      setShowSuggestions(true);
-    } else {
-      setFilteredUsers([]);
-      setShowSuggestions(false);
-    }
-  };
-
-  // Handle selecting a suggestion
-  const handleSuggestionClick = (user) => {
-    setFormData((prevData) => ({
-      ...prevData,
-      firstName: user.firstName,
-      lastName: user.lastName,
-    }));
-    setShowSuggestions(false);
   };
 
   const checkTimeAvailability = async (data) => {
@@ -656,6 +640,8 @@ const BookingForm = ({ onBookingSubmit }) => {
         recurrenceDays: [],
         endRecurrenceDate: '',
         notes: '',
+        needsMealRoom: false,
+        needsBreakoutRoom: false
       });
       
     } catch (err) {
@@ -692,11 +678,18 @@ const BookingForm = ({ onBookingSubmit }) => {
 
         <div className="relative bg-white rounded-lg shadow-md p-8">
           <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
+          
+          {error && (
+            <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit}>
             {/* Booking Title */}
             <div className="mb-6">
               <label className="block text-gray-700 font-medium mb-2">
-                Booking Title <span className="text-red-500"></span>
+                Booking Title <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -709,88 +702,53 @@ const BookingForm = ({ onBookingSubmit }) => {
               />
             </div>
 
+            {/* Building Selection */}
             <div className="mb-6">
               <label className="block text-gray-700 font-medium mb-2">
-                First Name <span className="text-red-500">*</span>
+                Building <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleNameChange}
-                placeholder="Enter your first name"
-                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoComplete="off"
-                required
-              />
-            </div>
-
-            {/* Last Name Field */}
-            <div className="relative mb-6">
-              <label className="block text-gray-700 font-medium mb-2">
-                Last Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleNameChange}
-                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoComplete="off"
-                required
-              />
-              {showSuggestions && filteredUsers.length > 0 && (
-                <ul className="absolute z-10 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-                  {filteredUsers.map((user) => (
-                    <li
-                      key={user._id}
-                      onClick={() => handleSuggestionClick(user)}
-                      className="p-2 hover:bg-blue-100 cursor-pointer"
-                    >
-                      {user.firstName} {user.lastName}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {/* Email */}
-            <div className="mb-6">
-              <label className="block text-gray-700 font-medium mb-2">
-              <span className="text-red-500"></span>
-              </label>
-              <input
-                type="hidden"
-                name="email"
-                value={formData.email}
+              <select
+                name="building"
+                value={formData.building}
                 onChange={handleChange}
                 className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                readOnly
-              />
+                required
+              >
+                <option value="">Select Building</option>
+                {buildings.map((building) => (
+                  <option key={building} value={building}>
+                    {building}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <input
-              type="hidden"
-              name="department"
-              value={formData.department}
-            />
-            
-            <input
-              type="hidden"
-              name="building"
-              value={formData.building}
-            />
-
-            <input
-              type="hidden"
-              name="category"
-              value={formData.category}
-            />
+            {/* Category Selection */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                Category <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="category"
+                value={formData.category}
+                onChange={handleChange}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+                disabled={!formData.building}
+              >
+                <option value="">Select Category</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Room Selection */}
             <div className="mb-6">
               <label className="block text-gray-700 font-medium mb-2">
-                Meeting Room <span className="text-red-500"></span>
+                Meeting Room <span className="text-red-500">*</span>
               </label>
               <select
                 name="room"
@@ -809,17 +767,48 @@ const BookingForm = ({ onBookingSubmit }) => {
               </select>
             </div>
 
+            {/* Additional Room Options */}
+            <div className="mb-6 flex flex-wrap gap-6">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="needsMealRoom"
+                  name="needsMealRoom"
+                  checked={formData.needsMealRoom}
+                  onChange={handleChange}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="needsMealRoom" className="ml-2 text-gray-700 font-medium">
+                  Need Meal Room
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="needsBreakoutRoom"
+                  name="needsBreakoutRoom"
+                  checked={formData.needsBreakoutRoom}
+                  onChange={handleChange}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="needsBreakoutRoom" className="ml-2 text-gray-700 font-medium">
+                  Need Breakout Room
+                </label>
+              </div>
+            </div>
+
             {/* Date and Time */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
-                  Date <span className="text-red-500"></span>
+                  Date <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
                   name="date"
                   value={formData.date}
-                  min={format(new Date(), 'yyyy-MM-dd')}   // 🔥 Disallow past dates
+                  min={format(new Date(), 'yyyy-MM-dd')}
                   onChange={handleChange}
                   className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
@@ -827,7 +816,7 @@ const BookingForm = ({ onBookingSubmit }) => {
               </div>
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
-                  Start Time <span className="text-red-500"></span>
+                  Start Time <span className="text-red-500">*</span>
                 </label>
                 <select
                   name="startTime"
@@ -849,7 +838,7 @@ const BookingForm = ({ onBookingSubmit }) => {
               </div>
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
-                  End Time <span className="text-red-500"></span>
+                  End Time <span className="text-red-500">*</span>
                 </label>
                 <select
                   name="endTime"
@@ -857,7 +846,7 @@ const BookingForm = ({ onBookingSubmit }) => {
                   onChange={handleChange}
                   className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
-                  disabled={!formData.startTime}  // Disable until start time is selected
+                  disabled={!formData.startTime}
                 >
                   <option value="">Select End Time</option>
                   {getFilteredEndTimes().map((time) => (
@@ -869,8 +858,6 @@ const BookingForm = ({ onBookingSubmit }) => {
               </div>
             </div>
 
-            
-
             {/* Recurring Booking Options */}
             <div className="mb-6">
               <div className="flex items-center mb-2">
@@ -880,7 +867,7 @@ const BookingForm = ({ onBookingSubmit }) => {
                   name="isRecurring"
                   checked={formData.isRecurring}
                   onChange={handleChange}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <label htmlFor="isRecurring" className="ml-2 text-gray-700 font-medium">
                   Make this a recurring booking
@@ -898,6 +885,7 @@ const BookingForm = ({ onBookingSubmit }) => {
                       value={formData.recurrenceType}
                       onChange={handleChange}
                       className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required={formData.isRecurring}
                     >
                       <option value="">Select Type</option>
                       <option value="daily">Daily</option>
@@ -915,7 +903,9 @@ const BookingForm = ({ onBookingSubmit }) => {
                       name="endRecurrenceDate"
                       value={formData.endRecurrenceDate}
                       onChange={handleChange}
+                      min={formData.date}
                       className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required={formData.isRecurring}
                     />
                   </div>
                 </div>
@@ -935,11 +925,28 @@ const BookingForm = ({ onBookingSubmit }) => {
               />
             </div>
 
+            {/* Store the user info in hidden fields */}
+            <input type="hidden" name="firstName" value={formData.firstName} />
+            <input type="hidden" name="lastName" value={formData.lastName} />
+            <input type="hidden" name="email" value={formData.email} />
+            <input type="hidden" name="department" value={formData.department} />
+
+            {/* Availability Status */}
+            {availabilityStatus && (
+              <div className={`mb-6 p-4 rounded ${
+                availabilityStatus.available 
+                  ? 'bg-green-100 border border-green-400 text-green-700' 
+                  : 'bg-yellow-100 border border-yellow-400 text-yellow-700'
+              }`}>
+                {availabilityStatus.message}
+              </div>
+            )}
+
             {/* Form Actions */}
             <div className="flex justify-end gap-4">
               <button
                 type="button"
-                onClick={handleGoBack}  // Add the onClick handler
+                onClick={handleGoBack}
                 className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
               >
                 Go Back
