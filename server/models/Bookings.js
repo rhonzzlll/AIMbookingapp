@@ -1,79 +1,115 @@
-const mongoose = require('mongoose'); // Import mongoose
+module.exports = (sequelize, DataTypes) => {
+  const Booking = sequelize.define('Booking', {
+    bookingId: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      field: 'bookingId',
+      allowNull: false
+    },
+    roomId: {
+      type: DataTypes.INTEGER,
+      field: 'roomId',
+      allowNull: true
+    },
+    userId: {
+      type: DataTypes.BIGINT,
+      field: 'userId',
+      allowNull: true
+    },
+    title: {
+      type: DataTypes.STRING(255),
+      field: 'title',
+      allowNull: true
+    },
+    bookingCapacity: {
+      type: DataTypes.INTEGER,
+      field: 'bookingCapacity',
+      allowNull: true
+    },
+    date: {
+      type: DataTypes.DATEONLY,
+      field: 'date',
+      allowNull: true
+    },
+    startTime: {
+      type: DataTypes.TIME,
+      field: 'startTime',
+      allowNull: true
+    },
+    endTime: {
+      type: DataTypes.TIME,
+      field: 'endTime',
+      allowNull: true
+    },
+    notes: {
+      type: DataTypes.STRING(255),
+      field: 'notes',
+      allowNull: true
+    },
+    isRecurring: {
+      type: DataTypes.BOOLEAN,
+      field: 'isRecurring',
+      allowNull: true
+    },
+    isMealRoom: {
+      type: DataTypes.BOOLEAN,
+      field: 'isMealRoom',
+      allowNull: true
+    },
+    isBreakRoom: {
+      type: DataTypes.BOOLEAN,
+      field: 'isBreakRoom',
+      allowNull: true
+    },
+    recurrenceEndDate: {
+      type: DataTypes.DATEONLY,
+      field: 'recurrenceEndDate',
+      allowNull: true
+    },
+    status: {
+      type: DataTypes.STRING(50),
+      field: 'status',
+      allowNull: true
+    },
+    timeSubmitted: {
+      type: DataTypes.TIME,
+      field: 'timeSubmitted',
+      allowNull: true
+    },
+    remarks: {
+      type: DataTypes.STRING(255),
+      field: 'remarks',
+      allowNull: true
+    },
+    changedBy: {
+      type: DataTypes.STRING(255),
+      field: 'changedBy',
+      allowNull: true
+    }
+  }, {
+    tableName: 'bookings',  // Note: Your table is named 'bookings' (plural)
+    schema: 'dbo',
+    timestamps: false
+  });
 
-const bookingSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-  },
-  title: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  firstName: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  lastName: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  department: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  category: {
-    type: String, // Changed to String
-    required: true,
-    trim: true,
-  },
-  room: {
-    type: String, // Changed to String
-    required: true,
-    trim: true,
-  },
-  building: {
-    type: String, // Changed to String
-    required: true,
-    trim: true,
-  },
-  date: {
-    type: String,
-    required: true,
-  },
-  startTime: {
-    type: String, // Changed to String
-    required: true,
-  },
-  endTime: {
-    type: String, // Changed to String
-    required: true,
-  
-  },
-  notes: {
-    type: String,
-    trim: true,
-  },
-  recurring: {
-    type: String,
-    enum: ['No', 'Daily', 'Weekly', 'Monthly'],
-    default: 'No',
-  },
-  recurrenceEndDate: {
-    type: Date,
-    default: null,
-  },
-  status: {
-    type: String,
-    enum: ['pending', 'confirmed', 'declined'],
-    default: 'pending',
-  },
-}, { timestamps: true });
+  // Define associations
+  Booking.associate = (models) => {
+    // Association with Room model
+    if (models.Room) {
+      Booking.belongsTo(models.Room, {
+        foreignKey: 'roomId',
+        targetKey: 'roomId'
+      });
+    }
+    
+    // Association with User model
+    if (models.User) {
+      Booking.belongsTo(models.User, {
+        foreignKey: 'userId',
+        targetKey: 'userId'
+      });
+    }
+  };
 
-const Booking = mongoose.model('Booking', bookingSchema);
-
-module.exports = Booking;
+  return Booking;
+};

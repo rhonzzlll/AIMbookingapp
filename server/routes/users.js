@@ -1,15 +1,38 @@
 const express = require("express");
 const router = express.Router();
-const mongoose = require("mongoose");
+const { User, sequelize } = require("../models"); // Import sequelize instance
 const bcrypt = require("bcryptjs");
-const User = require("../models/User");
-const { authenticate, authorizeAdmin } = require("../routes/auth"); // Import directly from auth routes
+const { authenticate, authorizeAdmin } = require("../routes/auth");
 
-// GET route to fetch all users - adding authentication
+// Input validation middleware
+const validateUserInput = (req, res, next) => {
+  const { firstName, lastName, email, password, role } = req.body;
+  
+  if (!firstName || !lastName || !email || !password || !role) {
+    return res.status(400).json({ message: "Please provide all required fields." });
+  }
+  
+  // Basic email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ message: "Please provide a valid email address." });
+  }
+  
+  // Role validation
+  const normalizedRole = role.toLowerCase();
+  if (!["admin", "user"].includes(normalizedRole)) {
+    return res.status(400).json({ message: "Invalid role. Must be 'Admin' or 'User'." });
+  }
+  
+  // Add normalized role to request for later use
+  req.normalizedRole = normalizedRole;
+  next();
+};
+
+// GET all users (no passwords)
 router.get("/", authenticate, async (req, res) => {
   try {
-    // Use select to exclude password from results
-    const users = await User.find().select("-password");
+    const users = await User.scope('withoutPassword').findAll();
     return res.status(200).json(users);
   } catch (error) {
     console.error("Error fetching users:", error);
@@ -17,22 +40,14 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
-// GET route to fetch a user by ID - adding authentication
+// GET a user by ID
 router.get("/:id", authenticate, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid user ID format" });
+
   try {
-    const { id } = req.params;
-
-    // Validate ObjectId format
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid user ID format" });
-    }
-
-    const user = await User.findById(id).select("-password");
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
+    const user = await User.scope('withoutPassword').findByPk(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
     return res.status(200).json(user);
   } catch (error) {
     console.error("Error fetching user:", error);
@@ -40,45 +55,32 @@ router.get("/:id", authenticate, async (req, res) => {
   }
 });
 
-// POST route to handle user registration (Admin-only)
-router.post("/", authenticate, authorizeAdmin, async (req, res) => {
+// POST: Register a user (admin only)
+router.post("/", authenticate, authorizeAdmin, validateUserInput, async (req, res) => {
   try {
     const { firstName, lastName, email, password, role, department, isActive = true } = req.body;
 
-    // Validate required fields
-    if (!firstName || !lastName || !email || !password || !role) {
-      return res.status(400).json({ message: "Please provide all required fields, including role." });
-    }
-
-    // Validate role with case insensitivity
-    const normalizedRole = role.toLowerCase();
-    if (!["admin", "user"].includes(normalizedRole)) {
-      return res.status(400).json({ message: "Invalid role. Role must be 'Admin' or 'User'." });
-    }
-
     // Check if user already exists
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ where: { email } });
     if (userExists) {
       return res.status(400).json({ message: "User already exists" });
     }
 
     // Create new user with proper case for role
-    const user = new User({
+    const user = await User.create({
       firstName,
       lastName,
       email,
-      password, // Will be hashed by pre-save hook in User model
+      password, // Will be hashed by hook in User model
       department,
-      role: normalizedRole === "admin" ? "Admin" : "User", // Match the enum case
+      role: req.normalizedRole === "admin" ? "Admin" : "User", // Match the enum case
       isActive
     });
-
-    await user.save();
 
     return res.status(201).json({
       message: "User registered successfully",
       user: {
-        _id: user._id,
+        userId: user.userId,
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
@@ -92,104 +94,112 @@ router.post("/", authenticate, authorizeAdmin, async (req, res) => {
     return res.status(500).json({ message: "Something went wrong! Please try again." });
   }
 });
-
-// PUT route to update user profile - adding authentication
+ // PUT: Update user (self or admin)
 router.put("/:id", authenticate, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid user ID format" });
+
+  // Begin transaction
+  const transaction = await sequelize.transaction();
+  
   try {
-    const { id } = req.params;
-    const { firstName, lastName, email, password, department, profileImage, birthdate, role, isActive } = req.body;
-
-    // Validate ObjectId format
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid user ID format" });
-    }
-
-    // Find user first to check if exists
-    const user = await User.findById(id);
-
+    const user = await User.findByPk(id, { transaction });
     if (!user) {
+      await transaction.rollback();
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Check if the authenticated user is updating their own profile or is an admin
-    if (req.user._id.toString() !== id && req.user.role !== "Admin") {
+    // Allow if self OR admin
+    if (!(req.user.userId === id || req.user.role.toLowerCase() === "admin")) {
+      await transaction.rollback();
       return res.status(403).json({ message: "Access denied. You can only update your own profile." });
     }
 
-    // Update user fields if provided
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      department,
+      profileImage,
+      birthdate,
+      role,
+      isActive
+    } = req.body;
+
+    // Basic email validation if provided
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        await transaction.rollback();
+        return res.status(400).json({ message: "Please provide a valid email address." });
+      }
+      user.email = email;
+    }
+
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
-    if (email) user.email = email;
     if (department) user.department = department;
     if (birthdate) user.birthdate = birthdate;
+    if (profileImage) user.profileImage = profileImage;
 
-    // Only allow admins to change roles and active status
-    if (req.user.role === "Admin") {
+    // Explicitly hash password if provided
+    if (password) {
+      // You could add password validation here for strength (optional)
+      user.password = await bcrypt.hash(password, 10);
+    }
+
+    if (req.user.role.toLowerCase() === "admin") {
       if (role) {
-        // Normalize role and validate
         const normalizedRole = role.toLowerCase();
         if (!["admin", "user"].includes(normalizedRole)) {
-          return res.status(400).json({ message: "Invalid role. Role must be 'Admin' or 'User'." });
+          await transaction.rollback();
+          return res.status(400).json({ message: "Invalid role. Must be 'Admin' or 'User'." });
         }
-        user.role = normalizedRole === "admin" ? "Admin" : "User"; // Match the enum case
+        user.role = normalizedRole === "admin" ? "Admin" : "User";
       }
 
-      // Set isActive if provided (only admins can change this)
-      if (isActive !== undefined) {
-        user.isActive = isActive;
-      }
+      if (isActive !== undefined) user.isActive = isActive;
     }
 
-    // Handle password separately
-    if (password) {
-      // No need to hash here as the pre-save hook will handle it
-      user.password = password;
-    }
-
-    // Handle profile image
-    if (profileImage) {
-      user.profileImage = profileImage;
-    }
-
-    // Save the updated user
-    const updatedUser = await user.save();
+    // Save the user
+    await user.save({ transaction });
+    await transaction.commit();
 
     // Return user without password
-    return res.status(200).json({
-      _id: updatedUser._id,
-      firstName: updatedUser.firstName,
-      lastName: updatedUser.lastName,
-      email: updatedUser.email,
-      role: updatedUser.role,
-      department: updatedUser.department,
-      birthdate: updatedUser.birthdate,
-      profileImage: updatedUser.profileImage,
-      isActive: updatedUser.isActive
-    });
+    const userResponse = user.toJSON();
+    delete userResponse.password; // Ensure password is not returned
+
+    return res.status(200).json(userResponse);
   } catch (error) {
+    await transaction.rollback();
     console.error("Error updating user:", error);
     return res.status(500).json({ message: "Something went wrong! Please try again." });
   }
 });
 
-// DELETE route to remove a user - adding authentication and admin authorization
+// DELETE: Admin only
 router.delete("/:id", authenticate, authorizeAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ message: "Invalid user ID format" });
+
+  const transaction = await sequelize.transaction();
+  
   try {
-    const { id } = req.params;
+    const deleted = await User.destroy({ 
+      where: { userId: id },
+      transaction 
+    });
 
-    // Validate ObjectId format
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid user ID format" });
-    }
-
-    const user = await User.findByIdAndDelete(id);
-
-    if (!user) {
+    if (!deleted) {
+      await transaction.rollback();
       return res.status(404).json({ message: "User not found" });
     }
-
+    
+    await transaction.commit();
     return res.status(200).json({ message: "User deleted successfully" });
   } catch (error) {
+    await transaction.rollback();
     console.error("Error deleting user:", error);
     return res.status(500).json({ message: "Something went wrong! Please try again." });
   }

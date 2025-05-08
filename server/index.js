@@ -1,45 +1,19 @@
 const dotenv = require('dotenv');
 dotenv.config();
+
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const mongoose = require('mongoose');
-
-// Database connection
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.DB || 'mongodb://127.0.0.1:27017/book', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
-      maxPoolSize: 10,
-    });
-    console.log('Connected to MongoDB...');
-
-    mongoose.connection.on('connected', () => {
-      console.log('MongoDB connection state:', mongoose.connection.readyState);
-    });
-
-    mongoose.connection.on('error', (err) => {
-      console.error('MongoDB connection error:', err);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.log('MongoDB disconnected');
-    });
-  } catch (err) {
-    console.error('Could not connect to MongoDB...', err);
-    process.exit(1);
-  }
-};
-
-connectDB();
 
 const app = express();
-app.use(cors());
 
-// Increase payload size limit for body-parser
-app.use(bodyParser.json({ limit: '10mb' })); // Adjust the limit as needed
+// Load Sequelize instance
+const db = require('./models');
+const sequelize = db.sequelize; // <==  This line fixes the ReferenceError
+
+// Middleware
+app.use(cors());
+app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
 // Import routes
@@ -47,23 +21,23 @@ const { router: authRoutes } = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const roomRoutes = require('./routes/roomRoutes');
 const bookingsRoutes = require('./routes/bookingsRoutes');
-const roomsRoutes = require('./routes/roomRoutes');
-
+const buildingRoutes = require('./routes/buildingroutes');
+const categoryRoutes = require('./routes/categoryRoutes');
+// Mount routes
 app.use('/api/bookings', bookingsRoutes);
-app.use('/api/rooms', roomsRoutes);
+app.use('/api/rooms', roomRoutes); // No need to register twice
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/rooms', roomRoutes);
+app.use('/api/buildings', buildingRoutes);
+app.use('/api/categories', categoryRoutes);
 
-// Test route
+// Test route for DB
 app.get('/', async (req, res) => {
   try {
-    const dbState = mongoose.connection.readyState; // 1 = connected, 0 = disconnected
-    const dbStatus = dbState === 1 ? 'Connected to MongoDB' : 'Not connected to MongoDB';
-
+    await sequelize.authenticate(); // Use Sequelize, not Mongoose
     res.status(200).send({
       message: 'Welcome to Booking App',
-      database: dbStatus,
+      database: 'Connected to SQL',
     });
   } catch (error) {
     console.error('Error checking database connection:', error);
@@ -74,6 +48,15 @@ app.get('/', async (req, res) => {
   }
 });
 
+// Authenticate DB at startup
+sequelize.authenticate()
+  .then(() => {
+    console.log('Connected to the database successfully.');
+  })
+  .catch((err) => {
+    console.error(' Failed to connect to the database:', err);
+  });
+
 // Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(` Server running on port ${PORT}`));

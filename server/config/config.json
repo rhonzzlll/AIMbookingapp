@@ -1,0 +1,44 @@
+{
+  "development": {
+    "username": "root",
+    "password": "root",
+    "database": "bookings",
+    "host": "AIMWINOS059\\SQLEXPRESS",
+    "dialect": "mssql",
+    "dialectOptions": {
+      "options": {
+        "trustServerCertificate": true,
+        "enableArithAbort": true,
+        "encrypt": true
+      }
+    }
+  },
+  "test": {
+    "username": "root",
+    "password": "root",
+    "database": "bookings",
+    "host": "AIMWINOS059\\SQLEXPRESS",
+    "dialect": "mssql",
+    "dialectOptions": {
+      "options": {
+        "trustServerCertificate": true,
+        "enableArithAbort": true,
+        "encrypt": true
+      }
+    }
+  },
+  "production": {
+    "username": "root",
+    "password": "root",
+    "database": "bookings",
+    "host": "AIMWINOS059\\SQLEXPRESS",
+    "dialect": "mssql",
+    "dialectOptions": {
+      "options": {
+        "trustServerCertificate": true,
+        "enableArithAbort": true,
+        "encrypt": true
+      }
+    }
+  }
+}

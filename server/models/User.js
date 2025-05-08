@@ -1,83 +1,104 @@
-const mongoose = require('mongoose'); 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const express = require('express');
-const app = express();
 
-app.use(express.json());
-
-const userSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  profileImage: { type: [String] }, // Array of strings
-  birthdate: { type: Date },
-  department: { 
-    type: String, 
-    enum: ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'], // Restrict to predefined values
-    default: "" 
-  },
-  role: {
-    type: String,
-    enum: ["User", "Admin"],
-    required: true, // Ensure the role is always required
-    default: "User" // Default role is "User"
-  },
-  isActive: { type: Boolean, default: true } // Added isActive field
-}, { timestamps: true });
-
-// Hash password before saving
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  try {
-    this.password = await bcrypt.hash(this.password, 10);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Method to generate JWT token
-userSchema.methods.generateAuthToken = function () {
-  const token = jwt.sign(
-    { id: this._id, email: this.email, role: this.role.toLowerCase() },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' }
-  );
-  return token;
-};
-
-
-userSchema.methods.checkActiveStatus = function () {
-  return this.isActive;
-};
-
-const User = mongoose.model('User', userSchema);
-
-app.put('/api/users/:id', async (req, res) => {
-  try {
-    const userId = req.params.id;
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+module.exports = (sequelize, DataTypes) => {
+  const User = sequelize.define('User', {
+    userId: {
+      type: DataTypes.BIGINT,
+      primaryKey: true,
+      autoIncrement: true,
+      allowNull: false
+    },
+    firstName: {
+      type: DataTypes.STRING(255),
+      allowNull: false
+    },
+    lastName: {
+      type: DataTypes.STRING(255),
+      allowNull: false
+    },
+    email: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      unique: true,
+      validate: {
+        isEmail: true
+      }
+    },
+    password: {
+      type: DataTypes.STRING(255),
+      allowNull: false
+    },
+    profileImage: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
+    birthdate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    department: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
+    role: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      validate: {
+        isIn: [['Admin', 'User']]
+      }
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: true
     }
-
-    // Update profileImage with Base64 strings
-    if (req.body.profileImage) {
-      user.profileImage = req.body.profileImage; // Expecting an array of Base64 strings
+  }, {
+    tableName: 'users',
+    schema: 'dbo',
+    timestamps: false,
+    hooks: {
+      // Hash password before saving (Sequelize style)
+      beforeCreate: async (user) => {
+        if (user.password) {
+          user.password = await bcrypt.hash(user.password, 10);
+        }
+      },
+      beforeUpdate: async (user) => {
+        if (user.changed('password')) {
+          user.password = await bcrypt.hash(user.password, 10);
+        }
+      }
+    },
+    // Add scopes for commonly used queries
+    scopes: {
+      withoutPassword: {
+        attributes: { exclude: ['password'] }
+      },
+      activeOnly: {
+        where: { isActive: true }
+      }
     }
+  });
 
-    // Update other fields
-    Object.assign(user, req.body);
+  // Instance method to generate JWT token
+  User.prototype.generateAuthToken = function () {
+    return jwt.sign(
+      { id: this.userId, email: this.email, role: this.role.toLowerCase() },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+  };
 
-    await user.save();
-    res.status(200).json({ message: 'Profile updated successfully', user });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+  // Instance method to verify password
+  User.prototype.verifyPassword = async function(password) {
+    return await bcrypt.compare(password, this.password);
+  };
 
-module.exports = User;
+  // Define any associations here
+  User.associate = function(models) {
+    // Example: User.hasMany(models.Booking)
+  };
+
+  return User;
+};

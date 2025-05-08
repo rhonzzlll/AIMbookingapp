@@ -1,14 +1,12 @@
-const Room = require('../models/roomModel');
+const { Room, Subroom } = require('../models');
 const crypto = require('crypto'); // For generating a shortened image name
 
-// Process the image to generate a base64 string
+// Process the image to generate a shortened name and base64 string
 const processImage = (image) => {
   if (!image) return null;
 
   const shortenedName = crypto.randomBytes(8).toString('hex'); // Generate a unique name
-  const base64Image = Buffer.from(image, 'base64').toString('base64'); // Decode the image to base64
-
-  return { shortenedName, base64Image };
+  return { shortenedName };
 };
 
 // Validate subrooms for correct structure and required fields
@@ -21,10 +19,15 @@ const validateSubRooms = (subRooms) => {
     if (!subRoom.roomName || typeof subRoom.roomName !== 'string') {
       throw new Error(`Subroom at index ${index} must have a valid roomName`);
     }
-    if (!subRoom.capacity || typeof subRoom.capacity !== 'number' || subRoom.capacity <= 0) {
+    
+    if (subRoom.capacity === undefined || typeof subRoom.capacity !== 'number') {
       throw new Error(`Subroom at index ${index} must have a valid capacity`);
     }
-    if (!subRoom.description || typeof subRoom.description !== 'string') {
+    
+    // Provide a default description if missing
+    if (!subRoom.description) {
+      subRoom.description = `Subroom ${index + 1}`;
+    } else if (typeof subRoom.description !== 'string') {
       throw new Error(`Subroom at index ${index} must have a valid description`);
     }
   });
@@ -33,7 +36,9 @@ const validateSubRooms = (subRooms) => {
 // Get all rooms
 const getAllRooms = async (req, res) => {
   try {
-    const rooms = await Room.find();
+    const rooms = await Room.findAll({
+      include: { model: Subroom, as: 'subRooms' }
+    });
     res.status(200).json(rooms);
   } catch (error) {
     console.error('Error fetching rooms:', error);
@@ -44,7 +49,10 @@ const getAllRooms = async (req, res) => {
 // Get a single room by ID
 const getRoomById = async (req, res) => {
   try {
-    const room = await Room.findById(req.params.id);
+    const room = await Room.findOne({
+      where: { roomId: req.params.id },
+      include: { model: Subroom, as: 'subRooms' }
+    });
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
@@ -64,7 +72,7 @@ const createRoom = async (req, res) => {
     console.log('Payload received:', req.body);
 
     // Validate required fields
-    if (!roomData.roomName || !roomData.building || !roomData.category || !roomData.capacity || !roomData.description) {
+    if (!roomData.roomName || !roomData.buildingId || !roomData.roomCapacity) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
 
@@ -77,15 +85,22 @@ const createRoom = async (req, res) => {
     const processedImage = processImage(roomImage);
 
     // Create and save the room
-    const newRoom = new Room({
+    const newRoom = await Room.create({
       ...roomData,
       isQuadrant: !!isQuadrant, // Ensure isQuadrant is a boolean
-      subRooms: isQuadrant ? subRooms : [], // Only include subRooms if isQuadrant is true
-      roomImage: processedImage ? processedImage.base64Image : null, // Save the base64 image if available
+      roomImage: processedImage ? processedImage.shortenedName : null, // Save the base64 image name if available
     });
 
-    const savedRoom = await newRoom.save();
-    res.status(201).json(savedRoom);
+    // If there are subrooms, create them and associate with the new room
+    if (isQuadrant && subRooms.length > 0) {
+      const subroomsToCreate = subRooms.map(subRoom => ({
+        roomId: newRoom.roomId, // Associate subrooms with the created room
+        ...subRoom
+      }));
+      await Subroom.bulkCreate(subroomsToCreate);
+    }
+
+    res.status(201).json(newRoom);
   } catch (error) {
     console.error('Error creating room:', error);
     res.status(400).json({ message: 'Error creating room', error: error.message });
@@ -97,67 +112,82 @@ const updateRoom = async (req, res) => {
   try {
     const { roomImage, subRooms, isQuadrant, ...roomData } = req.body;
 
+    console.log('Update payload received:', {
+      roomId: req.params.id,
+      roomData,
+      isQuadrant,
+      subRoomCount: subRooms?.length || 0
+    });
+
     // Validate subrooms if isQuadrant is true
-    if (isQuadrant) {
-      validateSubRooms(subRooms);
+    if (isQuadrant && subRooms) {
+      try {
+        validateSubRooms(subRooms);
+      } catch (validationError) {
+        console.error('Subroom validation error:', validationError);
+        return res.status(400).json({ 
+          message: 'Invalid subroom data', 
+          error: validationError.message 
+        });
+      }
     }
 
     // Process the image if provided
     let updatedData = { ...roomData, isQuadrant };
     if (roomImage) {
       const processedImage = processImage(roomImage);
-      updatedData.roomImage = processedImage ? processedImage.base64Image : null;
+      updatedData.roomImage = processedImage ? processedImage.shortenedName : null;
     }
 
     // Only include subRooms if isQuadrant is true
-    updatedData.subRooms = isQuadrant ? subRooms : [];
+    updatedData.subRooms = isQuadrant && subRooms ? subRooms : [];
 
-    const updatedRoom = await Room.findByIdAndUpdate(req.params.id, updatedData, {
-      new: true,
-      runValidators: true,
+    const updatedRoom = await Room.update(updatedData, {
+      where: { roomId: req.params.id },
+      returning: true,
+      plain: true
     });
 
-    if (!updatedRoom) {
+    if (!updatedRoom[1]) {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    res.status(200).json(updatedRoom);
+    // If there are subrooms to update, handle them
+    if (isQuadrant && subRooms) {
+      await Subroom.destroy({ where: { roomId: req.params.id } }); // Delete existing subrooms
+      const subroomsToCreate = subRooms.map(subRoom => ({
+        roomId: req.params.id, // Associate subrooms with the updated room
+        ...subRoom
+      }));
+      await Subroom.bulkCreate(subroomsToCreate);
+    }
+
+    res.status(200).json(updatedRoom[1]);
   } catch (error) {
     console.error('Error updating room:', error);
-    res.status(400).json({ message: 'Error updating room', error: error.message });
+    res.status(400).json({ 
+      message: 'Error updating room', 
+      error: error.message || 'Unknown error' 
+    });
   }
 };
 
 // Delete a room
 const deleteRoom = async (req, res) => {
   try {
-    const deletedRoom = await Room.findByIdAndDelete(req.params.id);
-    if (!deletedRoom) {
+    const room = await Room.findOne({ where: { roomId: req.params.id } });
+    if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
+
+    // Delete associated subrooms if any
+    await Subroom.destroy({ where: { roomId: req.params.id } });
+
+    await room.destroy();
     res.status(200).json({ message: 'Room deleted successfully' });
   } catch (error) {
     console.error('Error deleting room:', error);
     res.status(500).json({ message: 'Error deleting room', error });
-  }
-};
-
-// Save building (not clear if necessary, but kept for completeness)
-const saveBuilding = async (req, res) => {
-  try {
-    const { building } = req.body;
-
-    // Validate that the building field is provided
-    if (!building) {
-      return res.status(400).json({ message: 'Building is required' });
-    }
-
-    const newRoom = new Room({ building });
-    const savedRoom = await newRoom.save();
-    res.status(201).json(savedRoom);
-  } catch (error) {
-    console.error('Error saving building:', error);
-    res.status(400).json({ message: 'Error saving building', error: error.message });
   }
 };
 
@@ -167,5 +197,4 @@ module.exports = {
   createRoom,
   updateRoom,
   deleteRoom,
-  saveBuilding,
 };

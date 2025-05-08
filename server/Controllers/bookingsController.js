@@ -1,5 +1,6 @@
-const Booking = require('../models/Bookings');
+const { Booking, Room, User, Sequelize } = require('../models');
 
+// ...rest of your controller code
 const convertTo24HourFormat = (time) => {
   const [hourMinute, period] = time.split(' ');
   let [hour, minute] = hourMinute.split(':').map(Number);
@@ -16,18 +17,31 @@ const convertTo24HourFormat = (time) => {
 // Get all bookings
 exports.getAllBookings = async (req, res) => {
   try {
-    const bookings = await Booking.find();
+    const bookings = await Booking.findAll({
+      include: [
+        { model: Room, attributes: ['roomId', 'roomNumber'] },
+        { model: User, attributes: ['userId', 'username'] }
+      ]
+    });
     res.status(200).json(bookings);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
+// Get bookings by User ID
 exports.getBookingsByUserId = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const bookings = await Booking.find({ userId }).sort({ date: 1, startTime: 1 });
+    const bookings = await Booking.findAll({
+      where: { userId },
+      order: [['date', 'ASC'], ['startTime', 'ASC']],
+      include: [
+        { model: Room, attributes: ['roomId', 'roomNumber'] },
+        { model: User, attributes: ['userId', 'username'] }
+      ]
+    });
 
     if (!bookings || bookings.length === 0) {
       return res.status(404).json({ message: 'No bookings found for this user.' });
@@ -42,47 +56,37 @@ exports.getBookingsByUserId = async (req, res) => {
 // Create a new booking
 exports.createBooking = async (req, res) => {
   try {
-    console.log('Request body received:', req.body); // Debug log to see incoming data
-    
-    // Destructure _id from body to prevent duplicate key error
-    const { _id, startTime, endTime, room, building, userId, recurring, recurrenceEndDate, ...cleanedData } = req.body;
+    const { startTime, endTime, roomId, userId, title, bookingCapacity, date, notes, isRecurring, recurrenceEndDate, status, timeSubmitted, remarks, changedBy } = req.body;
 
-    if (!startTime || !endTime || !userId || !room || !building) {
-      return res.status(400).json({ 
-        message: 'Start time, end time, userId, room, and building are required.',
-        missingFields: {
-          startTime: !startTime,
-          endTime: !endTime,
-          userId: !userId,
-          room: !room,
-          building: !building
-        }
+    if (!startTime || !endTime || !userId || !roomId || !date) {
+      return res.status(400).json({
+        message: 'Start time, end time, userId, roomId, and date are required.',
       });
     }
 
-    // Parse the dates
-    const parsedStartTime = new Date(startTime);
-    const parsedEndTime = new Date(endTime);
+    // Validate the time format
+    const parsedStartTime = new Date(`${date}T${convertTo24HourFormat(startTime)}`);
+    const parsedEndTime = new Date(`${date}T${convertTo24HourFormat(endTime)}`);
 
     if (isNaN(parsedStartTime.getTime()) || isNaN(parsedEndTime.getTime())) {
       return res.status(400).json({ message: 'Invalid start time or end time format.' });
     }
 
-    // FIXED: Validate conflicts for the initial booking - look only for confirmed bookings
+    // Conflict validation with 30-minute buffer
     const bufferStartTime = new Date(parsedStartTime.getTime() - 30 * 60 * 1000);
     const bufferEndTime = new Date(parsedEndTime.getTime() + 30 * 60 * 1000);
 
     const overlappingBooking = await Booking.findOne({
-      room,
-      building,
-      $or: [
-        { startTime: { $lte: bufferStartTime }, endTime: { $gt: bufferStartTime } },
-        { startTime: { $lt: bufferEndTime }, endTime: { $gte: bufferEndTime } },
-        { startTime: { $gte: bufferStartTime }, endTime: { $lte: bufferEndTime } },
-        { startTime: { $lte: bufferStartTime }, endTime: { $gte: bufferEndTime } },
-      ],
-      // FIXED: Only check for confirmed status (case-insensitive)
-      status: { $regex: new RegExp('^confirmed$', 'i') }
+      where: {
+        roomId,
+        status: 'confirmed',
+        [Sequelize.Op.or]: [
+          { startTime: { [Sequelize.Op.lte]: bufferStartTime }, endTime: { [Sequelize.Op.gt]: bufferStartTime } },
+          { startTime: { [Sequelize.Op.lt]: bufferEndTime }, endTime: { [Sequelize.Op.gte]: bufferEndTime } },
+          { startTime: { [Sequelize.Op.gte]: bufferStartTime }, endTime: { [Sequelize.Op.lte]: bufferEndTime } },
+          { startTime: { [Sequelize.Op.lte]: bufferStartTime }, endTime: { [Sequelize.Op.gte]: bufferEndTime } },
+        ]
+      }
     });
 
     if (overlappingBooking) {
@@ -92,51 +96,60 @@ exports.createBooking = async (req, res) => {
     }
 
     // Handle recurring bookings
-    if (recurring !== 'No' && recurrenceEndDate) {
+    if (isRecurring && recurrenceEndDate) {
       const recurrenceEnd = new Date(recurrenceEndDate);
-      const recurrenceType = recurring;
-
-      let currentDate = new Date(parsedStartTime);
-      const bookings = [];
+      let currentDate = parsedStartTime;
 
       while (currentDate <= recurrenceEnd) {
         const currentEndTime = new Date(currentDate.getTime() + (parsedEndTime - parsedStartTime));
 
-        bookings.push({
-          ...cleanedData,
+        await Booking.create({
           userId,
-          room,
-          building,
+          roomId,
+          title,
+          bookingCapacity,
+          date: currentDate.toISOString().split('T')[0], // Set correct date
           startTime: currentDate,
           endTime: currentEndTime,
+          notes,
+          isRecurring,
+          recurrenceEndDate,
+          status,
+          timeSubmitted,
+          remarks,
+          changedBy
         });
 
-        if (recurrenceType === 'Daily') {
+        // Update current date for the next recurrence
+        if (recurring === 'Daily') {
           currentDate.setDate(currentDate.getDate() + 1);
-        } else if (recurrenceType === 'Weekly') {
+        } else if (recurring === 'Weekly') {
           currentDate.setDate(currentDate.getDate() + 7);
-        } else if (recurrenceType === 'Monthly') {
+        } else if (recurring === 'Monthly') {
           currentDate.setMonth(currentDate.getMonth() + 1);
         }
       }
 
-      await Booking.insertMany(bookings);
       return res.status(201).json({ message: 'Recurring bookings created successfully.' });
     }
 
     // Save the single booking
-    const newBooking = new Booking({
-      ...cleanedData,
+    const newBooking = await Booking.create({
       userId,
-      room, // Explicitly include room
-      building, // Explicitly include building
+      roomId,
+      title,
+      bookingCapacity,
+      date,
       startTime: parsedStartTime,
       endTime: parsedEndTime,
+      notes,
+      isRecurring,
+      recurrenceEndDate,
+      status,
+      timeSubmitted,
+      remarks,
+      changedBy
     });
-
-    console.log('Booking to be saved:', newBooking); // Debug log
-
-    await newBooking.save();
 
     res.status(201).json({
       message: 'Booking created successfully',
@@ -144,31 +157,25 @@ exports.createBooking = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Booking Error:', error);
-    if (error.code === 11000) {
-      return res.status(400).json({ message: 'Duplicate booking detected.' });
-    }
-    if (error.name === 'ValidationError') {
-      // Extract validation error details
-      const validationErrors = Object.keys(error.errors).reduce((acc, key) => {
-        acc[key] = error.errors[key].message;
-        return acc;
-      }, {});
-      return res.status(400).json({ 
-        message: 'Validation error', 
-        errors: validationErrors 
-      });
-    }
-    res.status(500).json({ error: 'Failed to create booking', message: error.message });
+    res.status(500).json({ message: 'Failed to create booking', error: error.message });
   }
 };
 
 // Get a booking by ID
 exports.getBookingById = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findOne({
+      where: { bookingId: req.params.id },
+      include: [
+        { model: Room, attributes: ['roomId', 'roomNumber'] },
+        { model: User, attributes: ['userId', 'username'] }
+      ]
+    });
+
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
+
     res.status(200).json(booking);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -178,32 +185,31 @@ exports.getBookingById = async (req, res) => {
 // Update a booking
 exports.updateBooking = async (req, res) => {
   try {
-    const { startTime, endTime, room, building } = req.body;
+    const { startTime, endTime, roomId, userId, title, bookingCapacity, date, notes, isRecurring, recurrenceEndDate, status, remarks, changedBy } = req.body;
 
-    if (startTime && endTime && room && building) {
-      const parsedStartTime = new Date(startTime);
-      const parsedEndTime = new Date(endTime);
+    if (startTime && endTime && roomId && userId && date) {
+      const parsedStartTime = new Date(`${date}T${convertTo24HourFormat(startTime)}`);
+      const parsedEndTime = new Date(`${date}T${convertTo24HourFormat(endTime)}`);
 
-      if (isNaN(parsedStartTime) || isNaN(parsedEndTime)) {
+      if (isNaN(parsedStartTime.getTime()) || isNaN(parsedEndTime.getTime())) {
         return res.status(400).json({ message: 'Invalid date format for start or end time' });
       }
 
       const bufferStartTime = new Date(parsedStartTime.getTime() - 30 * 60 * 1000);
       const bufferEndTime = new Date(parsedEndTime.getTime() + 30 * 60 * 1000);
 
-      // FIXED: Only check for confirmed status bookings
       const overlappingBooking = await Booking.findOne({
-        _id: { $ne: req.params.id },
-        room,
-        building,
-        $or: [
-          { startTime: { $lte: bufferStartTime }, endTime: { $gt: bufferStartTime } },
-          { startTime: { $lt: bufferEndTime }, endTime: { $gte: bufferEndTime } },
-          { startTime: { $gte: bufferStartTime }, endTime: { $lte: bufferEndTime } },
-          { startTime: { $lte: bufferStartTime }, endTime: { $gte: bufferEndTime } },
-        ],
-        // FIXED: Only check for confirmed status (case-insensitive)
-        status: { $regex: new RegExp('^confirmed$', 'i') }
+        where: {
+          bookingId: { [Sequelize.Op.ne]: req.params.id },
+          roomId,
+          status: 'confirmed',
+          [Sequelize.Op.or]: [
+            { startTime: { [Sequelize.Op.lte]: bufferStartTime }, endTime: { [Sequelize.Op.gt]: bufferStartTime } },
+            { startTime: { [Sequelize.Op.lt]: bufferEndTime }, endTime: { [Sequelize.Op.gte]: bufferEndTime } },
+            { startTime: { [Sequelize.Op.gte]: bufferStartTime }, endTime: { [Sequelize.Op.lte]: bufferEndTime } },
+            { startTime: { [Sequelize.Op.lte]: bufferStartTime }, endTime: { [Sequelize.Op.gte]: bufferEndTime } },
+          ]
+        }
       });
 
       if (overlappingBooking) {
@@ -213,25 +219,44 @@ exports.updateBooking = async (req, res) => {
       }
     }
 
-    const booking = await Booking.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updatedBooking = await Booking.update(
+      {
+        userId,
+        roomId,
+        title,
+        bookingCapacity,
+        date,
+        startTime: parsedStartTime,
+        endTime: parsedEndTime,
+        notes,
+        isRecurring,
+        recurrenceEndDate,
+        status,
+        remarks,
+        changedBy
+      },
+      { where: { bookingId: req.params.id }, returning: true }
+    );
 
-    if (!booking) {
+    if (!updatedBooking[0]) {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    res.status(200).json(booking);
+    res.status(200).json(updatedBooking[1][0]);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
 };
 
-// Delete a booking 
+// Delete a booking
 exports.deleteBooking = async (req, res) => {
   try {
-    const booking = await Booking.findByIdAndDelete(req.params.id);
+    const booking = await Booking.destroy({ where: { bookingId: req.params.id } });
+
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
+
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -239,6 +264,56 @@ exports.deleteBooking = async (req, res) => {
 };
 
 // Check availability
+exports.checkAvailability = async (req, res) => {
+  try {
+    const { startTime, endTime, roomId, building, category } = req.body;
+
+    if (!startTime || !endTime || !roomId || !building || !category) {
+      return res.status(400).json({ message: 'All fields (startTime, endTime, roomId, building, category) are required for availability check.' });
+    }
+
+    const parsedStartTime = new Date(startTime);
+    const parsedEndTime = new Date(endTime);
+
+    if (isNaN(parsedStartTime) || isNaN(parsedEndTime)) {
+      return res.status(400).json({ message: 'Invalid date format.' });
+    }
+
+    const bufferStartTime = new Date(parsedStartTime.getTime() - 30 * 60 * 1000);
+    const bufferEndTime = new Date(parsedEndTime.getTime() + 30 * 60 * 1000);
+
+    const overlappingBooking = await Booking.findOne({
+      where: {
+        roomId,
+        building,
+        category,
+        status: 'confirmed',
+        [Sequelize.Op.or]: [
+          { startTime: { [Sequelize.Op.lte]: bufferStartTime }, endTime: { [Sequelize.Op.gt]: bufferStartTime } },
+          { startTime: { [Sequelize.Op.lt]: bufferEndTime }, endTime: { [Sequelize.Op.gte]: bufferEndTime } },
+          { startTime: { [Sequelize.Op.gte]: bufferStartTime }, endTime: { [Sequelize.Op.lte]: bufferEndTime } },
+          { startTime: { [Sequelize.Op.lte]: bufferStartTime }, endTime: { [Sequelize.Op.gte]: bufferEndTime } },
+        ]
+      }
+    });
+
+    if (overlappingBooking) {
+      return res.status(200).json({
+        available: false,
+        message: 'This time slot is unavailable due to an already confirmed booking (30-minute buffer rule applies).',
+      });
+    }
+
+    return res.status(200).json({ available: true, message: 'This time slot is available.' });
+  } catch (error) {
+    console.error('Check Availability Error:', error);
+    res.status(500).json({ message: 'Failed to check availability.' });
+  }
+};
+
+
+
+ 
 exports.checkAvailability = async (req, res) => {
   try {
     console.log('Received Payload for Availability Check:', req.body); // Debugging log
