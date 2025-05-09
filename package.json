@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "browser-image-compression": "^2.0.2",
     "dotenv": "^16.4.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

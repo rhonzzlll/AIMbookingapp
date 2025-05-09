@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import RoomList from './RoomList';
 import RoomForm from './RoomForm';
 import DeleteConfirmation from './modals/DeleteConfirmation';
 import Toast from './Toast';
 import TopBar from '../../components/AdminComponents/TopBar';
-import imageCompression from 'browser-image-compression';
 import AdminContentTemplate from './AdminContentTemplate';
 import Pagination from '@mui/material/Pagination';
-import PaginationItem from '@mui/material/PaginationItem';
 import Stack from '@mui/material/Stack';
 
 const RoomManagement = () => {
   const [rooms, setRooms] = useState([]);
+  const [buildings, setBuildings] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -20,7 +21,6 @@ const RoomManagement = () => {
   const [toast, setToast] = useState(null);
   const [isSubroomVisible, setIsSubroomVisible] = useState({});
   const API_BASE_URL = 'http://localhost:5000/api';
-  const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Pagination states
@@ -28,8 +28,42 @@ const RoomManagement = () => {
   const [roomsPerPage] = useState(5);
 
   useEffect(() => {
-    fetchRooms();
+    // Fetch all required data when component mounts
+    fetchInitialData();
   }, []);
+
+  const fetchInitialData = async () => {
+    setLoading(true);
+    try {
+      // Use Promise.all to fetch rooms, buildings and categories in parallel
+      const [roomsRes, buildingsRes, categoriesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/rooms`),
+        fetch(`${API_BASE_URL}/buildings`),
+        fetch(`${API_BASE_URL}/categories`)
+      ]);
+
+      if (!roomsRes.ok) throw new Error('Failed to fetch rooms');
+      if (!buildingsRes.ok) throw new Error('Failed to fetch buildings');
+      if (!categoriesRes.ok) throw new Error('Failed to fetch categories');
+
+      const roomsData = await roomsRes.json();
+      const buildingsData = await buildingsRes.json();
+      const categoriesData = await categoriesRes.json();
+
+      setRooms(roomsData);
+      setBuildings(buildingsData);
+      setCategories(categoriesData);
+      
+      console.log('Fetched Rooms:', roomsData);
+      console.log('Fetched Buildings:', buildingsData);
+      console.log('Fetched Categories:', categoriesData);
+    } catch (error) {
+      console.error('Error fetching initial data:', error);
+      showToast('Failed to load data. Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -40,7 +74,6 @@ const RoomManagement = () => {
   };
 
   const fetchRooms = async () => {
-    setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/rooms`);
       if (!response.ok) {
@@ -48,12 +81,9 @@ const RoomManagement = () => {
       }
       const data = await response.json();
       setRooms(data);
-      console.log('Fetched Rooms:', data);
     } catch (error) {
       console.error('Error fetching rooms:', error);
       showToast('Failed to load rooms. Please try again.', 'error');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -74,7 +104,7 @@ const RoomManagement = () => {
 
   const confirmDelete = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/rooms/${roomToDelete._id}`, {
+      const response = await fetch(`${API_BASE_URL}/rooms/${roomToDelete.roomId}`, {
         method: 'DELETE',
       });
 
@@ -82,7 +112,7 @@ const RoomManagement = () => {
         throw new Error('Failed to delete room');
       }
 
-      setRooms(rooms.filter((room) => room._id !== roomToDelete._id));
+      setRooms(rooms.filter((room) => room.roomId !== roomToDelete.roomId));
       setIsDeleteModalOpen(false);
       setRoomToDelete(null);
       showToast(`${roomToDelete.roomName} has been deleted successfully`);
@@ -92,122 +122,120 @@ const RoomManagement = () => {
     }
   };
 
-  const handleFormSubmit = async (roomData, imageFile) => {
+  const handleFormSubmit = async (formDataToSubmit) => {
     try {
-      let base64Image = null;
-
-      if (imageFile) {
-        const options = {
-          maxSizeMB: 2,
-          useWebWorker: true,
-        };
-
-        try {
-          const compressedFile = await imageCompression(imageFile, options);
-          const reader = new FileReader();
-          reader.readAsDataURL(compressedFile);
-          await new Promise((resolve, reject) => {
-            reader.onload = () => {
-              base64Image = reader.result.split(',')[1];
-              resolve();
-            };
-            reader.onerror = reject;
-          });
-        } catch (compressionError) {
-          console.error('Error compressing image:', compressionError);
-          showToast('Failed to process image. Please try again.', 'error');
-          return;
-        }
+      // Extract roomData from formDataToSubmit to validate
+      const roomDataJson = formDataToSubmit.get('roomData');
+      if (!roomDataJson) {
+        showToast('Missing room data', 'error');
+        return;
+      }
+      
+      const roomData = JSON.parse(roomDataJson);
+      
+      // Validate required fields based on database schema
+      if (!roomData.roomName || !roomData.buildingId || !roomData.categoryId || !roomData.roomCapacity) {
+        showToast('Please fill in all required fields (Room Name, Building, Category, and Capacity)', 'error');
+        return;
       }
 
-      // Fix: Properly format subRooms to match server expectations
-      const formattedSubRooms = (roomData.subRooms || []).map((subRoom) => ({
-        roomName: subRoom.name || '', // Changed from subRoom.roomName to subRoom.name
-        capacity: parseInt(subRoom.capacity) || 0,
-        description: subRoom.description || '',
-      }));
-
-      const payload = {
-        ...roomData,
-        roomImage: base64Image,
-        subRooms: formattedSubRooms,
-      };
-
-      console.log('Payload:', payload);
-
+      let response;
+      
       if (editingRoom) {
-        const updatePayload = { ...payload };
-        if (!imageFile) {
-          delete updatePayload.roomImage;
-        }
-
-        const response = await fetch(`${API_BASE_URL}/rooms/${editingRoom._id}`, {
+        // For updates - use the existing FormData which already contains everything needed
+        response = await fetch(`${API_BASE_URL}/rooms/${editingRoom.roomId}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updatePayload),
+          body: formDataToSubmit, // Send FormData directly
         });
 
+        let errorMessage = 'Failed to update room';
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(`Failed to update room: ${errorData.message || errorData.error || ''}`);
+          const errorText = await response.text();
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch (e) {
+            errorMessage = errorText || errorMessage;
+          }
+          throw new Error(errorMessage);
         }
 
         const updatedRoom = await response.json();
         setRooms(
           rooms.map((room) =>
-            room._id === editingRoom._id ? updatedRoom : room
+            room.roomId === editingRoom.roomId ? updatedRoom : room
           )
         );
         showToast(`${updatedRoom.roomName} updated successfully`);
       } else {
-        const response = await fetch(`${API_BASE_URL}/rooms`, {
+        // For new rooms - use the existing FormData which already contains everything needed
+        response = await fetch(`${API_BASE_URL}/rooms`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
+          body: formDataToSubmit, // Send FormData directly
         });
 
+        let errorMessage = 'Failed to create room';
         if (!response.ok) {
-          throw new Error('Failed to create room');
+          const errorText = await response.text();
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch (e) {
+            errorMessage = errorText || errorMessage;
+          }
+          throw new Error(errorMessage);
         }
 
-        await fetchRooms();
+        const createdRoom = await response.json();
+        setRooms([...rooms, createdRoom]);
         showToast(`${roomData.roomName} added successfully`);
-        window.location.reload();
       }
 
       setIsFormOpen(false);
       setEditingRoom(null);
+      // Refresh the rooms data
+      fetchRooms();
     } catch (error) {
       console.error('Error saving room:', error);
       showToast(
-        `Failed to ${editingRoom ? 'update' : 'create'} room. Please try again.`,
+        `Failed to ${editingRoom ? 'update' : 'create'} room: ${error.message}`,
         'error'
       );
     }
   };
 
   const handleDivideRoom = (roomId) => {
-    const updatedRooms = rooms.map((room) => {
-      if (room._id === roomId) {
-        return {
-          ...room,
-          isQuadrant: true,
-          subRooms: [
-            { roomName: '', capacity: room.capacity / 2, description: '' },
-            { roomName: '', capacity: room.capacity / 2, description: '' },
-          ],
-        };
-      }
-      return room;
+    const roomToEdit = rooms.find(room => room.roomId === roomId);
+    if (!roomToEdit) return;
+    
+    // Set this room as editing room with subrooms
+    setEditingRoom({
+      ...roomToEdit,
+      isQuadrant: true,
+      subRooms: [
+        {
+          subroomId: uuidv4(),
+          roomId: roomToEdit.roomId,
+          subroomName: `${roomToEdit.roomName} - Section A`,
+          subroomCapacity: Math.floor(roomToEdit.roomCapacity / 2),
+          subroomDescription: '',
+          image: null,
+          imagePreview: null
+        },
+        {
+          subroomId: uuidv4(),
+          roomId: roomToEdit.roomId,
+          subroomName: `${roomToEdit.roomName} - Section B`,
+          subroomCapacity: Math.ceil(roomToEdit.roomCapacity / 2),
+          subroomDescription: '',
+          image: null,
+          imagePreview: null
+        },
+      ]
     });
-
-    setRooms(updatedRooms);
-    showToast('Room has been divided into subrooms.');
-    setIsSubroomVisible((prev) => ({ ...prev, [roomId]: true }));
+    
+    setIsFormOpen(true);
+    showToast('Room is ready to be divided. Please complete the subroom details.');
   };
 
   const toggleSubroomVisibility = (roomId) => {
@@ -225,7 +253,7 @@ const RoomManagement = () => {
   // Filter rooms based on search term
   const filteredRooms = rooms.filter(room =>
     room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    (room.roomDescription && room.roomDescription.toLowerCase().includes(searchTerm.toLowerCase()))
   );
   
   // Calculate pagination
@@ -274,10 +302,6 @@ const RoomManagement = () => {
               </div>
             ) : (
               <>
-
-
-
-              
                 <RoomList
                   rooms={currentRooms}
                   onEdit={handleEditRoom}
@@ -285,6 +309,8 @@ const RoomManagement = () => {
                   onDivide={handleDivideRoom}
                   toggleSubroomVisibility={toggleSubroomVisibility}
                   isSubroomVisible={isSubroomVisible}
+                  buildings={buildings}
+                  categories={categories}
                 />
                 
                 {filteredRooms.length > 0 && (
@@ -314,13 +340,15 @@ const RoomManagement = () => {
                 room={editingRoom}
                 onSubmit={handleFormSubmit}
                 onCancel={() => setIsFormOpen(false)}
+                buildings={buildings}
+                categories={categories}
               />
             )}
 
             {isDeleteModalOpen && (
               <DeleteConfirmation
                 title="Delete Room"
-                message={`Are you sure you want to delete "${roomToDelete.roomName}"? This action cannot be undone.`}
+                message={`Are you sure you want to delete "${roomToDelete.roomName}"? This action cannot be undone. This will also delete all associated subrooms.`}
                 onConfirm={confirmDelete}
                 onCancel={() => {
                   setIsDeleteModalOpen(false);

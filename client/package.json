@@ -41,6 +41,7 @@
     "react-router-dom": "^7.4.1",
     "react-time-picker": "^7.0.0",
     "react-toastify": "^11.0.5",
+    "uuid": "^11.1.0",
     "xlsx": "^0.18.5",
     "xlsx-style": "^0.8.13"
   }

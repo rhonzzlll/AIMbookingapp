@@ -61,11 +61,18 @@ const CategoryModal = ({
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Please select a building</option>
-              {buildings.map(building => (
-                <option key={building.id} value={building.name}>
-                  {building.name}
-                </option>
-              ))}
+              {buildings && buildings.length > 0 ? (
+                buildings.map(building => (
+                  <option 
+                    key={building._id || building.buildingId || building.id} 
+                    value={building.buildingName || building.name}
+                  >
+                    {building.buildingName || building.name}
+                  </option>
+                ))
+              ) : (
+                <option disabled>No buildings available</option>
+              )}
             </select>
           </div>
           
@@ -131,28 +138,35 @@ const CategoryManagement = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch buildings and categories from API
-      const buildingsResponse = await fetch('/api/buildings');  // Replace with your actual endpoint
-      const categoriesResponse = await fetch('/api/categories'); // Replace with your actual endpoint
-  
-      // Check if the responses are okay
+      const buildingsResponse = await fetch('http://localhost:5000/api/buildings');
+      const categoriesResponse = await fetch('http://localhost:5000/api/categories');
+
       if (buildingsResponse.ok && categoriesResponse.ok) {
         const buildingsData = await buildingsResponse.json();
         const categoriesData = await categoriesResponse.json();
-  
+        
+        console.log('Categories data:', categoriesData);
+        
+        // Transform API response to frontend format
+        const normalizedCategories = categoriesData.map(category => ({
+          id: category.categoryId,
+          name: category.categoryName,
+          building: category.buildingName, // Use the included building name 
+          description: category.categoryDescription
+        }));
+        
         setBuildings(buildingsData);
-        setCategories(categoriesData);
+        setCategories(normalizedCategories);
       } else {
         throw new Error('Failed to fetch data');
       }
-  
+
       setLoading(false);
     } catch (error) {
       console.error('Error fetching data:', error);
       setLoading(false);
     }
   };
-  
 
   const openAddModal = () => {
     setEditingCategory(null);
@@ -160,6 +174,7 @@ const CategoryManagement = () => {
   };
 
   const openEditModal = (category) => {
+    console.log('Opening edit modal with data:', category);
     setEditingCategory(category);
     setModalOpen(true);
   };
@@ -171,49 +186,93 @@ const CategoryManagement = () => {
 
   const handleSaveCategory = async (categoryData) => {
     try {
+      console.log('About to save:', categoryData); // Debug: log what we're saving
+      
+      // Transform the data to match backend expectations
+      const formattedData = {
+        categoryId: categoryData.id,
+        categoryName: categoryData.name,
+        building: categoryData.building, // This should be the building name
+        description: categoryData.description
+      };
+
+      console.log('Sending to backend:', formattedData); // Debug: log what we're sending
+
       let response;
-  
+
       if (editingCategory) {
         // Update existing category (PUT request)
-        response = await fetch(`/api/categories/${categoryData.id}`, {
+        response = await fetch(`http://localhost:5000/api/categories/${categoryData.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(categoryData),
+          body: JSON.stringify(formattedData),
         });
       } else {
         // Add new category (POST request)
-        response = await fetch('/api/categories', {
+        response = await fetch('http://localhost:5000/api/categories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(categoryData),
+          body: JSON.stringify(formattedData),
         });
       }
-  
-      if (response.ok) {
-        const updatedCategory = await response.json();
-  
-        // Update the state
-        if (editingCategory) {
-          setCategories(categories.map((cat) => (cat.id === updatedCategory.id ? updatedCategory : cat)));
-        } else {
-          setCategories([...categories, updatedCategory]);
-        }
-  
-        alert(editingCategory ? 'Category updated successfully!' : 'Category added successfully!');
-        onClose(); // Close the modal after saving
-      } else {
-        throw new Error('Failed to save category');
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${errorText}`);
       }
+
+      // Try to parse the response as JSON
+      let updatedCategory;
+      const responseText = await response.text();
+      
+      try {
+        // Only try to parse if there's actual content
+        if (responseText.trim()) {
+          updatedCategory = JSON.parse(responseText);
+        } else {
+          // If no content returned, use the data we sent
+          updatedCategory = formattedData;
+        }
+      } catch (e) {
+        console.error('Error parsing response:', e);
+        // Fallback to using the data we sent
+        updatedCategory = formattedData;
+      }
+
+      console.log('Response from server (parsed):', updatedCategory);
+
+      // Create a normalized version that matches our frontend structure
+      const normalizedCategory = {
+        id: updatedCategory.id || updatedCategory.categoryId,
+        name: updatedCategory.name || updatedCategory.categoryName,
+        building: updatedCategory.building, // Ensure building is mapped correctly
+        description: updatedCategory.description || updatedCategory.categoryDescription || ''
+      };
+
+      console.log('Normalized category to save to state:', normalizedCategory);
+
+      // Update the state with the normalized data
+      if (editingCategory) {
+        setCategories(categories.map((cat) => 
+          (cat.id === normalizedCategory.id ? normalizedCategory : cat)
+        ));
+      } else {
+        setCategories([...categories, normalizedCategory]);
+      }
+
+      alert(editingCategory ? 'Category updated successfully!' : 'Category added successfully!');
+      closeModal(); // Close the modal after saving
     } catch (error) {
       console.error('Error saving category:', error);
-      alert('Failed to save category. Please try again.');
+      alert(`Failed to save category: ${error.message}. Please try again.`);
     }
   };
+  
   const handleDeleteCategory = async (id) => {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
   
     try {
-      const response = await fetch(`/api/categories/${id}`, {
+      const response = await fetch(`http://localhost:5000/api/categories/${id}`, {
         method: 'DELETE',
       });
   
@@ -275,13 +334,13 @@ const CategoryManagement = () => {
                   {categories.map((category) => (
                     <tr key={category.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {category.name}
+                        {category.name || 'No Name'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {category.building}
+                        {category.building || 'No Building Assigned'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {category.description}
+                        {category.description || 'No Description'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button

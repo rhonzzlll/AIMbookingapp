@@ -4,6 +4,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       primaryKey: true,
       field: 'categoryId',
+      autoIncrement: false, // Changed from true to false
       allowNull: false
     },
     buildingId: {

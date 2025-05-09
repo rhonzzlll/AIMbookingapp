@@ -1,39 +1,31 @@
 const express = require('express');
-const {
-  getAllRooms,
-  getRoomById,
-  createRoom,
-  updateRoom,
-  deleteRoom,
-} = require('../Controllers/roomController');
-const Room = require('../models/roomModel'); // Adjust the path as needed
-
 const router = express.Router();
+const roomController = require('../Controllers/roomController');
 
-// Route to get all rooms
-router.get('/', getAllRooms);
+/**
+ * Room Routes
+ * 
+ * For create and update routes, we don't need to specify multer middleware here
+ * since it's already integrated with the controller methods through the 
+ * processRoomCreate and processRoomUpdate wrappers.
+ */
 
-// Route to get a single room by ID
-router.get('/:id', getRoomById);
+// Get all rooms (with optional filtering)
+router.get('/', roomController.getAllRooms);
 
-// Route to create a new room
-router.post('/', createRoom);
+// Get a specific room by ID
+router.get('/:id', roomController.getRoomById);
 
-// Route to update an existing room
-router.put('/:id', updateRoom);
+// Create a new room (multer is handled in the controller)
+router.post('/', roomController.createRoom);
 
-// Route to delete a room
-router.delete('/:id', deleteRoom);
+// Update a room (multer is handled in the controller)
+router.put('/:id', roomController.updateRoom);
 
-router.post('/rooms', async (req, res) => {
-  try {
-    const { building } = req.body;
-    const room = new Room({ building });
-    const savedRoom = await room.save();
-    res.status(201).json(savedfRoom);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+// Delete a room and its subrooms
+router.delete('/:id', roomController.deleteRoom);
+
+// Debug endpoint to check room structure (useful for development)
+router.get('/debug/structure', roomController.debugRoomStructure);
 
 module.exports = router;

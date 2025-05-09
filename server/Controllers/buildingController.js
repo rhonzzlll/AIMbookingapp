@@ -4,7 +4,6 @@ const { Building, Room, Category } = require('../models/');
 exports.createBuilding = async (req, res) => {
   try {
     const { 
-      buildingId, 
       buildingName, 
       buildingDescription, 
       buildingImage,
@@ -13,9 +12,12 @@ exports.createBuilding = async (req, res) => {
     } = req.body;
 
     // Basic validation
-    if (!buildingId || !buildingName) {
-      return res.status(400).json({ message: 'Building ID and name are required' });
+    if (!buildingName) {
+      return res.status(400).json({ message: 'Building name is required' });
     }
+
+    // Generate a numeric ID (6-digit number)
+    const buildingId = Math.floor(100000 + Math.random() * 900000);
 
     // Create a new building record with all fields
     const newBuilding = await Building.create({
@@ -32,7 +34,9 @@ exports.createBuilding = async (req, res) => {
   } catch (err) {
     console.error('Create Building Error:', err);
     if (err.name === 'SequelizeUniqueConstraintError') {
-      return res.status(409).json({ message: 'Building ID already exists' });
+      return res.status(409).json({ 
+        message: 'Building ID already exists. Please try again.'
+      });
     }
     res.status(500).json({ error: err.message });
   }

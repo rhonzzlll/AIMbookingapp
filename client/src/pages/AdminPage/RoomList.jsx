@@ -2,14 +2,6 @@ import React, { useState, useMemo } from 'react';
 
 const RoomList = ({ rooms, onEdit, onDelete }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'roomName', direction: 'asc' });
-  const [expandedRooms, setExpandedRooms] = useState({});
-
-  const toggleRoomExpansion = (roomId) => {
-    setExpandedRooms(prev => ({
-      ...prev,
-      [roomId]: !prev[roomId]
-    }));
-  };
 
   const handleSort = (key) => {
     setSortConfig((prev) => {
@@ -25,8 +17,25 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
 
   const sortedRooms = useMemo(() => {
     const compare = (a, b) => {
-      const valueA = a[sortConfig.key]?.toString().toLowerCase();
-      const valueB = b[sortConfig.key]?.toString().toLowerCase();
+      // Handle nested properties for building and category
+      let valueA, valueB;
+      
+      if (sortConfig.key === 'building') {
+        valueA = (a.Building?.buildingName || a.building || '').toString().toLowerCase();
+        valueB = (b.Building?.buildingName || b.building || '').toString().toLowerCase();
+      } else if (sortConfig.key === 'category') {
+        valueA = (a.Category?.categoryName || a.category || '').toString().toLowerCase();
+        valueB = (b.Category?.categoryName || b.category || '').toString().toLowerCase();
+      } else if (sortConfig.key === 'capacity') {
+        valueA = (a.roomCapacity || a.capacity || 0).toString().toLowerCase();
+        valueB = (b.roomCapacity || b.capacity || 0).toString().toLowerCase();
+      } else if (sortConfig.key === 'description') {
+        valueA = (a.roomDescription || a.description || '').toString().toLowerCase();
+        valueB = (b.roomDescription || b.description || '').toString().toLowerCase();
+      } else {
+        valueA = (a[sortConfig.key] || '').toString().toLowerCase();
+        valueB = (b[sortConfig.key] || '').toString().toLowerCase();
+      }
 
       if (!isNaN(valueA) && !isNaN(valueB)) {
         return sortConfig.direction === 'asc'
@@ -76,43 +85,42 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
             </tr>
           ) : (
             sortedRooms.map((room) => {
-              const roomImage = room.roomImage
-                ? `data:image/jpeg;base64,${room.roomImage}`
-                : localStorage.getItem(`roomImage_${room.roomName}`);
+              // Use the roomImageUrl from server response, or fall back to other methods
+              const roomImageSrc = room.roomImageUrl || 
+                (room.roomImage && !room.roomImage.startsWith('roomImage-') 
+                  ? `data:image/jpeg;base64,${room.roomImage}`
+                  : room.roomImage 
+                    ? `/api/uploads/${room.roomImage}` 
+                    : null);
 
-              const hasSubRooms = room.isQuadrant && room.subRooms && room.subRooms.length > 0;
-              const isExpanded = expandedRooms[room._id] || false;
-
+              // Get building name from various possible sources
+              const buildingName = room.Building?.buildingName || 
+                (typeof room.building === 'object' ? room.building.buildingName : room.building) || 
+                room.buildingId;
+              
+              // Get category name from various possible sources
+              const categoryName = room.Category?.categoryName || 
+                (typeof room.category === 'object' ? room.category.categoryName : room.category) || 
+                room.categoryId;
+              
               return (
-                <React.Fragment key={room._id}>
+                <React.Fragment key={room.roomId || room._id}>
                   <tr className="hover:bg-gray-50">
-                    <td className="py-3 px-4 font-semibold">
-                      <div className="flex items-center">
-                        {hasSubRooms && (
-                          <button 
-                            onClick={() => toggleRoomExpansion(room._id)}
-                            className="mr-2 text-gray-500 focus:outline-none w-5"
-                          >
-                            {isExpanded ? '▼' : '►'}
-                          </button>
-                        )}
-                        {room.roomName}
-                        {hasSubRooms && (
-                          <span className="ml-2 text-xs text-gray-500">
-                            ({room.subRooms.length} subrooms)
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">{room.building}</td>
-                    <td className="py-3 px-4">{room.category}</td>
-                    <td className="py-3 px-4">{room.capacity}</td>
+                    <td className="py-3 px-4 font-semibold">{room.roomName}</td>
+                    <td className="py-3 px-4">{buildingName}</td>
+                    <td className="py-3 px-4">{categoryName}</td>
+                    <td className="py-3 px-4">{room.roomCapacity || room.capacity}</td>
                     <td className="py-3 px-4">
-                      {roomImage ? (
+                      {roomImageSrc ? (
                         <img
-                          src={roomImage}
+                          src={roomImageSrc}
                           alt={room.roomName}
                           className="w-16 h-12 object-cover rounded"
+                          onError={(e) => {
+                            console.log('Image error:', e);
+                            e.target.onerror = null;
+                            e.target.src = 'https://via.placeholder.com/160x120?text=No+Image';
+                          }}
                         />
                       ) : (
                         <div className="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
@@ -120,7 +128,7 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-4 max-w-xs truncate">{room.description}</td>
+                    <td className="py-3 px-4 max-w-xs truncate">{room.roomDescription || room.description}</td>
                     <td className="py-3 px-4 flex justify-center space-x-2">
                       <button
                         onClick={() => onEdit(room)}
@@ -137,35 +145,46 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                     </td>
                   </tr>
 
-                  {hasSubRooms && isExpanded &&
-                    room.subRooms.map((subRoom, index) => {
-                      const subRoomImage = localStorage.getItem(`roomImage_${subRoom.roomName}`);
-                      return (
-                        <tr key={`${room._id}-sub-${index}`} className="bg-gray-50">
-                          <td className="py-3 px-4 pl-8 text-gray-600 flex items-center">
-                            <span className="mr-2">↳</span> {subRoom.roomName}
-                          </td>
-                          <td className="py-3 px-4">{room.building}</td>
-                          <td className="py-3 px-4">{room.category}</td>
-                          <td className="py-3 px-4">{subRoom.capacity}</td>
-                          <td className="py-3 px-4">
-                            {subRoomImage ? (
-                              <img
-                                src={subRoomImage}
-                                alt={subRoom.roomName}
-                                className="w-16 h-12 object-cover rounded"
-                              />
-                            ) : (
-                              <div className="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
-                                <span className="text-xs text-gray-500">No image</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 max-w-xs truncate">{subRoom.description}</td>
-                          <td className="py-3 px-4 text-center text-gray-400 text-sm">N/A</td>
-                        </tr>
-                      );
-                    })}
+                  {room.isQuadrant && room.subRooms && room.subRooms.map((subRoom, index) => {
+                    // Use the subRoomImageUrl from server response, or fall back to other methods
+                    const subRoomImageSrc = subRoom.subRoomImageUrl || 
+                      (subRoom.subRoomImage 
+                        ? `/api/uploads/${subRoom.subRoomImage}` 
+                        : null);
+                    
+                    return (
+                      <tr key={`${room.roomId || room._id}-sub-${subRoom.subRoomId || index}`} 
+                          className="hover:bg-gray-50 bg-gray-50">
+                        <td className="py-3 px-4 pl-8 text-gray-600 flex items-center">
+                          <span className="mr-2">↳</span> {subRoom.subRoomName || subRoom.roomName}
+                        </td>
+                        <td className="py-3 px-4">{buildingName}</td>
+                        <td className="py-3 px-4">{categoryName}</td>
+                        <td className="py-3 px-4">{subRoom.subRoomCapacity || subRoom.capacity}</td>
+                        <td className="py-3 px-4">
+                          {subRoomImageSrc ? (
+                            <img
+                              src={subRoomImageSrc}
+                              alt={subRoom.subRoomName || subRoom.roomName}
+                              className="w-16 h-12 object-cover rounded"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'https://via.placeholder.com/160x120?text=No+Image';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
+                              <span className="text-xs text-gray-500">No image</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 max-w-xs truncate">
+                          {subRoom.subRoomDescription || subRoom.description}
+                        </td>
+                        <td className="py-3 px-4 text-center text-gray-400 text-sm">N/A</td>
+                      </tr>
+                    );
+                  })}
                 </React.Fragment>
               );
             })

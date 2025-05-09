@@ -3,66 +3,76 @@ module.exports = (sequelize, DataTypes) => {
     roomId: {
       type: DataTypes.STRING(255),
       primaryKey: true,
-      field: 'roomId',
       allowNull: false
     },
-    buildingId: {
+    buildingId: {        
       type: DataTypes.STRING(255),
-      field: 'buildingId',
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'building',
+        key: 'buildingId'
+      }
+    },
+    categoryId: {   
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'category',
+        key: 'categoryId'
+      }
     },
     roomName: {
       type: DataTypes.STRING(255),
-      field: 'roomName',
       allowNull: false
-    },
-    subRoom: {
-      type: DataTypes.STRING(255),
-      field: 'subRoom',
-      allowNull: true
     },
     roomCapacity: {
       type: DataTypes.INTEGER,
-      field: 'roomCapacity',
-      allowNull: true
+      allowNull: false
     },
     isQuadrant: {
       type: DataTypes.BOOLEAN,
-      field: 'isQuadrant',
+      defaultValue: false
+    },
+    roomImage: {
+      type: DataTypes.STRING('MAX'), // VARCHAR(MAX) in SQL Server
       allowNull: true
     },
     roomDescription: {
       type: DataTypes.STRING(255),
-      field: 'roomDescription',
       allowNull: true
     },
-    roomImage: {
-      type: DataTypes.STRING(255),
-      field: 'roomImage',
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
       allowNull: true
     }
   }, {
     tableName: 'room',
     schema: 'dbo',
-    timestamps: false
+    timestamps: true,
+    freezeTableName: true
   });
 
-  Room.associate = (models) => {
-    // Association with Building model if you have one
-    if (models.Building) {
-      Room.belongsTo(models.Building, {
-        foreignKey: 'buildingId',
-        targetKey: 'buildingId'
-      });
-    }
-    
-    // Association with Booking model if you have one
-    if (models.Booking) {
-      Room.hasMany(models.Booking, {
-        foreignKey: 'roomId',
-        sourceKey: 'roomId'
-      });
-    }
+  Room.associate = function(models) {
+    Room.hasMany(models.Subroom, {
+      as: 'subRooms',
+      foreignKey: 'roomId',
+      sourceKey: 'roomId',
+      onDelete: 'CASCADE'
+    });
+
+    Room.belongsTo(models.Building, {
+      foreignKey: 'buildingId',
+      targetKey: 'buildingId'
+    });
+
+    Room.belongsTo(models.Category, {
+      foreignKey: 'categoryId',
+      targetKey: 'categoryId'
+    });
   };
 
   return Room;
