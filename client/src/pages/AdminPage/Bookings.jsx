@@ -14,23 +14,29 @@ const parseISODate = (dateString) => {
   return isNaN(date.getTime()) ? '' : date.toISOString().split('T')[0];
 };
 
-// Format time between 12-hour and 24-hour formats
+// Convert from 12-hour format (e.g. "8:00 AM") to 24-hour format (e.g. "08:00:00")
 const convertTo24HourFormat = (time12h) => {
   if (!time12h) return '';
   
-  const [time, modifier] = time12h.split(' ');
-  let [hours, minutes] = time.split(':');
+  const [timePart, modifier] = time12h.split(' ');
+  let [hours, minutes] = timePart.split(':').map(num => parseInt(num, 10));
   
-  if (hours === '12') {
-    hours = modifier === 'PM' ? '12' : '00';
+  // Convert hours to 24-hour format
+  if (hours === 12) {
+    hours = modifier === 'PM' ? 12 : 0;
   } else {
-    hours = modifier === 'PM' ? String(parseInt(hours, 10) + 12) : hours.padStart(2, '0');
+    hours = modifier === 'PM' ? hours + 12 : hours;
   }
   
-  return `${hours}:${minutes}`;
+  // Format with leading zeros and add seconds
+  const formattedHours = hours.toString().padStart(2, '0');
+  const formattedMinutes = minutes.toString().padStart(2, '0');
+  
+  // Return in HH:mm:ss format as expected by the server
+  return `${formattedHours}:${formattedMinutes}:00`;
 };
 
-// Format 24-hour time to 12-hour format
+// Convert from 24-hour format (e.g. "14:30:00") to 12-hour format (e.g. "2:30 PM")
 const convertTo12HourFormat = (time24h) => {
   if (!time24h) return '';
   
@@ -53,13 +59,11 @@ const initialFormState = {
   title: '',
   firstName: '',
   lastName: '',
-  email: '',
-  department: '',
-  category: '',
-  room: '',
+  userId: null,
+  categoryId: '',
   roomId: null,
-  building: '',
-  date: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+  buildingId: '',
+  date: new Date().toISOString().split('T')[0],  
   startTime: null,
   endTime: null,
   notes: '',
@@ -67,10 +71,10 @@ const initialFormState = {
   recurrenceEndDate: '',
   status: 'pending',
   bookingCapacity: 1,
-  userId: null,
   isMealRoom: false,
   isBreakRoom: false,
-  remarks: ''
+  remarks: '',
+  bookingId: null,
 };
 
 // Time options for dropdowns
@@ -114,6 +118,8 @@ const Bookings = () => {
   
   // New state for buildings and categories from API
   const [buildings, setBuildings] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [availableRooms, setAvailableRooms] = useState([]);
   const [buildingCategories, setBuildingCategories] = useState({});
   
   // Get token from localStorage
@@ -124,42 +130,136 @@ const Bookings = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [bookingToDelete, setBookingToDelete] = useState(null);
 
+  // Add these missing state declarations
+  const [formData, setFormData] = useState({...initialFormState});
+  const [formError, setFormError] = useState({});
+  const [submitLoading, setSubmitLoading] = useState(false);
+
   useEffect(() => {
-    const fetchRoomsAndBookings = async () => {
+    const fetchInitialData = async () => {
+      setLoading(true);
+      setError('');
+      
       try {
-        setLoading(true);
-        const roomRes = await axios.get(`${API_BASE_URL}/rooms`, {
-          headers: { Authorization: `Bearer ${token}` },
+        console.log("Fetching rooms data for setup...");
+        
+        // First fetch all rooms to extract building and category information
+        const roomsResponse = await axios.get(`${API_BASE_URL}/rooms`, {
+          headers: { Authorization: `Bearer ${token}` }
         });
         
-        // Store original room data
-        const roomsData = roomRes.data;
+        // Store rooms data
+        const roomsData = roomsResponse.data;
+        console.log("Rooms data:", roomsData);
         setRooms(roomsData);
         
-        // Extract unique buildings
-        const uniqueBuildings = [...new Set(roomsData.map(room => room.building))];
-        setBuildings(uniqueBuildings);
-        
-        // Create mapping of buildings to their categories
-        const categoryMap = {};
-        uniqueBuildings.forEach(building => {
-          const roomsInBuilding = roomsData.filter(room => room.building === building);
-          const categories = [...new Set(roomsInBuilding.map(room => room.category))];
-          categoryMap[building] = categories;
+        // Process buildings data consistently
+        const buildingsMap = {};
+        roomsData.forEach(room => {
+          if (room.buildingId) {
+            const buildingId = room.buildingId.toString();
+            const buildingName = room.Building?.buildingName || room.building || `Building ${buildingId}`;
+            
+            if (!buildingsMap[buildingId]) {
+              buildingsMap[buildingId] = {
+                id: buildingId,
+                name: buildingName
+              };
+            }
+          }
         });
         
-        setBuildingCategories(categoryMap);
+        // Convert to array for the dropdown
+        const buildingsList = Object.values(buildingsMap);
+        console.log("Extracted buildings:", buildingsList);
+        setBuildings(buildingsList);
+        
+        // Next, fetch bookings
+        const bookingsResponse = await axios.get(`${API_BASE_URL}/bookings`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        // Map booking data with room and building information
+        const bookingsData = await Promise.all(
+          bookingsResponse.data.map(async (booking) => {
+            // Find room info for this booking
+            const room = roomsData.find(r => r.roomId === booking.roomId) || {};
+            
+            // Get user info if needed
+            let userData = {};
+            if (booking.userId) {
+              try {
+                const userRes = await axios.get(`${API_BASE_URL}/users/${booking.userId}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                userData = userRes.data;
+              } catch (error) {
+                console.error(`Could not fetch user data for ID ${booking.userId}`, error);
+              }
+            }
+            
+            return {
+              ...booking,
+              roomName: room.roomName || 'Unknown Room',
+              building: room.Building?.buildingName || room.building || 'Unknown Building',
+              buildingId: room.buildingId || '',
+              category: room.Category?.categoryName || room.category || 'Unknown Category',
+              categoryId: room.categoryId || '',
+              firstName: userData.firstName || booking.firstName || '',
+              lastName: userData.lastName || booking.lastName || '',
+              department: userData.department || booking.department || '',
+              email: userData.email || '',
+              startTime12h: booking.startTime ? convertTo12HourFormat(booking.startTime) : '',
+              endTime12h: booking.endTime ? convertTo12HourFormat(booking.endTime) : '',
+              recurring: booking.isRecurring ? 'Yes' : 'No'
+            };
+          })
+        );
+        
+        setBookings(bookingsData);
+        
+        // Also fetch users for dropdown
+        const usersResponse = await axios.get(`${API_BASE_URL}/users`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        setUsers(usersResponse.data);
+        
+      } catch (err) {
+        console.error('Error fetching initial data:', err);
+        setError('Failed to load data. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchInitialData();
+  }, [token]);
 
-        const bookingRes = await axios.get(`${API_BASE_URL}/bookings`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        
-        // Map bookings with room details
-        const bookingsWithRoomDetails = await Promise.all(bookingRes.data.map(async (booking) => {
-          // Find the room for this booking
-          const room = roomsData.find(r => r.roomId === booking.roomId);
+  // Add this function to your component
+
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch rooms first to have room data available
+      const roomsResponse = await axios.get(`${API_BASE_URL}/rooms`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const roomsData = roomsResponse.data;
+      setRooms(roomsData);
+      
+      // Then fetch bookings
+      const bookingsResponse = await axios.get(`${API_BASE_URL}/bookings`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Map booking data with room information
+      const bookingsData = await Promise.all(
+        bookingsResponse.data.map(async (booking) => {
+          const room = roomsData.find(r => r.roomId === booking.roomId) || {};
           
-          // If we need user information
+          // Get user info if needed
           let userData = {};
           if (booking.userId) {
             try {
@@ -174,119 +274,30 @@ const Bookings = () => {
           
           return {
             ...booking,
-            roomName: room?.roomName || 'Unknown Room',
-            building: room?.building || 'Unknown Building',
-            category: room?.category || 'Unknown Category',
-            firstName: userData?.firstName || '',
-            lastName: userData?.lastName || '',
-            department: userData?.department || '',
-            email: userData?.email || '',
+            roomName: room.roomName || 'Unknown Room',
+            building: room.Building?.buildingName || room.building || 'Unknown Building',
+            buildingId: room.buildingId || '',
+            category: room.Category?.categoryName || room.category || 'Unknown Category',
+            categoryId: room.categoryId || '',
+            firstName: userData.firstName || booking.firstName || '',
+            lastName: userData.lastName || booking.lastName || '',
+            department: userData.department || booking.department || '',
+            email: userData.email || '',
+            startTime12h: booking.startTime ? convertTo12HourFormat(booking.startTime) : '',
+            endTime12h: booking.endTime ? convertTo12HourFormat(booking.endTime) : '',
+            recurring: booking.isRecurring ? 'Yes' : 'No'
           };
-        }));
-
-        setBookings(bookingsWithRoomDetails);
-      } catch (err) {
-        console.error('Error fetching initial data:', err);
-        setError('Failed to load data. Please check your API connection.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRoomsAndBookings();
-  }, [token]);
-
-  // Fetch bookings data
-  const fetchBookings = useCallback(async () => {
-    setLoading(true);
-    setError('');
-  
-    try {
-      const [bookingsRes, roomsRes, usersRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/bookings`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`${API_BASE_URL}/rooms`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`${API_BASE_URL}/users`, {
-          headers: { Authorization: `Bearer ${token}` }
         })
-      ]);
-  
-      // Create a map of rooms for quick lookup
-      const roomMap = {};
-      roomsRes.data.forEach(room => {
-        roomMap[room.roomId] = room;
-      });
+      );
       
-      // Create a map of users for quick lookup
-      const userMap = {};
-      usersRes.data.forEach(user => {
-        userMap[user.userId] = user;
-      });
-  
-      const enrichedBookings = bookingsRes.data.map(booking => {
-        const room = roomMap[booking.roomId] || {};
-        const user = userMap[booking.userId] || {};
-        
-        return {
-          ...booking,
-          roomName: room.roomName || 'Unknown Room',
-          building: room.building || 'Unknown Building',
-          category: room.category || 'Unknown Category',
-          firstName: user.firstName || '',
-          lastName: user.lastName || '',
-          department: user.department || '',
-          email: user.email || '',
-          // Convert database date and time formats to frontend format
-          startTime12h: booking.startTime ? convertTo12HourFormat(booking.startTime) : '',
-          endTime12h: booking.endTime ? convertTo12HourFormat(booking.endTime) : '',
-          recurring: booking.isRecurring ? 'Yes' : 'No'
-        };
-      });
-  
-      setBookings(enrichedBookings);
-      setRooms(roomsRes.data);
-      setUsers(usersRes.data);
+      setBookings(bookingsData);
     } catch (err) {
-      console.error('Error fetching data:', err);
-      setError('Failed to load data. Please try again.');
+      console.error('Error fetching bookings:', err);
+      setError('Failed to load bookings. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [token]);
-  
-  // Fetch buildings and their categories from rooms API
-  const fetchBuildingsAndCategories = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/rooms`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      // Extract unique buildings
-      const uniqueBuildings = [...new Set(response.data.map(room => room.building))];
-      setBuildings(uniqueBuildings);
-      
-      // Create mapping of buildings to their categories
-      const categoryMap = {};
-      uniqueBuildings.forEach(building => {
-        const roomsInBuilding = response.data.filter(room => room.building === building);
-        const categories = [...new Set(roomsInBuilding.map(room => room.category))];
-        categoryMap[building] = categories;
-      });
-      
-      setBuildingCategories(categoryMap);
-    } catch (err) {
-      console.error('Error fetching buildings and categories:', err);
-    }
-  }, [token]);
-
-  // Initialize data on component mount
-  useEffect(() => {
-    fetchBookings();
-    fetchBuildingsAndCategories();
-  }, [fetchBookings, fetchBuildingsAndCategories]);
+  };
 
   // Filter bookings based on active tab
   const filteredBookings = useMemo(() => {
@@ -326,87 +337,74 @@ const Bookings = () => {
   };
   
   const handleEditClick = (booking) => {
-    const selectedBuilding = booking.building;
-    const selectedCategory = booking.category;
-  
-    // Set categories and available rooms based on the booking's building and category
-    const selectedCategories = buildingCategories[selectedBuilding] || [];
-    const matchedRooms = rooms.filter(
-      (room) => room.building === selectedBuilding && room.category === selectedCategory
-    );
-  
-    setCategories(selectedCategories);
-    setAvailableRooms(matchedRooms);
-  
-    // Format the times for the form
-    const startTime12h = booking.startTime12h || convertTo12HourFormat(booking.startTime);
-    const endTime12h = booking.endTime12h || convertTo12HourFormat(booking.endTime);
-  
-    // Prefill form
+    console.log('Editing booking:', booking);
+    
+    // First set basic booking form data
     setFormData({
       ...booking,
       date: parseISODate(booking.date),
-      startTime: startTime12h,
-      endTime: endTime12h,
+      startTime: booking.startTime12h || convertTo12HourFormat(booking.startTime),
+      endTime: booking.endTime12h || convertTo12HourFormat(booking.endTime),
       isRecurring: booking.isRecurring || booking.recurring === 'Yes',
       recurring: booking.isRecurring ? 'Yes' : 'No',
       recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
-      roomId: booking.roomId,
       isMealRoom: booking.isMealRoom || false,
       isBreakRoom: booking.isBreakRoom || false,
     });
-  
+    
     setEditBookingId(booking.bookingId);
+    
+    // Get the building ID from the booking
+    const buildingId = booking.buildingId || '';
+    
+    if (buildingId && rooms.length > 0) {
+      // Find rooms in this building
+      const roomsInBuilding = rooms.filter(room => 
+        room.buildingId && room.buildingId.toString() === buildingId.toString()
+      );
+      
+      // Extract unique categories
+      const categoriesMap = {};
+      roomsInBuilding.forEach(room => {
+        if (room.categoryId) {
+          const categoryId = room.categoryId.toString();
+          const categoryName = room.Category?.categoryName || room.category || `Category ${categoryId}`;
+          
+          if (!categoriesMap[categoryId]) {
+            categoriesMap[categoryId] = {
+              id: categoryId,
+              name: categoryName
+            };
+          }
+        }
+      });
+      
+      const categoriesList = Object.values(categoriesMap);
+      console.log("Setting categories for building:", categoriesList);
+      setCategories(categoriesList);
+      
+      // Get category ID from the booking
+      const categoryId = booking.categoryId || '';
+      
+      if (categoryId) {
+        // Find rooms in this building AND category
+        const filteredRooms = rooms.filter(room => 
+          room.buildingId && 
+          room.buildingId.toString() === buildingId.toString() &&
+          room.categoryId && 
+          room.categoryId.toString() === categoryId.toString()
+        );
+        
+        console.log("Setting available rooms:", filteredRooms);
+        setAvailableRooms(filteredRooms);
+      }
+    }
+    
     setIsEditModalOpen(true);
   };
   
   const handleDeleteClick = (booking) => {
     setBookingToDelete(booking);
-    setIsDeleteModalOpen(true);
-  };
-  
-  const handleDeleteBooking = async () => {
-    if (!bookingToDelete) return;
-    
-    setLoading(true);
-    try {
-      await axios.delete(`${API_BASE_URL}/bookings/${bookingToDelete.bookingId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      fetchBookings(); // Refresh the bookings list
-      setIsDeleteModalOpen(false);
-    } catch (err) {
-      console.error('Error deleting booking:', err);
-      setError('Failed to delete booking. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStatusChange = (bookingId, status) => {
-    setSelectedBookingId(bookingId);
-    setSelectedStatus(status);
-    setIsStatusModalOpen(true);
-  };
-
-  // Form states
-  const [formData, setFormData] = useState({ ...initialFormState });
-  const [formError, setFormError] = useState({});
-  const [submitLoading, setSubmitLoading] = useState(false);
-  const [categories, setCategories] = useState([]);
-  const [availableRooms, setAvailableRooms] = useState([]);
-
-  // Reset form to initial state
-  const resetForm = () => {
-    setFormData({ ...initialFormState });
-    setFormError({});
-    setCategories([]);
-    setAvailableRooms([]);
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
     
     if (name === 'isRecurring' || name === 'isMealRoom' || name === 'isBreakRoom') {
       setFormData(prev => ({ ...prev, [name]: e.target.checked }));
@@ -457,49 +455,117 @@ const Bookings = () => {
     }
   };
     
-  const handleBuildingChange = (e) => {
-    const selectedBuilding = e.target.value;
+// Proper building change handler
+const handleBuildingChange = (e) => {
+  console.log("Building selected:", e.target.value);
+  const selectedBuildingId = e.target.value;
+  
+  // Reset dependent selections
+  setFormData(prev => ({
+    ...prev,
+    buildingId: selectedBuildingId,
+    building: selectedBuildingId,
+    categoryId: '',
+    category: '',
+    roomId: null,
+    roomName: ''
+  }));
+  
+  // Clear any errors
+  setFormError(prev => ({ ...prev, building: '', category: '', room: '' }));
+  
+  // Filter categories for this building
+  if (selectedBuildingId && rooms.length > 0) {
+    const roomsInBuilding = rooms.filter(room => 
+      room.buildingId && room.buildingId.toString() === selectedBuildingId
+    );
     
-    // Update form data with building, reset category and room
-    setFormData(prev => ({
-      ...prev,
-      building: selectedBuilding,
-      category: '',
-      roomId: null,
-      room: '',
-      roomName: ''
-    }));
+    // Extract unique categories
+    const categoriesMap = {};
+    roomsInBuilding.forEach(room => {
+      if (room.categoryId) {
+        const categoryId = room.categoryId.toString();
+        const categoryName = room.Category?.categoryName || room.category || `Category ${categoryId}`;
+        
+        if (!categoriesMap[categoryId]) {
+          categoriesMap[categoryId] = {
+            id: categoryId,
+            name: categoryName
+          };
+        }
+      }
+    });
     
-    // Get categories for this building from the mapping
-    const buildingCategories = buildingCategories[selectedBuilding] || [];
-    setCategories(buildingCategories);
+    const categoriesList = Object.values(categoriesMap);
+    console.log("Categories for this building:", categoriesList);
+    setCategories(categoriesList);
+  } else {
+    // Reset categories if no building selected
+    setCategories([]);
+  }
+  
+  // Always reset available rooms when building changes
+  setAvailableRooms([]);
+};
+
+// Proper category change handler
+const handleCategoryChange = (e) => {
+  console.log("Category selected:", e.target.value);
+  const selectedCategoryId = e.target.value;
+  
+  // Update category in form data
+  setFormData(prev => ({
+    ...prev,
+    categoryId: selectedCategoryId,
+    category: selectedCategoryId,
+    roomId: null,
+    roomName: ''
+  }));
+  
+  // Clear category-related errors
+  setFormError(prev => ({ ...prev, category: '', room: '' }));
+  
+  // Filter rooms by building AND category
+  if (formData.buildingId && selectedCategoryId && rooms.length > 0) {
+    console.log("Filtering rooms by building", formData.buildingId, "and category", selectedCategoryId);
     
-    // Clear available rooms until category is selected
+    const filteredRooms = rooms.filter(room => 
+      room.buildingId && 
+      room.buildingId.toString() === formData.buildingId.toString() &&
+      room.categoryId &&
+      room.categoryId.toString() === selectedCategoryId.toString()
+    );
+    
+    console.log("Available rooms:", filteredRooms);
+    setAvailableRooms(filteredRooms);
+  } else {
     setAvailableRooms([]);
-  };
+  }
+};
 
-  const handleCategoryChange = (e) => {
-    const selectedCategory = e.target.value;
-    
-    // Update form data with category, reset room
+// Proper room selection handler
+const handleRoomChange = (e) => {
+  console.log("Room selected:", e.target.value);
+  const selectedRoomId = e.target.value;
+  
+  // Find full room data for the selected room
+  const selectedRoom = rooms.find(room => 
+    room.roomId && room.roomId.toString() === selectedRoomId
+  );
+  
+  console.log("Found room data:", selectedRoom);
+  
+  if (selectedRoom) {
     setFormData(prev => ({
       ...prev,
-      category: selectedCategory,
-      roomId: null,
-      room: '',
-      roomName: ''
+      roomId: selectedRoomId,
+      roomName: selectedRoom.roomName || '',
+      bookingCapacity: selectedRoom.capacity || 1
     }));
-    
-    // Filter rooms based on selected building and category
-    if (formData.building && selectedCategory) {
-      const filteredRooms = rooms.filter(
-        room => room.building === formData.building && room.category === selectedCategory
-      );
-      setAvailableRooms(filteredRooms);
-    }
-  };
+    setFormError(prev => ({ ...prev, room: '' }));
+  }
+};
 
-  // Handle time selection
   const handleTimeChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
@@ -535,6 +601,7 @@ const Bookings = () => {
 
   // Handle user selection
   const handleUserSelect = (user) => {
+    // This function now only triggers when a user is selected from a dropdown
     setFormData(prev => ({
       ...prev,
       userId: user.userId,
@@ -545,13 +612,53 @@ const Bookings = () => {
     }));
   };
 
+  // You might also want to add a function to clear user ID when manually typing names
+  const handleNameChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+      // Clear userId if manually editing names
+      userId: (name === 'firstName' || name === 'lastName') ? null : prev.userId
+    }));
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    
+    // Handle checkbox inputs differently
+    if (type === 'checkbox') {
+      setFormData(prev => ({ ...prev, [name]: checked }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+    
+    // Special handling for certain fields
+    if (name === 'recurring') {
+      setFormData(prev => ({
+        ...prev,
+        isRecurring: value !== 'No',
+        recurring: value
+      }));
+    }
+
+    // Handle bookingCapacity as integer
+    if (name === 'bookingCapacity') {
+      const capacityValue = parseInt(value, 10) || 1; // Default to 1 if parsing fails
+      setFormData(prev => ({
+        ...prev,
+        bookingCapacity: capacityValue
+      }));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitLoading(true);
     setError('');
     setFormError({});
 
-    const loggedInUserId = localStorage.getItem('userId');
+    const loggedInUserId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
     if (!loggedInUserId) {
       setError('User not authenticated. Please log in again.');
       setSubmitLoading(false);
@@ -561,6 +668,7 @@ const Bookings = () => {
     let hasError = false;
     const errors = {};
 
+    // Enhanced validation
     if (!formData.firstName || !formData.lastName) {
       errors.name = 'First name and last name are required';
       hasError = true;
@@ -569,13 +677,12 @@ const Bookings = () => {
     if (!formData.startTime || !formData.endTime) {
       errors.time = 'Start and end times are required';
       hasError = true;
-    } else {
-      const start = convertTo24HourFormat(formData.startTime);
-      const end = convertTo24HourFormat(formData.endTime);
-      if (start >= end) {
-        errors.time = 'Start time must be before end time';
-        hasError = true;
-      }
+    }
+
+    // Validate bookingCapacity/pax
+    if (formData.bookingCapacity < 1) {
+      errors.bookingCapacity = 'Pax must be at least 1';
+      hasError = true;
     }
 
     if (!formData.roomId) {
@@ -583,25 +690,13 @@ const Bookings = () => {
       hasError = true;
     }
 
-    if (!formData.building) {
+    if (!formData.buildingId) {
       errors.building = 'Building is required';
       hasError = true;
     }
 
     if (formData.isRecurring && !formData.recurrenceEndDate) {
       errors.recurrence = 'Recurrence end date is required for recurring bookings';
-      hasError = true;
-    }
-
-    // Find the user ID from the first and last name
-    const selectedUser = users.find(
-      user => 
-        user.firstName.toLowerCase() === formData.firstName.toLowerCase() &&
-        user.lastName.toLowerCase() === formData.lastName.toLowerCase()
-    );
-    
-    if (!selectedUser && !formData.userId) {
-      errors.name = 'User not found. Please enter a registered first and last name.';
       hasError = true;
     }
 
@@ -612,6 +707,54 @@ const Bookings = () => {
     }
 
     try {
+      // Convert times to 24-hour format expected by the API
+      const startTime24 = convertTo24HourFormat(formData.startTime);
+      const endTime24 = convertTo24HourFormat(formData.endTime);
+      
+      // Create a timestamp for when the form is submitted
+      const now = new Date();
+      const timeSubmitted = now.toISOString();
+      
+      // Validate the timeSubmitted value before adding it to payload
+      console.log('Generated timeSubmitted:', timeSubmitted);
+      
+      // Ensure correct data types for IDs (convert to numbers if the API expects numbers)
+      const roomId = formData.roomId; // Keep as string for nvarchar field
+      const buildingId = formData.buildingId; // Keep as string for nvarchar field
+      const categoryId = Number(formData.categoryId); // Convert to number as expected by DB schema
+      
+      // Make sure date is in ISO format
+      const bookingDate = new Date(formData.date).toISOString().split('T')[0];
+      let recurrenceEndDate = null;
+      if (formData.isRecurring && formData.recurrenceEndDate) {
+        recurrenceEndDate = new Date(formData.recurrenceEndDate).toISOString().split('T')[0];
+      }
+      
+      // Create a payload with properly formatted date/time values and correct types
+      const payload = {
+        roomId: roomId,
+        userId: loggedInUserId ? Number(loggedInUserId) : (formData.userId ? Number(formData.userId) : Number(2)),
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        department: formData.department || '',
+        title: formData.title.trim(),
+        buildingId: buildingId,
+        categoryId: categoryId,
+        bookingCapacity: Number(formData.bookingCapacity) || 1,
+        date: bookingDate,
+        startTime: startTime24,
+        endTime: endTime24,
+        notes: formData.notes || '',
+        isRecurring: Boolean(formData.isRecurring),
+        isMealRoom: Boolean(formData.isMealRoom),
+        isBreakRoom: Boolean(formData.isBreakRoom),
+        recurrenceEndDate: recurrenceEndDate,
+        status: (formData.status || 'pending').toLowerCase(),
+        timeSubmitted: timeSubmitted,
+        remarks: formData.remarks || '',
+        changedBy: formData.changedBy || 'System'
+      };
+
       // Get the details of the logged-in user who is making this booking
       const adminResponse = await axios.get(`${API_BASE_URL}/users/${loggedInUserId}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -620,62 +763,69 @@ const Bookings = () => {
       const adminData = adminResponse.data;
       const changedByName = `${adminData.firstName} ${adminData.lastName}`;
 
-      const startTime24 = convertTo24HourFormat(formData.startTime);
-      const endTime24 = convertTo24HourFormat(formData.endTime);
-      
-      // Create a timestamp for the submission time
-      const now = new Date();
-      const timeSubmitted = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      // Add additional fields to payload
+      payload.changedBy = changedByName;
 
-      const payload = {
-        title: formData.title,
-        roomId: formData.roomId || parseInt(formData.room),
-        userId: formData.userId || selectedUser?.userId,
-        bookingCapacity: parseInt(formData.bookingCapacity) || 1,
-        date: formData.date,
-        startTime: startTime24,
-        endTime: endTime24,
-        notes: formData.notes,
-        isRecurring: formData.isRecurring,
-        isMealRoom: formData.isMealRoom,
-        isBreakRoom: formData.isBreakRoom,
-        recurrenceEndDate: formData.isRecurring ? formData.recurrenceEndDate : null,
-        status: formData.status || 'pending',
-        timeSubmitted: timeSubmitted,
-        remarks: formData.remarks || '',
-        changedBy: changedByName
-      };
+      console.log('Sending payload to server:', payload);
 
-      let responseBooking;
+      let response;
 
+      // Handle different API calls for create vs update
       if (isEditModalOpen && editBookingId) {
-        responseBooking = await axios.put(
+        payload.bookingId = Number(editBookingId) || editBookingId;
+        response = await axios.put(
           `${API_BASE_URL}/bookings/${editBookingId}`,
           payload,
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        console.log('Update response:', response.data);
       } else {
-        responseBooking = await axios.post(
+        response = await axios.post(
           `${API_BASE_URL}/bookings`,
           payload,
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        console.log('Create response:', response.data);
       }
 
+      // Success - reset form and close modal
       resetForm();
       setIsAddModalOpen(false);
       setIsEditModalOpen(false);
       fetchBookings();
     } catch (err) {
-      console.error('Booking error:', err.response?.data || err.message);
-      if (err.response?.data?.message) {
-        setError(err.response.data.message);
+      console.error('Booking error:', err);
+      
+      // More detailed error handling
+      if (err.response) {
+        console.error('Error status:', err.response.status);
+        console.error('Error data:', err.response.data);
+        
+        if (err.response.data?.message) {
+          setError(err.response.data.message);
+        } else if (err.response.data?.error) {
+          setError(err.response.data.error);
+        } else {
+          setError(`Server error (${err.response.status}). Please try again.`);
+        }
+      } else if (err.request) {
+        setError('Network error. Please check your connection.');
       } else {
         setError('Failed to save booking. Please try again.');
       }
     } finally {
       setSubmitLoading(false);
     }
+  };
+
+  // Add this missing resetForm function that will properly reset all fields
+
+  const resetForm = () => {
+    setFormData({...initialFormState});
+    setFormError({});
+    setCategories([]);
+    setAvailableRooms([]);
+    setEditBookingId(null);
   };
 
   // User search functionality
@@ -865,8 +1015,8 @@ const Bookings = () => {
             <input
               type="text"
               name="firstName"
-              defaultValue={formData.firstName} // Use defaultValue for uncontrolled input
-              onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
+              value={formData.firstName || ''}
+              onChange={handleNameChange}
               required
               placeholder="Enter first name"
               autoComplete="off"
@@ -879,8 +1029,8 @@ const Bookings = () => {
             <input
               type="text"
               name="lastName"
-              defaultValue={formData.lastName} // Use defaultValue for uncontrolled input
-              onBlur={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))} // Update state on blur
+              value={formData.lastName || ''}
+              onChange={handleNameChange}
               required
               placeholder="Enter last name"
               autoComplete="off"
@@ -905,57 +1055,90 @@ const Bookings = () => {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              name="status"
+              value={formData.status || 'pending'}
+              onChange={handleInputChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="declined">Declined</option>
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Building</label>
             <select
-              name="building"
-              value={formData.building}
-              onChange={handleBuildingChange} // Use the dedicated handler
+              name="buildingId"
+              value={formData.buildingId || ''}
+              onChange={handleBuildingChange}
               required
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className={`w-full p-2 border ${formError.building ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
             >
               <option value="">Select Building</option>
               {buildings.map(building => (
-                <option key={building} value={building}>{building}</option>
+                <option key={building.id} value={building.id}>
+                  {building.name}
+                </option>
               ))}
             </select>
+            {formError.building && <p className="text-red-500 text-xs mt-1">{formError.building}</p>}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
             <select
-              name="category"
-              value={formData.category}
-              onChange={handleCategoryChange} // Use the dedicated handler
+              name="categoryId"
+              value={formData.categoryId || ''}
+              onChange={handleCategoryChange}
               required
-              disabled={!formData.building}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              disabled={!formData.buildingId}
+              className={`w-full p-2 border ${formError.category ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500 ${!formData.buildingId ? 'bg-gray-100' : 'bg-white'}`}
             >
               <option value="">Select Category</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
+              {categories.map(category => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
                 </option>
               ))}
             </select>
+            {formError.category && <p className="text-red-500 text-xs mt-1">{formError.category}</p>}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
             <select
-              name="room"
-              value={formData.room}
-              onChange={handleInputChange}
+              name="roomId"
+              value={formData.roomId || ''}
+              onChange={handleRoomChange}
               required
-              disabled={!formData.category}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              disabled={!formData.categoryId}
+              className={`w-full p-2 border ${formError.room ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500 ${!formData.categoryId ? 'bg-gray-100' : 'bg-white'}`}
             >
               <option value="">Select Room</option>
-              {availableRooms.map((room) => (
-                <option key={room._id} value={room._id}>
-                  {room.roomName}
+              {availableRooms.map(room => (
+                <option key={room.roomId} value={room.roomId}>
+                  {room.roomName} {room.capacity ? `(Capacity: ${room.capacity})` : ''}
                 </option>
               ))}
             </select>
+            {formError.room && <p className="text-red-500 text-xs mt-1">{formError.room}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pax</label>
+            <input
+              type="number"
+              name="bookingCapacity"
+              value={formData.bookingCapacity || 1}
+              onChange={handleInputChange}
+              min="1"
+              required
+              className={`w-full p-2 border ${formError.bookingCapacity ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+            />
+            {formError.bookingCapacity && <p className="text-red-500 text-xs mt-1">{formError.bookingCapacity}</p>}
           </div>
 
           <div>
@@ -1004,50 +1187,94 @@ const Bookings = () => {
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Recurring</label>
-            <select
-              name="recurring"
-              value={formData.recurring}
-              onChange={handleInputChange}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="No">No</option>
-              <option value="Daily">Daily</option>
-              <option value="Weekly">Weekly</option>
-              <option value="Monthly">Monthly</option>
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            {/* Checkboxes row */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="isRecurring"
+                name="isRecurring"
+                checked={formData.isRecurring}
+                onChange={(e) => {
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    isRecurring: e.target.checked,
+                    recurring: e.target.checked ? 'Daily' : 'No',
+                    recurrenceEndDate: e.target.checked ? prev.recurrenceEndDate || formData.date : ''
+                  }))
+                }}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="isRecurring" className="ml-2 block text-sm text-gray-700">
+                Is this a recurring booking?
+              </label>
+            </div>
+
+            {/* Meal Room */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="isMealRoom"
+                name="isMealRoom"
+                checked={formData.isMealRoom}
+                onChange={(e) => setFormData((prev) => ({ ...prev, isMealRoom: e.target.checked }))}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="isMealRoom" className="ml-2 block text-sm text-gray-700">
+                Meal Room
+              </label>
+            </div>
           </div>
 
-          {formData.recurring !== 'No' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Recurrence End Date</label>
-              <input
-                type="date"
-                name="recurrenceEndDate"
-                value={formData.recurrenceEndDate}
-                onChange={handleInputChange}
-                required
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              />
+          {/* Conditional fields that appear when recurring is checked */}
+          {formData.isRecurring && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 border-t border-gray-200 pt-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Recurrence Pattern</label>
+                <select
+                  name="recurring"
+                  value={formData.recurring || "Daily"}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="Daily">Daily</option>
+                  <option value="Weekly">Weekly</option>
+                  <option value="Monthly">Monthly</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Recurrence End Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  name="recurrenceEndDate"
+                  value={formData.recurrenceEndDate || ""}
+                  onChange={handleInputChange}
+                  required={formData.isRecurring}
+                  min={formData.date} // Can't end before it starts
+                  className={`w-full p-2 border ${formError.recurrence ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+                />
+                {formError.recurrence && <p className="text-red-500 text-xs mt-1">{formError.recurrence}</p>}
+              </div>
             </div>
           )}
 
-          {isEdit && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleInputChange}
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="declined">Declined</option>
-              </select>
-            </div>
-          )}
+          {/* Break Room checkbox on its own row for better spacing */}
+          <div className="flex items-center mt-4">
+            <input
+              type="checkbox"
+              id="isBreakRoom"
+              name="isBreakRoom"
+              checked={formData.isBreakRoom}
+              onChange={(e) => setFormData((prev) => ({ ...prev, isBreakRoom: e.target.checked }))}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="isBreakRoom" className="ml-2 block text-sm text-gray-700">
+              Break Room
+            </label>
+          </div>
         </div>
 
         <div>
@@ -1058,6 +1285,18 @@ const Bookings = () => {
             onBlur={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} // Update state on blur
             rows="3"
             placeholder="Add any additional notes here"
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          ></textarea>
+        </div>
+
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Additional Remarks</label>
+          <textarea
+            name="remarks"
+            defaultValue={formData.remarks}
+            onBlur={(e) => setFormData((prev) => ({ ...prev, remarks: e.target.value }))}
+            rows="2"
+            placeholder="Add any additional remarks here"
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
           ></textarea>
         </div>
@@ -1130,6 +1369,11 @@ const Bookings = () => {
       : bVal.localeCompare(aVal);
   });
  
+  const handleStatusChange = (bookingId, status) => {
+    setSelectedBookingId(bookingId);
+    setSelectedStatus(status);
+    setIsStatusModalOpen(true);
+  };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
@@ -1344,16 +1588,23 @@ const Bookings = () => {
           try {
             await axios.put(
               `${API_BASE_URL}/bookings/${selectedBookingId}`,
-              { status: selectedStatus },
+              { 
+                status: selectedStatus,
+                changedBy: localStorage.getItem('username') || 'Admin User' 
+              },
               { headers: { Authorization: `Bearer ${token}` } }
             );
             fetchBookings(); // Refresh bookings
             setIsStatusModalOpen(false);
           } catch (err) {
             console.error('Error updating status:', err);
+            setError('Failed to update booking status. Please try again.');
           }
         }}
       />
+
+     
+ 
     </div>
   );
 };

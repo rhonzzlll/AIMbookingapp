@@ -14,6 +14,9 @@ const app = express();
 const db = require('./models');
 const sequelize = db.sequelize;
 
+// SET THE DB TO THE APP - THIS IS THE CRITICAL ADDITION
+app.set('db', db);
+
 // Configure multer storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {

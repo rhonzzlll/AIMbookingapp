@@ -310,6 +310,15 @@ const BuildingManagement = () => {
     setExpandedBuilding(expandedBuilding === buildingId ? null : buildingId);
   };
 
+  // Function to signal that building data has changed
+  const signalBuildingDataChanged = () => {
+    // Store a timestamp in sessionStorage to signal data change
+    sessionStorage.setItem('buildingsLastUpdated', Date.now().toString());
+    // Also dispatch a custom event that HomePage can listen for
+    const event = new CustomEvent('buildingsDataChanged');
+    window.dispatchEvent(event);
+  };
+
   // Handle saving building data (create or update)
   const handleSaveBuilding = async (buildingData) => {
     try {
@@ -357,6 +366,9 @@ const BuildingManagement = () => {
         alert('Building added successfully!');
       }
 
+      // Signal that building data has changed
+      signalBuildingDataChanged();
+      
       closeModal();
     } catch (error) {
       console.error('Error saving building:', error);
@@ -380,6 +392,10 @@ const BuildingManagement = () => {
 
       // Remove the building from the state after successful deletion
       setBuildings(buildings.filter(building => building.buildingId !== buildingId));
+      
+      // Signal that building data has changed
+      signalBuildingDataChanged();
+      
       alert('Building deleted successfully!');
     } catch (error) {
       console.error('Error deleting building:', error);

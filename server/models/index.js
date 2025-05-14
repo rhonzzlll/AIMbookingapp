@@ -27,8 +27,23 @@ fs
     );
   })
   .forEach(file => {
-    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
-    db[model.name] = model;
+    try {
+      // Log which file we're trying to load
+      console.log(`Loading model from: ${file}`);
+      
+      const modelDefinition = require(path.join(__dirname, file));
+      
+      // Check if the export is a function
+      if (typeof modelDefinition === 'function') {
+        const model = modelDefinition(sequelize, Sequelize.DataTypes);
+        db[model.name] = model;
+        console.log(`Successfully loaded model: ${model.name}`);
+      } else {
+        console.error(`Warning: Model file ${file} does not export a function. Skipping.`);
+      }
+    } catch (error) {
+      console.error(`Error loading model from ${file}:`, error);
+    }
   });
 
 Object.keys(db).forEach(modelName => {

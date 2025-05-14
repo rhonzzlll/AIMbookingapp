@@ -11,9 +11,17 @@ import AIMImage from '../../images/AIM.png';
 import ACCImage from '../../images/ACC.png';
 import FacilityModal from '../../components/FacilityModal';
 
+// Base URL for API requests
+const API_BASE_URL = 'http://localhost:5000';
+
+const token = localStorage.getItem('token');
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${token}`
+};
+
 const HomePage = () => {
   const userId = localStorage.getItem('userId'); // Retrieve userId from localStorage
-  const token = localStorage.getItem('token'); // Get token for authenticated requests
 
   const [user, setUser] = useState({
     firstName: '',
@@ -23,6 +31,7 @@ const HomePage = () => {
   });
 
   const [bookings, setBookings] = useState([]);
+  const [facilities, setFacilities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('upcoming');
@@ -32,7 +41,7 @@ const HomePage = () => {
     const fetchUserAndBookings = async () => {
       try {
         // Fetch user data
-        const userResponse = await axios.get(`http://localhost:5000/api/users/${userId}`, {
+        const userResponse = await axios.get(`${API_BASE_URL}/api/users/${userId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -46,7 +55,8 @@ const HomePage = () => {
           department: userData.department || '',
         });
 
-        const bookingsResponse = await axios.get(`http://localhost:5000/api/bookings/user/${userId}`, {
+        // Fetch user's bookings
+        const bookingsResponse = await axios.get(`${API_BASE_URL}/api/bookings/user/${userId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -58,14 +68,47 @@ const HomePage = () => {
           setBookings([]);
         }
 
+        // Improved buildings/facilities fetch with error handling
+        const facilitiesResponse = await axios.get(`${API_BASE_URL}/api/buildings`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        console.log('Raw facilities data:', facilitiesResponse.data);
+
+        if (facilitiesResponse.data && Array.isArray(facilitiesResponse.data)) {
+          // Simplified mapping to ensure we get the critical fields
+          const processedFacilities = facilitiesResponse.data.map(facility => {
+            return {
+              buildingId: facility.buildingId || '',
+              buildingName: facility.buildingName || 'Unnamed Facility',
+              buildingDescription: facility.buildingDescription || 'No description available',
+              buildingImage: facility.buildingImage || null
+            };
+          });
+          
+          setFacilities(processedFacilities);
+          console.log('Processed facilities:', processedFacilities);
+        } else {
+          console.log('No facilities found or data is not an array');
+          setFacilities([]);
+        }
+
         setLoading(false);
       } catch (err) {
         console.error('Error fetching data:', err);
+        if (err.response) {
+          console.error('Response status:', err.response.status);
+          console.error('Response data:', err.response.data);
+        }
+        
         if (err.response && err.response.status === 404) {
           setBookings([]);
+          setFacilities([]);
           setLoading(false);
         } else {
-          setError('Failed to fetch data');
+          setError(`Failed to fetch data: ${err.message}`);
           setLoading(false);
         }
       }
@@ -99,6 +142,14 @@ const HomePage = () => {
   // Limit bookings to 5 for "upcoming" and "past" tabs
   const displayedBookings =
     activeTab === 'all' ? filteredBookings : filteredBookings.slice(0, visibleCount);
+
+  // Function to get image by building name
+  const getImageByName = (name) => {
+    if (name.toLowerCase().includes('conference center')) {
+      return ACCImage;
+    } 
+    return AIMImage;
+  };
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -211,20 +262,26 @@ const HomePage = () => {
                 <div>
                   <h2 className="text-xl font-bold mb-4 text-black">Available Facilities</h2>
                   <div className="grid md:grid-cols-2 gap-6">
-                    <FacilityCard
-                      imageSrc={AIMImage}
-                      title="Asian Institute of Management Building"
-                      description="Contemporary venue perfect for conferences, workshops, and high-level discussions."
-                      bookingLink="/aim-rooms"
-                   
-                    />
-                    <FacilityCard
-                      imageSrc={ACCImage}
-                      title="Asian Institute of Management Conference Center Building"
-                      description="Modern space for meetings, seminars, and executive discussions."
-                      bookingLink="/acc-rooms"
-                      
-                    />
+                    {facilities.length > 0 ? (
+                      facilities.map((facility) => (
+                        <FacilityCard
+                          key={facility.buildingId}
+                          imageSrc={facility.buildingImage || getImageByName(facility.buildingName)}
+                          title={facility.buildingName}
+                          description={facility.buildingDescription || "Available for booking"}
+                          bookingLink={`/building/${facility.buildingId}`}
+                          features={facility.amenities || []}
+                          lastUpdated={facility.lastUpdated}
+                        />
+                      ))
+                    ) : (
+                      <div className="text-center py-8 col-span-2 bg-white bg-opacity-80 rounded-xl p-6">
+                        <div className="text-gray-400 mb-2">
+                          <AlertCircle size={32} className="mx-auto" />
+                        </div>
+                        <p className="text-gray-500">No facilities available at the moment</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -444,14 +501,45 @@ const BookingCard = ({ booking }) => {
 
 // Facility Card Component
 const FacilityCard = ({ imageSrc, title, description, bookingLink, features }) => {
+  const [imgError, setImgError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const handleImageError = () => {
+    console.log(`Error loading image for ${title}`);
+    setImgError(true);
+    setIsLoading(false);
+  };
+  
+  const handleImageLoad = () => {
+    setIsLoading(false);
+  };
+  
   return (
     <div className="bg-white text-gray-800 rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-      <div className="h-48 overflow-hidden">
-        <img src={imageSrc} alt={title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
+      <div className="h-48 overflow-hidden relative">
+        {/* Show loading indicator while image is loading */}
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-0">
+            <div className="w-8 h-8 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+          </div>
+        )}
+        
+        {/* Use fallback image logic */}
+        <img 
+          src={imgError ? '/placeholder-building.png' : (imageSrc || '/placeholder-building.png')}
+          alt={title} 
+          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300 relative z-10" 
+          onError={handleImageError}
+          onLoad={handleImageLoad}
+        />
       </div>
+      
       <div className="p-6">
-        <h3 className="text-xl font-bold mb-2">{title}</h3>
-        <p className="text-gray-600 text-sm mb-4">{description}</p>
+        <div className="flex justify-between items-start mb-2">
+          <h3 className="text-xl font-bold">{title || 'Unnamed Facility'}</h3>
+        </div>
+        
+        <p className="text-gray-600 text-sm mb-4">{description || 'Available for booking'}</p>
 
         {features && features.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4">

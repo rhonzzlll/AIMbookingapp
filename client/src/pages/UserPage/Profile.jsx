@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import Header from './Header';
-// import AIMbg from '../../images/AIMbg.png';
 import home from "../../images/home.png";
-
+import imageCompression from 'browser-image-compression';
 
 const Profile = () => {
   const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
-  const userId = localStorage.getItem("_id"); // Retrieve userId from localStorage
-  const token = localStorage.getItem("token"); // Get token for authenticated requests
-  const userRole = localStorage.getItem("role"); // Get user role
+  const userId = localStorage.getItem("userId");
+  const token = localStorage.getItem("token");
+  const userRole = localStorage.getItem("role");
+  const API_BASE_URL = 'http://localhost:5000/api';
   
   const [user, setUser] = useState({
     firstName: '',
@@ -22,7 +22,7 @@ const Profile = () => {
     role: ''
   });
 
-  const [profileImage, setProfileImage] = useState(null);
+  const [profileImageFile, setProfileImageFile] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -41,8 +41,7 @@ const Profile = () => {
     const fetchUserData = async () => {
       try {
         console.log(`Fetching user data for userId: ${userId}`);
-        // Try to fetch from user endpoint first
-        const response = await axios.get(`http://localhost:5000/api/users/${userId}`, {
+        const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
           headers: { 
             Authorization: `Bearer ${token}`
           }
@@ -53,33 +52,31 @@ const Profile = () => {
           firstName: userData.firstName,
           lastName: userData.lastName,
           department: userData.department || '',
-          birthdate: userData.birthdate ? userData.birthdate.split('T')[0] : '', 
+          birthdate: userData.birthdate || '', // Handle Sequelize DATEONLY format
           email: userData.email,
           profileImage: userData.profileImage || '',
           role: userData.role || userRole || ''
         });
         
+        // Set preview image with proper URL path
         if (userData.profileImage) {
-          setPreviewImage(userData.profileImage);
+          setPreviewImage(`${API_BASE_URL}/uploads/${userData.profileImage}`);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
         
-        // If API fails, try to use localStorage data and email from URL
         setUseLocalData(true);
         
-        // Get firstName and lastName from localStorage if available
         const firstName = localStorage.getItem("firstName") || '';
         const lastName = localStorage.getItem("lastName") || '';
         const email = localStorage.getItem("email") || '';
         
-        // Set the user data from localStorage
         setUser({
           firstName,
           lastName,
           email,
-          department: 'ICT', // Default from your MongoDB record
-          role: userRole || 'User', // Default from your MongoDB record
+          department: 'ICT', 
+          role: userRole || 'User',
           profileImage: '',
           birthdate: ''
         });
@@ -107,28 +104,50 @@ const Profile = () => {
     setPasswords({ ...passwords, [name]: value });
   };
 
-  // Handle profile image selection
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files);
-    const promises = files.map((file) => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result); // Base64 string
-        reader.onerror = (error) => reject(error);
-        reader.readAsDataURL(file);
-      });
-    });
+  // Handle profile image selection with compression
+  const handleImageChange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        setLoading(true);
 
-    Promise.all(promises)
-      .then((base64Images) => {
-        setProfileImage(base64Images); // Store Base64 strings in state
-      })
-      .catch((error) => {
-        console.error('Error converting images to Base64:', error);
-      });
+        // Validate file size (10MB limit)
+        if (file.size > 10 * 1024 * 1024) {
+          setError('Image file is too large. Please select an image under 10MB.');
+          setLoading(false);
+          return;
+        }
+
+        setProfileImageFile(file);
+
+        // Compress image for preview
+        const previewOptions = {
+          maxSizeMB: 0.5,
+          maxWidthOrHeight: 800,
+          useWebWorker: true,
+          fileType: 'image/jpeg',
+          initialQuality: 0.8,
+        };
+
+        const compressedFile = await imageCompression(file, previewOptions);
+
+        // Generate preview
+        const reader = new FileReader();
+        reader.onload = () => {
+          setPreviewImage(reader.result);
+        };
+        reader.readAsDataURL(compressedFile);
+
+      } catch (error) {
+        console.error('Error processing image:', error);
+        setError('Failed to process image. Please try a different file.');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
-  // Handle form submission
+  // Handle form submission - updated for Multer
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -136,22 +155,26 @@ const Profile = () => {
     setLoading(true);
 
     try {
-      const updateData = {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        department: user.department,
-        birthdate: user.birthdate,
-        email: user.email,
-        profileImage, // Send Base64 strings
-      };
+      // Create FormData for Multer
+      const formData = new FormData();
+      formData.append('firstName', user.firstName);
+      formData.append('lastName', user.lastName);
+      formData.append('department', user.department);
+      formData.append('birthdate', user.birthdate || '');
+      formData.append('email', user.email);
+      
+      // Only append image if a new one is selected
+      if (profileImageFile) {
+        formData.append('profileImage', profileImageFile);
+      }
 
       const response = await axios.put(
-        `http://localhost:5000/api/users/${userId}`,
-        updateData,
+        `${API_BASE_URL}/users/${userId}`,
+        formData,
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+            'Content-Type': 'multipart/form-data',
           },
         }
       );
@@ -159,6 +182,10 @@ const Profile = () => {
       if (response.status === 200) {
         setSuccess('Profile updated successfully');
         toast.success('Profile updated successfully');
+        
+        // Update localStorage with new user data
+        localStorage.setItem("firstName", user.firstName);
+        localStorage.setItem("lastName", user.lastName);
       } else {
         setError('Failed to update profile. Please try again.');
         toast.error('Failed to update profile');
@@ -172,7 +199,7 @@ const Profile = () => {
     }
   };
 
-  // Handle password change
+  // Handle password change - updated for Sequelize model
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
 
@@ -186,9 +213,9 @@ const Profile = () => {
 
     try {
       await axios.put(
-        'http://localhost:5000/api/auth/update-password', 
+        `${API_BASE_URL}/auth/update-password`, 
         {
-          email: user.email,
+          userId: userId,
           currentPassword: passwords.oldPassword,
           newPassword: passwords.newPassword
         },
@@ -212,10 +239,8 @@ const Profile = () => {
     }
   };
 
- 
   useEffect(() => {
     if (useLocalData && userId === '67f35bf80888a27d080e2eb0') {
-     
       setUser({
         firstName: 'John',
         lastName: 'Jones',
@@ -231,30 +256,29 @@ const Profile = () => {
 
   return (
     <div className="relative w-full overflow-x-auto">
-          {/* Fixed Background Image and Overlay */}
-            <div className="fixed inset-0 z-0">
-              <div
-                className="absolute inset-0"
-                style={{
-                  backgroundImage: `url(${home})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                  backgroundRepeat: "no-repeat",
-                  backgroundAttachment: "fixed",
-                }}
-              />
-              <div className="absolute inset-0 bg-black bg-opacity-10" />
-            </div>
-    
-      
-          {/* Scrollable Foreground Layer */}
-          <div className="relative z-10 flex flex-col min-h-screen w-full">
-            {/* Fixed Header */}
-            <header className="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
-              <Header />
-            </header>
+      {/* Fixed Background Image and Overlay */}
+      <div className="fixed inset-0 z-0">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${home})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            backgroundAttachment: "fixed",
+          }}
+        />
+        <div className="absolute inset-0 bg-black bg-opacity-10" />
+      </div>
 
-            <div>
+      {/* Scrollable Foreground Layer */}
+      <div className="relative z-10 flex flex-col min-h-screen w-full">
+        {/* Fixed Header */}
+        <header className="fixed top-0 left-0 w-full z-50 bg-white shadow-md">
+          <Header />
+        </header>
+
+        <div className="container mx-auto px-4 pt-24 pb-8">
           <h1 className="text-2xl font-bold mb-6">Profile Information</h1>
           {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
           {success && <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">{success}</div>}
@@ -306,16 +330,6 @@ const Profile = () => {
                       onChange={handleImageChange}
                     />
                   </label>
-                </div>
-                <div className="flex space-x-4">
-                  {profileImage && profileImage.map((src, index) => (
-                    <img
-                      key={index}
-                      src={src}
-                      alt={`Preview ${index + 1}`}
-                      className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-                    />
-                  ))}
                 </div>
               </div>
 
@@ -457,8 +471,7 @@ const Profile = () => {
             </form>
           </div>
         </div>
-
-          </div>
+      </div>
     </div>       
   );
 };
