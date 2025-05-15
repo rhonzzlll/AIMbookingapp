@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
+import jwt_decode from 'jwt-decode'; // Import for token decoding
 
 const API_BASE_URL = 'http://localhost:5000/api';
 const DEPARTMENTS = ['Engineering', 'Marketing', 'HR', 'Finance', 'Sales', 'IT', 'ICT'];
@@ -15,12 +16,43 @@ const generateTimeOptions = () => [
 const BookingForm = ({ isEdit, initialData, onClose }) => {
   const token = localStorage.getItem('token');
   
+  // Get user information from token and API
+  const getUserInfo = useCallback(async () => {
+    if (!token) return {};
+    
+    try {
+      const decoded = jwt_decode(token);
+      // Get userId from token or localStorage
+      const userId = decoded.userId || localStorage.getItem('userId');
+      
+      if (!userId) return {};
+      
+      // Fetch complete user data from API
+      const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      const userData = response.data;
+      
+      return {
+        userId: userData._id || userId,
+        firstName: userData.firstName || decoded.firstName || '',
+        lastName: userData.lastName || decoded.lastName || '',
+        department: userData.department || '',
+        email: userData.email || '',
+      };
+    } catch (error) {
+      console.error('Error getting user info:', error);
+      return {};
+    }
+  }, [token]);
+  
   // Initial form state
   const initialFormState = {
     title: '',
     firstName: '',
     lastName: '',
-    userId: null,
+    userId: '',
     department: '',
     categoryId: '',
     roomId: null,
@@ -44,6 +76,8 @@ const BookingForm = ({ isEdit, initialData, onClose }) => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState({});
+  const [userInfo, setUserInfo] = useState({});
+  const [loadingUser, setLoadingUser] = useState(true);
   
   // Data state
   const [buildings, setBuildings] = useState([]);
@@ -54,12 +88,40 @@ const BookingForm = ({ isEdit, initialData, onClose }) => {
   // Time options
   const timeOptions = useMemo(() => generateTimeOptions(), []);
 
+  // Fetch user data
+  useEffect(() => {
+    const fetchUserData = async () => {
+      setLoadingUser(true);
+      try {
+        const info = await getUserInfo();
+        setUserInfo(info);
+        
+        // Update form data with user info
+        setFormData(prev => ({
+          ...prev,
+          firstName: info.firstName || prev.firstName,
+          lastName: info.lastName || prev.lastName,
+          userId: info.userId || prev.userId,
+          department: info.department || prev.department
+        }));
+      } catch (err) {
+        console.error('Error fetching user data:', err);
+      } finally {
+        setLoadingUser(false);
+      }
+    };
+    
+    fetchUserData();
+  }, [getUserInfo]);
+
   // Fetch buildings and rooms data when component mounts
   useEffect(() => {
     const fetchRoomsData = async () => {
       try {
+        // Get all rooms with detailed information
         const response = await axios.get(`${API_BASE_URL}/rooms`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
+          params: { includeDetails: true } // Request detailed information
         });
         
         setAllRooms(response.data);
@@ -138,46 +200,8 @@ const BookingForm = ({ isEdit, initialData, onClose }) => {
     return Object.values(uniqueCategoriesMap).sort((a, b) => a.name.localeCompare(b.name));
   }, [allRooms]);
 
-  // Handle building selection
-  const handleBuildingChange = (e) => {
-    const buildingId = e.target.value;
-    handleBuildingChangeWithId(buildingId);
-  };
-  
-  const handleBuildingChangeWithId = (buildingId) => {
-    // Update form data and reset dependent fields
-    setFormData(prev => ({
-      ...prev,
-      buildingId: buildingId,
-      categoryId: '',
-      roomId: null
-    }));
-    
-    // Update available categories
-    const categoriesForBuilding = getCategoriesForBuilding(buildingId);
-    setCategories(categoriesForBuilding);
-    
-    // Clear available rooms
-    setAvailableRooms([]);
-    
-    // Clear any building-related errors
-    setFormError(prev => ({ ...prev, building: '', room: '' }));
-  };
-
-  // Handle category selection
-  const handleCategoryChange = (e) => {
-    const categoryId = e.target.value;
-    handleCategoryChangeWithId(categoryId);
-  };
-  
-  const handleCategoryChangeWithId = (categoryId) => {
-    // Update form data
-    setFormData(prev => ({
-      ...prev,
-      categoryId: categoryId,
-      roomId: null
-    }));
-    
+  // Check room availability
+  const checkRoomAvailability = async (roomId, date, startTime, endTime) => {
     // Filter available rooms based on building and category
     const buildingId = formData.buildingId;
     const roomsForBuildingAndCategory = allRooms.filter(room => {
@@ -330,13 +354,15 @@ const BookingForm = ({ isEdit, initialData, onClose }) => {
       return `${hours}:${minutes}`;
     };
     
-    // Prepare submission data
+    // Prepare submission data - Use userId from localStorage to match HomePage
+    const userId = localStorage.getItem('userId');
+    
     const bookingData = {
       ...formData,
       isRecurring: formData.recurring !== 'No',
       startTime: convertTo24HourFormat(formData.startTime),
       endTime: convertTo24HourFormat(formData.endTime),
-      // Add other fields for API as needed
+      userId: userId || userInfo.userId || userInfo.id // Prioritize localStorage userId
     };
     
     try {
@@ -530,7 +556,7 @@ const BookingForm = ({ isEdit, initialData, onClose }) => {
               </option>
             ))}
           </select>
-          {formError.startTime && <p className="text-red-500 text-xs mt-1">{formError.startTime}</p>}
+          {formError.startTime && <p className="text-red-500 text-xs mt-1">{formError.startTime}</p>}z
           {formError.time && <p className="text-red-500 text-xs mt-1">{formError.time}</p>}
         </div>
 

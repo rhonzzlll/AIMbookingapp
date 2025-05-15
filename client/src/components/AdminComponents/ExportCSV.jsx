@@ -150,7 +150,7 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
           booking.department,
           booking.roomName,
           `${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`,
-          booking.attendees || '-',
+          booking.bookingCapacity || '-', // <-- changed from booking.attendees
           formatDate(booking.date),
           booking.notes || 'REFER TO TFO'
         ]);
@@ -401,7 +401,7 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
                         {`${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`}
                       </td>
                       <td className="px-4 py-2 border-r border-gray-200 text-sm text-center">
-                        {booking.attendees || '-'}
+                        {booking.bookingCapacity || '-'}
                       </td>
                       <td className="px-4 py-2 border-r border-gray-200 text-sm text-center">
                         {formatDate(booking.date)}

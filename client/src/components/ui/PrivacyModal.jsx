@@ -42,7 +42,7 @@ const PrivacyModal = ({ isOpen, onOpenChange, onConfirm }) => {
             </p>
 
             <p>
-              By voluntarily submitting this form, you are hereby allowing AIM Conference Center Manila (ACCM) to collect, use, process, consolidate, share, store, and retain your personal data. The information collected from this form will be recorded in a database accessed only by authorized ACCM personnel. ACCM will use your personal data to process this form along with related activities.
+              By voluntarily submitting this form, you are hereby allowing AIM Conference Center Manila (ACC) to collect, use, process, consolidate, share, store, and retain your personal data. The information collected from this form will be recorded in a database accessed only by authorized ACC personnel. ACC will use your personal data to process this form along with related activities.
             </p>
 
             <p>

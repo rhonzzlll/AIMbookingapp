@@ -5,10 +5,9 @@ import { Link } from 'react-router-dom';
 import Header from './Header';
 import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, User } from 'lucide-react';
 import AIMLogo from "../../images/AIM_Logo.png";
-//import AIMbg from "../../images/AIM_bldg.jpng";
+// import AIMbg from "../../images/AIM_bldg.jpng";
 import home from "../../images/home.png";
-import AIMImage from '../../images/AIM.png';
-import ACCImage from '../../images/ACC.png';
+ 
 import FacilityModal from '../../components/FacilityModal';
 
 // Base URL for API requests
@@ -19,6 +18,10 @@ const headers = {
   'Content-Type': 'application/json',
   'Authorization': `Bearer ${token}`
 };
+
+// Default images for facilities when specific images aren't available
+const AIMImage = "/placeholder-building.png";
+const ACCImage = "/placeholder-building.png";
 
 const HomePage = () => {
   const userId = localStorage.getItem('userId'); // Retrieve userId from localStorage
@@ -36,11 +39,62 @@ const HomePage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('upcoming');
   const [visibleCount, setVisibleCount] = useState(5); // Limit to 5 bookings by default
+  const [showFacilityModal, setShowFacilityModal] = useState(false);
+  const [buildingsLoading, setBuildingsLoading] = useState(true);
+  const [buildingsError, setBuildingsError] = useState(null);
+
+  // Fetch buildings from API
+  const fetchBuildings = async () => {
+    setBuildingsLoading(true);
+    setBuildingsError(null);
+    
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/buildings`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      console.log('Raw facilities data:', response.data);
+      
+      if (response.data && Array.isArray(response.data)) {
+        // Process building data to ensure consistent structure
+        const processedFacilities = response.data.map(facility => {
+          // Check if image URL is already complete or needs to be prefixed with API URL
+          let imageUrl = facility.buildingImageUrl || facility.buildingImage;
+          if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+            imageUrl = `${API_BASE_URL}/uploads/${imageUrl}`;
+          } else if (imageUrl && imageUrl.startsWith('/')) {
+            imageUrl = `${API_BASE_URL}${imageUrl}`;
+          }
+          
+          return {
+            buildingId: facility.buildingId || '',
+            buildingName: facility.buildingName || 'Unnamed Facility',
+            buildingDescription: facility.buildingDescription || 'No description available',
+            buildingImage: imageUrl,
+            amenities: facility.amenities || []
+          };
+        });
+        
+        setFacilities(processedFacilities);
+        console.log('Processed facilities:', processedFacilities);
+      } else {
+        setFacilities([]);
+        console.log('No facilities found or data is not an array');
+      }
+    } catch (err) {
+      console.error('Error fetching buildings:', err);
+      setBuildingsError('Failed to load buildings');
+    } finally {
+      setBuildingsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchUserAndBookings = async () => {
       try {
-        // Fetch user data
+        // Get user data from API
         const userResponse = await axios.get(`${API_BASE_URL}/api/users/${userId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -54,72 +108,63 @@ const HomePage = () => {
           profileImage: userData.profileImage || '/default-avatar.png',
           department: userData.department || '',
         });
-
-        // Fetch user's bookings
-        const bookingsResponse = await axios.get(`${API_BASE_URL}/api/bookings/user/${userId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (bookingsResponse.data && Array.isArray(bookingsResponse.data)) {
-          setBookings(bookingsResponse.data);
-        } else {
-          setBookings([]);
-        }
-
-        // Improved buildings/facilities fetch with error handling
-        const facilitiesResponse = await axios.get(`${API_BASE_URL}/api/buildings`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        console.log('Raw facilities data:', facilitiesResponse.data);
-
-        if (facilitiesResponse.data && Array.isArray(facilitiesResponse.data)) {
-          // Simplified mapping to ensure we get the critical fields
-          const processedFacilities = facilitiesResponse.data.map(facility => {
-            return {
-              buildingId: facility.buildingId || '',
-              buildingName: facility.buildingName || 'Unnamed Facility',
-              buildingDescription: facility.buildingDescription || 'No description available',
-              buildingImage: facility.buildingImage || null
-            };
+        
+        // Fetch bookings but handle 404 gracefully
+        try {
+          const bookingsResponse = await axios.get(`${API_BASE_URL}/api/bookings/user/${userId}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           });
           
-          setFacilities(processedFacilities);
-          console.log('Processed facilities:', processedFacilities);
-        } else {
-          console.log('No facilities found or data is not an array');
-          setFacilities([]);
-        }
-
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        if (err.response) {
-          console.error('Response status:', err.response.status);
-          console.error('Response data:', err.response.data);
+          setBookings(bookingsResponse.data || []);
+        } catch (bookingsErr) {
+          console.log('No bookings found or bookings API not available:', bookingsErr);
+          // Just set empty bookings instead of showing an error
+          setBookings([]);
         }
         
-        if (err.response && err.response.status === 404) {
-          setBookings([]);
-          setFacilities([]);
-          setLoading(false);
-        } else {
-          setError(`Failed to fetch data: ${err.message}`);
-          setLoading(false);
-        }
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching user data:', err);
+        setError('Failed to load user profile');
+        setLoading(false);
       }
     };
-
+    
+    // Call the function if userId and token exist
     if (userId && token) {
       fetchUserAndBookings();
+      fetchBuildings();
     } else {
       setError('User not authenticated');
       setLoading(false);
     }
+    
+    // Listen for building data changes from the admin panel
+    const handleBuildingsDataChanged = () => {
+      fetchBuildings();
+    };
+
+    // Add event listener for building data changes
+    window.addEventListener('buildingsDataChanged', handleBuildingsDataChanged);
+
+    // Check sessionStorage for updates
+    const checkForBuildingUpdates = () => {
+      const lastUpdated = sessionStorage.getItem('buildingsLastUpdated');
+      if (lastUpdated && lastUpdated !== localStorage.getItem('lastBuildingFetch')) {
+        fetchBuildings();
+        localStorage.setItem('lastBuildingFetch', lastUpdated);
+      }
+    };
+
+    // Check for updates periodically
+    const intervalId = setInterval(checkForBuildingUpdates, 5000);
+
+    return () => {
+      window.removeEventListener('buildingsDataChanged', handleBuildingsDataChanged);
+      clearInterval(intervalId);
+    };
   }, [userId, token]);
 
   // Filter bookings based on active tab
@@ -129,12 +174,14 @@ const HomePage = () => {
 
     if (!bookingDate) return false;
 
-    const today = new Date();
+    // Strip time to compare just the date part
+    const bookingDay = new Date(bookingDate.toDateString());
+    const todayDay = new Date(new Date().toDateString());
 
     if (activeTab === 'upcoming') {
-      return bookingDate >= today;
+      return bookingDay >= todayDay;
     } else if (activeTab === 'past') {
-      return bookingDate < today;
+      return bookingDay < todayDay;
     }
     return true; // all tab
   });
@@ -143,9 +190,8 @@ const HomePage = () => {
   const displayedBookings =
     activeTab === 'all' ? filteredBookings : filteredBookings.slice(0, visibleCount);
 
-  // Function to get image by building name
-  const getImageByName = (name) => {
-    if (name.toLowerCase().includes('conference center')) {
+   const getImageByName = (name) => {
+    if (name && name.toLowerCase().includes('conference center')) {
       return ACCImage;
     } 
     return AIMImage;
@@ -178,7 +224,7 @@ const HomePage = () => {
         </header>
 
         {/* Main content with dark overlay */}
-        <main className="pt-16 text-white flex-grow">
+        <main className="pt-24 text-white flex-grow">
           {/* Hero Section */}
           <div className="container mx-auto px-4 pb-4 text-center">
             <h1 className="text-4xl font-bold">Welcome, {user.firstName}!</h1>
@@ -234,7 +280,9 @@ const HomePage = () => {
 
                   <div
                     className={`space-y-4 ${
-                      displayedBookings.length > 3 ? 'max-h-96 overflow-y-auto' : ''
+                      activeTab === 'all' && displayedBookings.length > 3 
+                        ? 'max-h-96 overflow-y-auto' 
+                        : ''
                     }`}
                   >
                     {displayedBookings.length > 0 ? (
@@ -247,23 +295,49 @@ const HomePage = () => {
                           <AlertCircle size={32} className="mx-auto" />
                         </div>
                         <p className="text-gray-500">No bookings found</p>
-                        <Link
-                          to="/book-room"
+                        <button
+                          onClick={() => setShowFacilityModal(true)}
                           className="mt-4 text-blue-600 text-sm font-medium hover:underline block"
                         >
                           Book a room now
-                        </Link>
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Facilities */}
+                {/* Facilities - Now Dynamic */}
                 <div>
                   <h2 className="text-xl font-bold mb-4 text-black">Available Facilities</h2>
-                  <div className="grid md:grid-cols-2 gap-6">
-                    {facilities.length > 0 ? (
-                      facilities.map((facility) => (
+                  
+                  {buildingsLoading ? (
+                    <div className="flex justify-center items-center py-8">
+                      <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                      <p className="ml-2 text-black">Loading facilities...</p>
+                    </div>
+                  ) : buildingsError ? (
+                    <div className="text-center py-8 bg-white bg-opacity-90 rounded-xl p-4">
+                      <div className="text-red-500 mb-2">
+                        <AlertCircle size={32} className="mx-auto" />
+                      </div>
+                      <p className="text-gray-800">{buildingsError}</p>
+                      <button
+                        onClick={fetchBuildings}
+                        className="mt-4 text-blue-600 text-sm font-medium hover:underline"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  ) : facilities.length === 0 ? (
+                    <div className="text-center py-8 col-span-2 bg-white bg-opacity-80 rounded-xl p-6">
+                      <div className="text-gray-400 mb-2">
+                        <AlertCircle size={32} className="mx-auto" />
+                      </div>
+                      <p className="text-gray-500">No facilities available at the moment</p>
+                    </div>
+                  ) : (
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {facilities.map((facility) => (
                         <FacilityCard
                           key={facility.buildingId}
                           imageSrc={facility.buildingImage || getImageByName(facility.buildingName)}
@@ -271,23 +345,15 @@ const HomePage = () => {
                           description={facility.buildingDescription || "Available for booking"}
                           bookingLink={`/building/${facility.buildingId}`}
                           features={facility.amenities || []}
-                          lastUpdated={facility.lastUpdated}
                         />
-                      ))
-                    ) : (
-                      <div className="text-center py-8 col-span-2 bg-white bg-opacity-80 rounded-xl p-6">
-                        <div className="text-gray-400 mb-2">
-                          <AlertCircle size={32} className="mx-auto" />
-                        </div>
-                        <p className="text-gray-500">No facilities available at the moment</p>
-                      </div>
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
-
+          
           {/* Footer */}
           <footer className="bg-blue-900 text-white w-full">
             <div className="px-4 py-10">
@@ -337,9 +403,14 @@ const HomePage = () => {
           </footer>
         </main>
       </div>
+      
+      {/* Facility Modal */}
+      {showFacilityModal && (
+        <FacilityModal onClose={() => setShowFacilityModal(false)} />
+      )}
     </div>
   );
-}
+};
 
 // Loading State Component
 const LoadingState = () => (
@@ -411,7 +482,7 @@ const BookingCard = ({ booking }) => {
         return format(date, 'h:mm a');
       }
       
-      return timeString; // Return as is if format is unknown
+      return timeString;  // Return as is if format is unknown
     } catch (error) {
       console.error('Time formatting error:', error);
       return timeString;

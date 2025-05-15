@@ -69,7 +69,8 @@ const { router: authRoutes } = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const roomRoutes = require('./routes/roomRoutes');
 const bookingsRoutes = require('./routes/bookingsRoutes');
-const buildingRoutes = require('./routes/buildingroutes');
+const buildingRoutes = require('./routes/buildingRoutes');  // capital R if file is named buildingRoutes.js
+
 const categoryRoutes = require('./routes/categoryRoutes');
 
 // Mount routes

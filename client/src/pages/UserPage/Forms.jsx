@@ -9,8 +9,7 @@ import { X, AlertCircle } from 'lucide-react';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import PrivacyModal from '../../components/ui/PrivacyModal';
 import CancelBookingConfirmation from './modals/CancelBookingConfirmation';
-import { parse, add } from 'date-fns'; // Add this at the top if not already imported
-
+import { parse, add } from 'date-fns'; 
  
 const API_BASE_URL = 'http://localhost:5000/api';
 

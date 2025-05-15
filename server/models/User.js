@@ -58,7 +58,7 @@ module.exports = (sequelize, DataTypes) => {
     schema: 'dbo',
     timestamps: false,
     hooks: {
-      // Hash password before saving (Sequelize style)
+      // Hash password before saving
       beforeCreate: async (user) => {
         if (user.password) {
           user.password = await bcrypt.hash(user.password, 10);
@@ -70,7 +70,7 @@ module.exports = (sequelize, DataTypes) => {
         }
       }
     },
-    // Add scopes for commonly used queries
+    // Scopes for commonly used queries
     scopes: {
       withoutPassword: {
         attributes: { exclude: ['password'] }
@@ -81,7 +81,7 @@ module.exports = (sequelize, DataTypes) => {
     }
   });
 
-  // Instance method to generate JWT token
+  // Method to generate JWT token
   User.prototype.generateAuthToken = function () {
     return jwt.sign(
       { id: this.userId, email: this.email, role: this.role.toLowerCase() },
@@ -90,14 +90,17 @@ module.exports = (sequelize, DataTypes) => {
     );
   };
 
-  // Instance method to verify password
+  // Method to verify password
   User.prototype.verifyPassword = async function(password) {
     return await bcrypt.compare(password, this.password);
   };
 
-  // Define any associations here
+  // Define associations here
   User.associate = function(models) {
-    // Example: User.hasMany(models.Booking)
+    User.hasMany(models.Booking, {
+      foreignKey: 'userId',
+      sourceKey: 'userId'
+    });
   };
 
   return User;

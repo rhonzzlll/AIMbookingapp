@@ -1,53 +1,75 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
-const StatusModal = ({ isOpen, currentStatus, adminName, onClose, onConfirm }) => {
+const StatusModal = ({ isOpen, currentStatus, onClose, onConfirm, bookingId }) => {
+  const [userName, setUserName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const API_BASE_URL = 'http://localhost:5000/api';
+  
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        setIsLoading(true);
+        const token = localStorage.getItem('token');
+        const userId = localStorage.getItem('userId');
+        
+        if (!token || !userId) {
+          console.log("No token or userId found");
+          return;
+        }
+        
+        const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (response.data) {
+          const name = `${response.data.firstName} ${response.data.lastName}`;
+          setUserName(name);
+        }
+      } catch (error) {
+        console.error("Error fetching user info:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (isOpen) {
+      fetchUserInfo();
+    }
+  }, [isOpen]);
+  
   if (!isOpen) return null;
-
-  const getStatusColor = () => {
-    if (currentStatus === 'confirmed') return 'bg-green-100 text-green-800 border-green-200';
-    if (currentStatus === 'declined') return 'bg-red-100 text-red-800 border-red-200';
-    return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-  };
-
-  const getStatusText = () => {
-    if (currentStatus === 'confirmed') return 'Confirm';
-    if (currentStatus === 'declined') return 'Decline';
-    return 'Update';
-  };
-
+  
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h3 className="text-xl font-bold mb-4">Update Booking Status</h3>
+        <div className="text-xl font-semibold mb-4">Update Booking Status</div>
         
-        <div className="mb-4">
-          <p className="mb-2">Are you sure you want to {getStatusText().toLowerCase()} this booking?</p>
-          
-          <div className={`p-3 rounded-md ${getStatusColor()} mb-3`}>
-            <p className="font-medium">
-              New status will be: <span className="font-semibold capitalize">{currentStatus}</span>
-            </p>
-            <p className="text-sm mt-1">
-              Changed by: <span className="font-medium">{adminName || 'Admin'}</span>
-            </p>
-          </div>
+        <p className="mb-4">Are you sure you want to {currentStatus === 'confirmed' ? 'confirm' : 'decline'} this booking?</p>
+        
+        <div className={`p-4 mb-4 rounded-md ${
+          currentStatus === 'confirmed' ? 'bg-green-100' : 'bg-red-100'
+        }`}>
+          <p><strong>New status will be:</strong> {currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}</p>
+          <p><strong>Changed by:</strong> {isLoading ? "Loading..." : userName || "You"}</p>
         </div>
         
-        <div className="flex justify-end gap-2">
-          <button 
+        <div className="flex justify-end gap-3">
+          <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
           >
             Cancel
           </button>
-          <button 
+          <button
             onClick={onConfirm}
-            className={`px-4 py-2 text-white rounded-md 
-              ${currentStatus === 'confirmed' ? 'bg-green-600 hover:bg-green-700' : 
-                currentStatus === 'declined' ? 'bg-red-600 hover:bg-red-700' :
-                'bg-blue-600 hover:bg-blue-700'}`}
+            className={`px-4 py-2 text-white rounded ${
+              currentStatus === 'confirmed' 
+                ? 'bg-green-600 hover:bg-green-700' 
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
-            {getStatusText()}
+            Confirm
           </button>
         </div>
       </div>

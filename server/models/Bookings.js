@@ -1,4 +1,3 @@
-// Updated Booking Model (models/Booking.js)
 module.exports = (sequelize, DataTypes) => {
   const Booking = sequelize.define('Booking', {
     bookingId: {
@@ -131,7 +130,7 @@ module.exports = (sequelize, DataTypes) => {
     timestamps: false
   });
 
-  // Define associations - these look good, keep as is
+  // Define associations
   Booking.associate = (models) => {
     if (models.Room) {
       Booking.belongsTo(models.Room, {

@@ -1,9 +1,56 @@
-import React from 'react';
-import AIMImage from '../images/AIM.png';
-import ACCImage from '../images/ACC.png';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Link } from 'react-router-dom';
 
+const API_BASE_URL = 'http://localhost:5000';
+const token = localStorage.getItem('token');
+
 const FacilityModal = ({ onClose }) => {
+  const [facilities, setFacilities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchFacilities = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/buildings`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const processedFacilities = response.data.map((facility) => {
+        let imageUrl = facility.buildingImageUrl || facility.buildingImage;
+        if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+          imageUrl = `${API_BASE_URL}/uploads/${imageUrl}`;
+        } else if (imageUrl && imageUrl.startsWith('/')) {
+          imageUrl = `${API_BASE_URL}${imageUrl}`;
+        }
+
+        return {
+          buildingId: facility.buildingId || '',
+          buildingName: facility.buildingName || 'Unnamed Facility',
+          buildingDescription: facility.buildingDescription || 'No description available',
+          buildingImage: imageUrl,
+          amenities: facility.amenities || [],
+        };
+      });
+
+      setFacilities(processedFacilities);
+    } catch (err) {
+      console.error('Error fetching facilities:', err);
+      setError('Failed to load facilities');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFacilities();
+  }, []);
+
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
@@ -22,33 +69,53 @@ const FacilityModal = ({ onClose }) => {
 
         <h2 className="text-2xl font-bold mb-4 text-center">Select a Facility</h2>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <FacilityCard
-            imageSrc={AIMImage}
-            title="Asian Institute of Management Building"
-            description="Contemporary venue perfect for conferences, workshops, and high-level discussions."
-            bookingLink="/aim-rooms"
-            features={["Minimal outside noise", "Air conditioning", "Creative Atmosphere"]}
-          />
-          <FacilityCard
-            imageSrc={ACCImage}
-            title="Asian Institute of Management Conference Center Building"
-            description="Modern space for meetings, seminars, and executive discussions."
-            bookingLink="/acc-rooms"
-            features={["Tech-Ready", "Quiet and Private", "Modern and Bright", "Air conditioning"]}
-          />
-        </div>
+        {loading ? (
+          <div className="flex justify-center items-center py-8">
+            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <p className="ml-2 text-black">Loading facilities...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-8">
+            <p className="text-red-500">{error}</p>
+            <button
+              onClick={fetchFacilities}
+              className="mt-4 text-blue-600 text-sm font-medium hover:underline"
+            >
+              Try again
+            </button>
+          </div>
+        ) : facilities.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No facilities available at the moment</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-6">
+            {facilities.map((facility) => (
+              <FacilityCard
+                key={facility.buildingId}
+                imageSrc={facility.buildingImage}
+                title={facility.buildingName}
+                description={facility.buildingDescription}
+                bookingLink={`/building/${facility.buildingId}`}
+                features={facility.amenities}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-// Copied version of FacilityCard to keep this component self-contained
 const FacilityCard = ({ imageSrc, title, description, bookingLink, features }) => {
   return (
     <div className="bg-white text-gray-800 rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
       <div className="h-48 overflow-hidden">
-        <img src={imageSrc} alt={title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
+        <img
+          src={imageSrc || '/placeholder-building.png'}
+          alt={title}
+          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+        />
       </div>
       <div className="p-6">
         <h3 className="text-xl font-bold mb-2">{title}</h3>

@@ -21,6 +21,7 @@ import AccRooms from './pages/UserPage/AccRooms';
 import AimRooms from './pages/UserPage/AimRooms';
 import Forms from './pages/UserPage/Forms';
 import Login from './pages/UserPage/Login'; // Import the Login component
+import BuildingDetails from './pages/UserPage/BuildingDetails'; // Import the BuildingDetails component
 
 import './style.css';
 
@@ -53,6 +54,7 @@ const AppContent = () => {
                         {/* User Routes */}
                         <Route path="/Home" element={<Home />} />
                         <Route path="/profile" element={<Profile />} />
+                        <Route path="/building/:buildingId" element={<BuildingDetails />} /> {/* Add this new route */}
                         <Route path="/acc-rooms" element={<AccRooms />} />
                         <Route path="/aim-rooms" element={<AimRooms />} />
                         <Route path="/forms" element={<Forms />} />

@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import axios from 'axios';
 import bg from '../../images/bg.png';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Confirm from "../../components/ui/ConfirmationModal";  
+
 const API_BASE_URL = 'http://localhost:5000/api';
-import { useNavigate } from 'react-router-dom'; 
 
 const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -33,9 +33,7 @@ const BookingForm = ({ onBookingSubmit }) => {
   const location = useLocation();
   const bookingData = location.state?.bookingData;
   const navigate = useNavigate(); // Initialize the navigate function
-
-  // Other state and useEffect hooks
-
+  
   const handleGoBack = () => {
     navigate(-1); // Navigate to the previous page
   };
@@ -45,9 +43,11 @@ const BookingForm = ({ onBookingSubmit }) => {
     firstName: '',
     lastName: '',
     email: '',
-    building: '',
-    category: '',
-    room: '',
+    buildingId: '',
+    buildingName: '', // Add this field to store the name
+    categoryId: '',
+    categoryName: '', // Add this field to store the name
+    roomId: '',
     date: format(new Date(), 'yyyy-MM-dd'), 
     startTime: '09:00 AM',
     endTime: '10:00 AM',
@@ -55,10 +55,12 @@ const BookingForm = ({ onBookingSubmit }) => {
     isRecurring: false,
     recurrenceType: '',
     recurrenceDays: [],
-    endRecurrenceDate: '',
+    recurrenceEndDate: '',
     notes: '',
-    needsMealRoom: false,
-    needsBreakoutRoom: false
+    isMealRoom: false,
+    isBreakRoom: false,
+    bookingCapacity: 1,
+    status: 'pending'
   });
 
   const [rooms, setRooms] = useState([]);
@@ -78,7 +80,7 @@ const BookingForm = ({ onBookingSubmit }) => {
   const [roomMap, setRoomMap] = useState({});
   const [blockedTimes, setBlockedTimes] = useState([]);
 
-  const userId = localStorage.getItem('_id');
+  const userId = localStorage.getItem('userId');
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('role');
 
@@ -94,9 +96,9 @@ const BookingForm = ({ onBookingSubmit }) => {
       if (room) {
         setFormData((prevFormData) => ({
           ...prevFormData,
-          building: room.building || '',
-          category: room.category || '',
-          room: room.roomName || '',
+          buildingId: room.buildingId || '',
+          categoryId: room.categoryId || '',
+          roomId: room.roomId || '',
         }));
       }
 
@@ -166,18 +168,46 @@ const BookingForm = ({ onBookingSubmit }) => {
     const fetchRooms = async () => {
       try {
         const response = await axios.get(`${API_BASE_URL}/rooms`);
-        setRooms(response.data); 
         
-        // Extract unique buildings and categories
-        const uniqueBuildings = [...new Set(response.data.map(room => room.building))];
+        // Map the API response to include the nested name properties
+        const processedRooms = response.data.map(room => ({
+          ...room,
+          // Extract name from nested objects
+          buildingName: room.Building?.buildingName || room.buildingName || room.buildingId,
+          categoryName: room.Category?.categoryName || room.categoryName || room.categoryId
+        }));
+        
+        setRooms(processedRooms);
+        console.log("Processed rooms data:", processedRooms);
+        
+        // Extract unique buildings with names from the nested structure
+        const uniqueBuildings = [];
+        const buildingsMap = {};
+        
+        processedRooms.forEach(room => {
+          if (!buildingsMap[room.buildingId]) {
+            buildingsMap[room.buildingId] = true;
+            uniqueBuildings.push({
+              id: room.buildingId,
+              name: room.Building?.buildingName || room.buildingName || room.buildingId
+            });
+          }
+        });
+        
+        // Sort buildings by name
+        uniqueBuildings.sort((a, b) => a.name.localeCompare(b.name));
+        console.log("Processed buildings:", uniqueBuildings);
         setBuildings(uniqueBuildings);
         
-        // Create a map of room IDs to room data
+        // Create a map of room IDs to room data with proper names
         const newRoomMap = {};
-        response.data.forEach(room => {
-          newRoomMap[room._id] = {
+        processedRooms.forEach(room => {
+          newRoomMap[room.roomId] = {
             roomName: room.roomName,
-            building: room.building,
+            buildingId: room.buildingId,
+            buildingName: room.Building?.buildingName || room.buildingName || room.buildingId,
+            categoryId: room.categoryId,
+            categoryName: room.Category?.categoryName || room.categoryName || room.categoryId
           };
         });
         setRoomMap(newRoomMap);
@@ -186,20 +216,37 @@ const BookingForm = ({ onBookingSubmit }) => {
         setError('Failed to fetch rooms. Please try again.');
       }
     };
-  
+
     fetchRooms();
   }, []);
   
   // Update categories when building changes
   useEffect(() => {
-    if (formData.building && rooms.length > 0) {
-      const buildingRooms = rooms.filter(room => room.building === formData.building);
-      const uniqueCategories = [...new Set(buildingRooms.map(room => room.category))];
+    if (formData.buildingId && rooms.length > 0) {
+      const buildingRooms = rooms.filter(room => room.buildingId === formData.buildingId);
+      
+      // Extract unique categories with both ID and display name from nested data
+      const uniqueCategories = [];
+      const categoryMap = {};
+      
+      buildingRooms.forEach(room => {
+        if (!categoryMap[room.categoryId]) {
+          categoryMap[room.categoryId] = true;
+          uniqueCategories.push({
+            id: room.categoryId,
+            name: room.Category?.categoryName || room.categoryName || room.categoryId
+          });
+        }
+      });
+      
+      // Sort categories by name
+      uniqueCategories.sort((a, b) => a.name.localeCompare(b.name));
+      console.log("Categories for building:", uniqueCategories);
       setCategories(uniqueCategories);
     } else {
       setCategories([]);
     }
-  }, [formData.building, rooms]);
+  }, [formData.buildingId, rooms]);
 
   // Fetch users from the API
   useEffect(() => {
@@ -226,11 +273,11 @@ const BookingForm = ({ onBookingSubmit }) => {
       const bookings = response.data.bookings || response.data;
   
       const enrichedBookings = bookings.map(booking => {
-        const roomData = roomMap[booking.room];
+        const roomData = roomMap[booking.roomId];
         return {
           ...booking,
-          roomName: roomData?.roomName || booking.room,
-          building: roomData?.building || booking.building,
+          roomName: roomData?.roomName || booking.roomId,
+          buildingId: roomData?.buildingId || booking.buildingId,
         };
       });
   
@@ -242,20 +289,20 @@ const BookingForm = ({ onBookingSubmit }) => {
   };
 
   useEffect(() => {
-    if (formData.building && formData.room && formData.date && rooms.length > 0) {
+    if (formData.buildingId && formData.roomId && formData.date && rooms.length > 0) {
       fetchBookings(); // Fetch bookings data for all rooms
     }
-  }, [formData.building, formData.room, formData.date, rooms]);  // Ensure this is called when rooms change   
+  }, [formData.buildingId, formData.roomId, formData.date, rooms]);
 
   const processBookingsForTimeSlots = (bookings) => {
-    if (!bookings || !formData.building || !formData.room || !formData.date) return;
+    if (!bookings || !formData.buildingId || !formData.roomId || !formData.date) return;
   
-    // 🔄 Clear previous unavailable time slots
+    // Clear previous unavailable time slots
     setUnavailableTimeSlots([]);
   
-    // ✅ Filter bookings for the selected building and room
+    // Filter bookings for the selected building and room
     const relevantBookings = bookings.filter(booking =>
-      booking.building === formData.building &&
+      booking.buildingId === formData.buildingId &&
       new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
       booking.status?.toLowerCase() === 'confirmed'
     );
@@ -289,23 +336,25 @@ const BookingForm = ({ onBookingSubmit }) => {
       });
     });
   
-    // ✅ Update unavailable time slots
+    // Update unavailable time slots
     setUnavailableTimeSlots(unavailable);
   };
   
-  
   // Filter rooms based on building and category
   useEffect(() => {
-    if (formData.building && formData.category) {
+    if (formData.buildingId && formData.categoryId) {
       const filtered = rooms.filter(
         (room) =>
-          room.building === formData.building && room.category === formData.category
+          room.buildingId === formData.buildingId && room.categoryId === formData.categoryId
       );
+      
+      // Sort rooms by name
+      filtered.sort((a, b) => a.roomName.localeCompare(b.roomName));
       setFilteredRooms(filtered);
     } else {
       setFilteredRooms([]);
     }
-  }, [formData.building, formData.category, rooms]);
+  }, [formData.buildingId, formData.categoryId, rooms]);
 
   // Handle fallback to local data for testing
   useEffect(() => {
@@ -322,23 +371,48 @@ const BookingForm = ({ onBookingSubmit }) => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-
-    if (name === 'building') {
+  
+    if (name === 'buildingId') {
+      const selectedBuilding = buildings.find(b => b.id === value) || { name: '' };
+      console.log("Selected building:", selectedBuilding); // Debug log
+      
       setFormData({
         ...formData,
         [name]: value,
-        category: '',
-        room: '',
+        buildingName: selectedBuilding.name,
+        categoryId: '',
+        categoryName: '',
+        roomId: '',
       });
       setAvailabilityStatus(null);
-    } else if (name === 'category') {
+    } else if (name === 'categoryId') {
+      // Find the selected category to get its name
+      const selectedCategory = categories.find(c => c.id === value) || { name: '' };
+      
       setFormData({
         ...formData,
         [name]: value,
-        room: '',
+        categoryName: selectedCategory.name,
+        roomId: '',
       });
       setAvailabilityStatus(null);
-    } else if (name === 'room' || name === 'date' || name === 'startTime' || name === 'endTime') {
+    } else if (name === 'roomId') {
+      const selectedRoom = roomMap[value] || {};
+      setFormData({
+        ...formData,
+        [name]: value,
+        roomName: selectedRoom.roomName || '',
+      });
+      setAvailabilityStatus(null);
+      
+      // Check availability after a short delay
+      if (formData.buildingId && value && formData.date && formData.startTime && formData.endTime) {
+        checkTimeAvailability({
+          ...formData,
+          [name]: value
+        });
+      }
+    } else if (name === 'date' || name === 'startTime' || name === 'endTime') {
       setFormData({
         ...formData,
         [name]: value,
@@ -346,8 +420,8 @@ const BookingForm = ({ onBookingSubmit }) => {
       setAvailabilityStatus(null);
       
       // When key booking details change, check availability after a short delay
-      if (formData.building && formData.room && formData.date && 
-          (name === 'room' || name === 'date' || name === 'startTime' || name === 'endTime')) {
+      if (formData.buildingId && formData.roomId && formData.date && 
+          (name === 'roomId' || name === 'date' || name === 'startTime' || name === 'endTime')) {
         checkTimeAvailability({
           ...formData,
           [name]: value
@@ -362,66 +436,63 @@ const BookingForm = ({ onBookingSubmit }) => {
   };
 
   const checkTimeAvailability = async (data) => {
-    if (!data.date || !data.startTime || !data.endTime) {
+    if (!data.date || !data.startTime || !data.endTime || !data.roomId || !data.categoryId) {
       setAvailabilityStatus({
         available: false,
-        message: 'Please provide a valid date, start time, and end time.',
+        message: 'Please provide a valid date, room, start time, end time, and category.',
       });
       return;
     }
-
+  
     setIsCheckingAvailability(true);
-
+  
     try {
       // Convert times to proper format for API
       const startTime24 = convertTo24HourFormat(data.startTime);
       const endTime24 = convertTo24HourFormat(data.endTime);
-
-      // Combine date and time into ISO strings
-      const startDateTime = new Date(`${data.date}T${startTime24}:00`);
-      const endDateTime = new Date(`${data.date}T${endTime24}:00`);
-
-      // Validate that the dates are valid
-      if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-        setAvailabilityStatus({
-          available: false,
-          message: 'Invalid date or time format.',
-        });
-        return;
-      }
-
-      // Ensure start time is before end time
-      if (startDateTime >= endDateTime) {
-        setAvailabilityStatus({
-          available: false,
-          message: 'Start time must be before end time.',
-        });
-        return;
-      }
-
+  
+      // Ensure the time format is correct (HH:MM:SS)
+      const formatTimeString = (timeStr) => {
+        return timeStr.includes(':') ? 
+          (timeStr.split(':').length === 2 ? `${timeStr}:00` : timeStr) : 
+          `${timeStr}:00:00`;
+      };
+  
+      const formattedStartTime = formatTimeString(startTime24);
+      const formattedEndTime = formatTimeString(endTime24);
+  
+      // Log the payload being sent to the API
+      console.log('Payload for availability check:', {
+        buildingId: data.buildingId,
+        roomId: data.roomId,
+        categoryId: data.categoryId,
+        date: data.date,
+        startTime: formattedStartTime,
+        endTime: formattedEndTime,
+      });
+  
       // Call the availability check endpoint
       const response = await axios.post(
         `${API_BASE_URL}/bookings/check-availability`,
         {
-          building: data.building,
-          room: data.room,
-          category: data.category,
-          startTime: startDateTime.toISOString(),
-          endTime: endDateTime.toISOString(),
-          // FIXED: Send "confirmed" in lowercase to match backend expectations
-          status: 'confirmed',
+          buildingId: data.buildingId,
+          roomId: data.roomId,
+          categoryId: data.categoryId,
+          date: data.date,
+          startTime: formattedStartTime,
+          endTime: formattedEndTime,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-
+  
       setAvailabilityStatus(response.data);
     } catch (err) {
       console.error('Error checking availability:', err);
       setAvailabilityStatus({
         available: false,
-        message: 'Error checking availability. Please try again.',
+        message: err.response?.data?.message || 'Error checking availability. Please try again.',
       });
     } finally {
       setIsCheckingAvailability(false);
@@ -540,6 +611,13 @@ const BookingForm = ({ onBookingSubmit }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Check if all required fields are filled
+    if (!formData.startTime || !formData.endTime || !formData.roomId || !formData.date || !formData.categoryId) {
+      setError('All fields (startTime, endTime, roomId, date, category) are required.');
+      return;
+    }
+
     setLoading(true);
     setError('');
   
@@ -558,18 +636,18 @@ const BookingForm = ({ onBookingSubmit }) => {
       const startTime24 = convertTo24HourFormat(formData.startTime);
       const endTime24 = convertTo24HourFormat(formData.endTime);
   
-      // Combine date and time into ISO strings
-      const startDateTime = new Date(`${formData.date}T${startTime24}:00`);
-      const endDateTime = new Date(`${formData.date}T${endTime24}:00`);
-  
       // Validate that the dates are valid
-      if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+      if (isNaN(new Date(`${formData.date}T${startTime24}:00`).getTime()) || 
+          isNaN(new Date(`${formData.date}T${endTime24}:00`).getTime())) {
         setError('Invalid date or time. Please check your input.');
         setLoading(false);
         return;
       }
   
       // Validate that start time is before end time
+      const startDateTime = new Date(`${formData.date}T${startTime24}:00`);
+      const endDateTime = new Date(`${formData.date}T${endTime24}:00`);
+      
       if (startDateTime >= endDateTime) {
         setError('Start time must be earlier than end time.');
         setLoading(false);
@@ -580,12 +658,11 @@ const BookingForm = ({ onBookingSubmit }) => {
       const availabilityCheck = await axios.post(
         `${API_BASE_URL}/bookings/check-availability`,
         {
-          building: formData.building,
-          room: formData.room,
-          category: formData.category,
+          buildingId: formData.buildingId,
+          roomId: formData.roomId,
+          categoryId: formData.categoryId,
           startTime: startDateTime.toISOString(),
           endTime: endDateTime.toISOString(),
-          // FIXED: Use lowercase "confirmed" status
           status: 'confirmed',
         },
         {
@@ -600,14 +677,18 @@ const BookingForm = ({ onBookingSubmit }) => {
       }
   
       // Prepare payload with ISO strings and user data
-      // Remove _id from formData if present to avoid duplicate key error
+      // Remove unnecessary fields if present to avoid duplicate key error
       const { _id, ...cleanFormData } = formData;
   
       const bookingPayload = {
-        ...cleanFormData, // Remove _id
-        startTime: startDateTime.toISOString(),
-        endTime: endDateTime.toISOString(),
-        userId, // Ensure userId is included in the payload
+        ...cleanFormData,
+        date: formData.date,
+        startTime: startTime24, // Send time in 24h format for DB
+        endTime: endTime24, // Send time in 24h format for DB
+        userId: parseInt(userId), // Ensure it's an integer as expected by the model
+        timeSubmitted: new Date().toISOString(),
+        status: 'pending',
+        bookingCapacity: formData.bookingCapacity || 1
       };
   
       // Make API request
@@ -615,9 +696,9 @@ const BookingForm = ({ onBookingSubmit }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      await fetchBookings();  // ✅ Fetch updated bookings
+      await fetchBookings();  // Fetch updated bookings
 
-      if (formData.building && formData.room && formData.date) {
+      if (formData.buildingId && formData.roomId && formData.date) {
         processBookingsForTimeSlots(existingBookings); 
       }      
             
@@ -628,9 +709,9 @@ const BookingForm = ({ onBookingSubmit }) => {
         firstName: '',
         lastName: '',
         email: '',
-        building: '',
-        category: '',
-        room: '',
+        buildingId: '',
+        categoryId: '',
+        roomId: '',
         date: format(new Date(), 'yyyy-MM-dd'),
         startTime: '09:00 AM',
         endTime: '10:00 AM',
@@ -638,10 +719,11 @@ const BookingForm = ({ onBookingSubmit }) => {
         isRecurring: false,
         recurrenceType: '',
         recurrenceDays: [],
-        endRecurrenceDate: '',
+        recurrenceEndDate: '',
         notes: '',
-        needsMealRoom: false,
-        needsBreakoutRoom: false
+        isMealRoom: false,
+        isBreakRoom: false,
+        bookingCapacity: 1
       });
       
     } catch (err) {
@@ -656,10 +738,8 @@ const BookingForm = ({ onBookingSubmit }) => {
     }
   };
 
-  
   return (
     <div className="font-sans">
-
       <div className="px-4 pb-8">
         {/* Background */}
         <div className="fixed inset-0 z-0">
@@ -708,19 +788,24 @@ const BookingForm = ({ onBookingSubmit }) => {
                 Building <span className="text-red-500">*</span>
               </label>
               <select
-                name="building"
-                value={formData.building}
+                name="buildingId"
+                value={formData.buildingId}
                 onChange={handleChange}
                 className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >
                 <option value="">Select Building</option>
                 {buildings.map((building) => (
-                  <option key={building} value={building}>
-                    {building}
+                  <option key={building.id} value={building.id}>
+                    {building.name}
                   </option>
                 ))}
               </select>
+              {formData.buildingId && (
+                <p className="mt-1 text-sm text-gray-600">
+                  Selected: {formData.buildingName || buildings.find(b => b.id === formData.buildingId)?.name || formData.buildingId}
+                </p>
+              )}
             </div>
 
             {/* Category Selection */}
@@ -729,20 +814,25 @@ const BookingForm = ({ onBookingSubmit }) => {
                 Category <span className="text-red-500">*</span>
               </label>
               <select
-                name="category"
-                value={formData.category}
+                name="categoryId"
+                value={formData.categoryId}
                 onChange={handleChange}
                 className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
-                disabled={!formData.building}
+                disabled={!formData.buildingId}
               >
                 <option value="">Select Category</option>
                 {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
+                  <option key={category.id} value={category.id}>
+                    {category.name}
                   </option>
                 ))}
               </select>
+              {formData.categoryId && (
+                <p className="mt-1 text-sm text-gray-600">
+                  Selected: {formData.categoryName || categories.find(c => c.id === formData.categoryId)?.name || formData.categoryId}
+                </p>
+              )}
             </div>
 
             {/* Room Selection */}
@@ -751,20 +841,23 @@ const BookingForm = ({ onBookingSubmit }) => {
                 Meeting Room <span className="text-red-500">*</span>
               </label>
               <select
-                name="room"
-                value={formData.room}
+                name="roomId"
+                value={formData.roomId}
                 onChange={handleChange}
                 className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
-                disabled={!formData.category}
+                disabled={!formData.categoryId}
               >
                 <option value="">Select Room</option>
                 {filteredRooms.map((room) => (
-                  <option key={room._id} value={room.roomName}>
+                  <option key={room.roomId} value={room.roomId}>
                     {room.roomName}
                   </option>
                 ))}
               </select>
+              {formData.roomId && roomMap[formData.roomId] && (
+                <p className="mt-1 text-sm text-gray-600">Selected: {roomMap[formData.roomId].roomName}</p>
+              )}
             </div>
 
             {/* Additional Room Options */}
@@ -772,13 +865,13 @@ const BookingForm = ({ onBookingSubmit }) => {
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  id="needsMealRoom"
-                  name="needsMealRoom"
-                  checked={formData.needsMealRoom}
+                  id="isMealRoom"
+                  name="isMealRoom"
+                  checked={formData.isMealRoom}
                   onChange={handleChange}
                   className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="needsMealRoom" className="ml-2 text-gray-700 font-medium">
+                <label htmlFor="isMealRoom" className="ml-2 text-gray-700 font-medium">
                   Need Meal Room
                 </label>
               </div>
@@ -786,15 +879,31 @@ const BookingForm = ({ onBookingSubmit }) => {
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  id="needsBreakoutRoom"
-                  name="needsBreakoutRoom"
-                  checked={formData.needsBreakoutRoom}
+                  id="isBreakRoom"
+                  name="isBreakRoom"
+                  checked={formData.isBreakRoom}
                   onChange={handleChange}
                   className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="needsBreakoutRoom" className="ml-2 text-gray-700 font-medium">
+                <label htmlFor="isBreakRoom" className="ml-2 text-gray-700 font-medium">
                   Need Breakout Room
                 </label>
+              </div>
+              
+              <div className="flex items-center ml-6">
+                <label htmlFor="bookingCapacity" className="mr-2 text-gray-700 font-medium">
+                  Capacity:
+                </label>
+                <input
+                  type="number"
+                  id="bookingCapacity"
+                  name="bookingCapacity"
+                  min="1"
+                  max="100"
+                  value={formData.bookingCapacity}
+                  onChange={handleChange}
+                  className="w-20 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
             </div>
 
@@ -900,8 +1009,8 @@ const BookingForm = ({ onBookingSubmit }) => {
                     </label>
                     <input
                       type="date"
-                      name="endRecurrenceDate"
-                      value={formData.endRecurrenceDate}
+                      name="recurrenceEndDate"
+                      value={formData.recurrenceEndDate}
                       onChange={handleChange}
                       min={formData.date}
                       className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

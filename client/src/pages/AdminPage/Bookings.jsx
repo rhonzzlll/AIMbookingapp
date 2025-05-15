@@ -3,6 +3,7 @@ import axios from 'axios';
 import TopBar from '../../components/AdminComponents/TopBar';
 import DeleteConfirmation from './modals/DeleteConfirmation';
 import StatusModal from './modals/StatusModal';
+import ExcelEventBulletinExporter from '../../components/AdminComponents/ExportCSV';
 
 const formatDate = (date) => {
   const options = { year: 'numeric', month: 'short', day: 'numeric' };
@@ -867,7 +868,6 @@ const handleRoomChange = (e) => {
       return timeInMinutes > currentTotalMinutes;
     });
   };
-  
   const getTimeInMinutes = (timeStr) => {
     const [time, modifier] = timeStr.split(' ');
     let [hours, minutes] = time.split(':').map(Number);
@@ -879,11 +879,12 @@ const handleRoomChange = (e) => {
   };
 
   const isTimeSlotTaken = (timeStr, type = 'start') => {
-    if (!formData.roomId || !formData.date) return false;
+    if (!formData.room || !formData.date) return false;
   
-    const selectedRoom = rooms.find(r => r.roomId === formData.roomId);
-    const selectedRoomName = selectedRoom?.roomName;
-    if (!selectedRoomName) return false;
+    const selectedRoom = rooms.find(r => r._id === formData.room);
+    const selectedBuilding = selectedRoom?.building;
+  
+    if (!selectedBuilding) return false;
   
     const [hourStr, minuteStr] = timeStr.split(' ')[0].split(':');
     let hours = parseInt(hourStr, 10);
@@ -895,35 +896,80 @@ const handleRoomChange = (e) => {
   
     const checkTime = new Date(`${formData.date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
   
+    // Check for conflicts across all rooms in the same building
     return bookings.some((booking) => {
-      // Skip the current booking when editing
-      if (isEditModalOpen && editBookingId && booking.bookingId === editBookingId) return false;
-    
+      if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;  // Skip the current booking when editing
+  
       const bookingDate = new Date(booking.date).toISOString().split('T')[0];
       const selectedDate = new Date(formData.date).toISOString().split('T')[0];
-    
+  
       if (
-        booking.roomId === formData.roomId &&
-        bookingDate === selectedDate &&
+        booking.building === selectedBuilding && 
+        bookingDate === selectedDate && 
         booking.status === 'confirmed'
       ) {
-        const bookingStart = new Date(`${bookingDate}T${booking.startTime}`);
-        const bookingEnd = new Date(`${bookingDate}T${booking.endTime}`);
-    
+        const bookingStart = new Date(booking.startTime);
+        const bookingEnd = new Date(booking.endTime);
+  
         if (type === 'start') {
-          const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);
+          const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);  // Buffer time
           return checkTime >= bookingStart && checkTime < bufferEnd;
         }
-    
+  
         if (type === 'end') {
-          const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);
+          const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);  // Buffer time
           return checkTime >= bufferStart && checkTime < bookingEnd;
         }
       }
-    
+  
       return false;
     });
+  };  
+
+  const processBookingsForTimeSlots = (bookings) => {
+    if (!bookings || !formData.building || !formData.room || !formData.date) return;
+  
+    // Clear previous unavailable time slots
+    setUnavailableTimeSlots([]);
+  
+    const relevantBookings = bookings.filter(booking =>
+      booking.building === formData.building &&
+      new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
+      booking.status?.toLowerCase() === 'confirmed'
+    );
+  
+    const unavailable = [];
+  
+    relevantBookings.forEach(booking => {
+      const bookingStart = new Date(booking.startTime);
+      const bookingEnd = new Date(booking.endTime);
+      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000); // 30 min buffer time
+  
+      const formatTimeToOption = (date) => {
+        let hours = date.getHours();
+        const minutes = date.getMinutes();
+        const period = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        return `${hours}:${minutes.toString().padStart(2, '0')} ${period}`;
+      };
+  
+      TIME_OPTIONS.forEach(timeOption => {
+        const timeOption24 = convertTo24HourFormat(timeOption);
+        const timeOptionDate = new Date(`${formData.date}T${timeOption24}:00`);
+  
+        // Check for overlapping time slots across all rooms in the building
+        if (timeOptionDate >= bookingStart && timeOptionDate < bufferEnd) {
+          unavailable.push({
+            time: timeOption,
+            reason: `Booking: ${formatTimeToOption(bookingStart)} - ${formatTimeToOption(bookingEnd)} (Already booked)`
+          });
+        }
+      });
+    });
+  
+    setUnavailableTimeSlots(unavailable);
   };
+  
   
   const getFilteredStartTimes = () => {
     const today = new Date().toISOString().split('T')[0];
@@ -938,45 +984,32 @@ const handleRoomChange = (e) => {
   };
   
   const getFilteredEndTimes = () => {
-    if (!formData.startTime || !formData.date) return [];
+    const startTime = formData.startTime;
+    if (!startTime) return TIME_OPTIONS;
   
-    const start24 = convertTo24HourFormat(formData.startTime);
-    const startDateTime = new Date(`${formData.date}T${start24}:00`);
-    const availableEndTimes = [];
+    const startMinutes = getTimeInMinutes(startTime);  // Ensure start time is in minutes
   
-    for (const time of TIME_OPTIONS) {
-      const end24 = convertTo24HourFormat(time);
-      const endDateTime = new Date(`${formData.date}T${end24}:00`);
-      if (endDateTime <= startDateTime) continue;
+    // Existing logic to filter based on start time
+    const filteredEndTimes = TIME_OPTIONS.filter((time) => getTimeInMinutes(time) > startMinutes);
   
-      const bufferEnd = new Date(endDateTime.getTime() + 30 * 60 * 1000);
-  
-      const hasConflict = bookings.some((booking) => {
-         
-        if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;
-  
-        const bookingDate = new Date(booking.date).toISOString().split('T')[0];
-        const selectedDate = new Date(formData.date).toISOString().split('T')[0];
-        const roomMatch = rooms.find(r => r._id === formData.room)?.roomName === booking.roomName;
-  
-        if (!roomMatch || bookingDate !== selectedDate || booking.status !== 'confirmed') return false;
-  
-        const bookingStart = new Date(booking.startTime);
-        const bookingEnd = new Date(booking.endTime);
-  
-        return startDateTime < bookingEnd && bufferEnd > bookingStart;
+    // If today is selected, ensure that only times after the current time are available
+    const now = new Date();
+    const selectedDate = new Date(formData.date);
+    const isToday = now.toDateString() === selectedDate.toDateString();
+    
+    if (isToday) {
+      const currentHour = now.getHours();
+      const currentMinutes = now.getMinutes();
+      const currentTotalMinutes = currentHour * 60 + currentMinutes;
+      
+      return filteredEndTimes.filter(time => {
+        const timeInMinutes = getTimeInMinutes(time);
+        return timeInMinutes > currentTotalMinutes;  // Ensuring only times after current time
       });
-  
-      if (hasConflict) break;
-  
-      availableEndTimes.push(time);
     }
   
-    return availableEndTimes;
+    return filteredEndTimes;
   };
-  
-  
-  
   
   // BookingForm component
   const BookingForm = React.memo(({ isEdit }) => {
@@ -1186,24 +1219,32 @@ const handleRoomChange = (e) => {
               ))}
             </select>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            {/* Checkboxes row */}
-            <div className="flex items-center">
+        <div className="space-y-4 mt-4">
+          {/* Other Request Text */}
+          <div className="text-center">
+            <label className="block text-sm font-medium text-gray-700">Other Request</label>
+          </div>
+
+          {/* Checkboxes Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-center">
+            {/* Is this a recurring booking */}
+            <div className="flex justify-center items-center">
               <input
                 type="checkbox"
                 id="isRecurring"
                 name="isRecurring"
                 checked={formData.isRecurring}
                 onChange={(e) => {
-                  setFormData(prev => ({ 
-                    ...prev, 
+                  setFormData(prev => ({
+                    ...prev,
                     isRecurring: e.target.checked,
                     recurring: e.target.checked ? 'Daily' : 'No',
                     recurrenceEndDate: e.target.checked ? prev.recurrenceEndDate || formData.date : ''
                   }))
                 }}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
               <label htmlFor="isRecurring" className="ml-2 block text-sm text-gray-700">
                 Is this a recurring booking?
@@ -1211,19 +1252,34 @@ const handleRoomChange = (e) => {
             </div>
 
             {/* Meal Room */}
-            <div className="flex items-center">
+            <div className="flex justify-center items-center">
               <input
                 type="checkbox"
                 id="isMealRoom"
                 name="isMealRoom"
                 checked={formData.isMealRoom}
                 onChange={(e) => setFormData((prev) => ({ ...prev, isMealRoom: e.target.checked }))}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
               <label htmlFor="isMealRoom" className="ml-2 block text-sm text-gray-700">
                 Meal Room
               </label>
             </div>
+          </div>
+
+          {/* Break Room checkbox */}
+          <div className="flex justify-center items-center mt-4">
+            <input
+              type="checkbox"
+              id="isBreakRoom"
+              name="isBreakRoom"
+              checked={formData.isBreakRoom}
+              onChange={(e) => setFormData((prev) => ({ ...prev, isBreakRoom: e.target.checked }))}
+              className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="isBreakRoom" className="ml-2 block text-sm text-gray-700">
+              Break Room
+            </label>
           </div>
 
           {/* Conditional fields that appear when recurring is checked */}
@@ -1260,21 +1316,6 @@ const handleRoomChange = (e) => {
               </div>
             </div>
           )}
-
-          {/* Break Room checkbox on its own row for better spacing */}
-          <div className="flex items-center mt-4">
-            <input
-              type="checkbox"
-              id="isBreakRoom"
-              name="isBreakRoom"
-              checked={formData.isBreakRoom}
-              onChange={(e) => setFormData((prev) => ({ ...prev, isBreakRoom: e.target.checked }))}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <label htmlFor="isBreakRoom" className="ml-2 block text-sm text-gray-700">
-              Break Room
-            </label>
-          </div>
         </div>
 
         <div>
@@ -1369,10 +1410,15 @@ const handleRoomChange = (e) => {
       : bVal.localeCompare(aVal);
   });
  
-  const handleStatusChange = (bookingId, status) => {
-    setSelectedBookingId(bookingId);
-    setSelectedStatus(status);
-    setIsStatusModalOpen(true);
+  const handleStatusChange = async (bookingId, status) => {
+    try {
+      setSelectedBookingId(bookingId);
+      setSelectedStatus(status);
+      setIsStatusModalOpen(true);
+    } catch (error) {
+      console.error("Error preparing status change:", error);
+      setError("Failed to prepare status change. Please try again.");
+    }
   };
 
   return (
@@ -1381,18 +1427,21 @@ const handleRoomChange = (e) => {
       <div className="p-4 bg-gray-100 w-full flex flex-col">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Bookings</h2>
-          <button
-            onClick={handleAddNewClick}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            + Add New Booking
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddNewClick}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              + Add New Booking
+            </button>
+            <ExcelEventBulletinExporter bookings={bookings} />
+          </div>
         </div>
 
         {/* Filter Buttons */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-4">
-            {['All', 'Pending', 'Approved', 'Declined'].map((status) => (
+            {['All', 'Pending', 'Confirmed', 'Declined'].map((status) => (
               <TabButton
                 key={status}
                 label={status}
@@ -1501,9 +1550,12 @@ const handleRoomChange = (e) => {
                         >
                           {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                         </span>
-                        <small className="block text-gray-500 mt-1">
-                          Changed by {booking.bookedBy || ': '}
-                        </small>
+                        {/* Only show "Changed by" if status is confirmed/declined and changedBy exists */}
+                        {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
+                          <small className="block text-gray-500 mt-1">
+                            Changed by: {booking.changedBy}
+                          </small>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-2 border-b">{booking.recurring}</td>
@@ -1517,13 +1569,13 @@ const handleRoomChange = (e) => {
                         </button>
                         <button
                           className="text-green-600 hover:underline"
-                          onClick={() => handleStatusChange(booking._id, 'confirmed')}
+                          onClick={() => handleStatusChange(booking.bookingId, 'confirmed')} // Ensure booking.bookingId is used
                         >
                           Confirm
                         </button>
                         <button
                           className="text-red-600 hover:underline"
-                          onClick={() => handleStatusChange(booking._id, 'declined')}
+                          onClick={() => handleStatusChange(booking.bookingId, 'declined')} // Ensure booking.bookingId is used
                         >
                           Decline
                         </button>
@@ -1586,25 +1638,88 @@ const handleRoomChange = (e) => {
         onClose={() => setIsStatusModalOpen(false)}
         onConfirm={async () => {
           try {
-            await axios.put(
+            setSubmitLoading(true); // Show loading state
+
+            // Validate selectedBookingId
+            if (!selectedBookingId) {
+              console.error("Error: selectedBookingId is undefined.");
+              setError("Failed to update booking. Booking ID is missing.");
+              setSubmitLoading(false);
+              return;
+            }
+
+            console.log("Updating booking with ID:", selectedBookingId);
+
+            // Fetch the full booking object first
+            const bookingRes = await axios.get(
               `${API_BASE_URL}/bookings/${selectedBookingId}`,
-              { 
-                status: selectedStatus,
-                changedBy: localStorage.getItem('username') || 'Admin User' 
-              },
               { headers: { Authorization: `Bearer ${token}` } }
             );
-            fetchBookings(); // Refresh bookings
+
+            if (!bookingRes.data) {
+              throw new Error("Could not fetch booking details");
+            }
+
+            const booking = bookingRes.data;
+            console.log("Original booking data:", booking);
+
+            // Get current user's ID and fetch details
+            const userId = localStorage.getItem('userId');
+            let changedBy = 'Unknown User';
+
+            if (userId) {
+              try {
+                const userResponse = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+
+                if (userResponse.data) {
+                  changedBy = `${userResponse.data.firstName} ${userResponse.data.lastName}`;
+                }
+              } catch (error) {
+                console.error('Error fetching user details:', error);
+                // Continue with default name
+              }
+            }
+
+            // Create a simplified update payload - only send necessary fields
+            const updatePayload = {
+              status: selectedStatus.toLowerCase(),
+              changedBy: changedBy,
+              bookingId: booking.bookingId || booking._id,
+            };
+
+            console.log("Sending update payload:", updatePayload);
+
+            // Make the update request
+            const updateResponse = await axios.put(
+              `${API_BASE_URL}/bookings/${selectedBookingId}`,
+              updatePayload,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            console.log("Update response:", updateResponse.data);
+
+            // Success - refresh bookings and close modal
+            await fetchBookings();
             setIsStatusModalOpen(false);
           } catch (err) {
             console.error('Error updating status:', err);
-            setError('Failed to update booking status. Please try again.');
+
+            // Better error handling
+            if (err.response) {
+              setError(`Failed to update booking: ${err.response.data?.message || err.response.status}`);
+            } else if (err.request) {
+              setError('Network error. Please check your connection.');
+            } else {
+              setError('Failed to update booking status. Please try again.');
+            }
+          } finally {
+            setSubmitLoading(false);
           }
         }}
       />
 
-     
- 
     </div>
   );
 };

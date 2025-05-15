@@ -12,7 +12,7 @@ const processImage = async (file) => {
   try {
     // Compression options
     const options = {
-      maxSizeMB: 1,          // Maximum size in MB
+      maxSizeMB: 1,         
       maxWidthOrHeight: 800, // Resize to this maximum width or height
       useWebWorker: true,    // Use web worker for better performance
       initialQuality: 0.7,   // Initial quality setting
@@ -46,8 +46,9 @@ const BuildingModal = ({
   const [buildingDescription, setBuildingDescription] = useState('');
   const [buildingImage, setBuildingImage] = useState('');
   const [imageFile, setImageFile] = useState(null);
-  const [isUsingUrl, setIsUsingUrl] = useState(false);
-  const [imageUrl, setImageUrl] = useState('');
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
 
   // Initialize form with edit data
   useEffect(() => {
@@ -55,17 +56,13 @@ const BuildingModal = ({
       setBuildingId(editData.buildingId || '');
       setBuildingName(editData.buildingName || '');
       setBuildingDescription(editData.buildingDescription || '');
-      setBuildingImage(editData.buildingImage || '');
       
-      // Check if the image is a URL
-      if (editData.buildingImage && 
-         (editData.buildingImage.startsWith('http://') || 
-          editData.buildingImage.startsWith('https://'))) {
-        setIsUsingUrl(true);
-        setImageUrl(editData.buildingImage);
-      } else {
-        setIsUsingUrl(false);
-        setImageUrl('');
+      if (editData.buildingImageUrl) {
+        // Use the direct URL if available
+        setImagePreview(editData.buildingImageUrl);
+      } else if (editData.buildingImage) {
+        // Fallback to constructing the URL
+        setImagePreview(`${API_BASE_URL}/uploads/${editData.buildingImage}`);
       }
       
       setImageFile(null);
@@ -76,78 +73,124 @@ const BuildingModal = ({
       setBuildingDescription('');
       setBuildingImage('');
       setImageFile(null);
-      setIsUsingUrl(false);
-      setImageUrl('');
+      setImagePreview(null);
+      setErrors({});
     }
   }, [editData, isOpen]);
 
   const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Store the file for later processing
-      setImageFile(file);
-      
       try {
-        // Show preview with the compressed image
-        const optimizedBase64 = await processImage(file);
-        setBuildingImage(optimizedBase64);
-        setIsUsingUrl(false);
-        setImageUrl('');
+        setLoading(true);
+        
+        // Validate file size (10MB max)
+        if (file.size > 10 * 1024 * 1024) {
+          setErrors((prev) => ({
+            ...prev,
+            image: 'Image file is too large. Please select an image under 10MB.',
+          }));
+          setLoading(false);
+          return;
+        }
+
+        // Store the original file for later submission
+        setImageFile(file);
+        
+        // Create and display compressed preview
+        const previewOptions = {
+          maxSizeMB: 0.5,
+          maxWidthOrHeight: 800,
+          useWebWorker: true,
+          fileType: 'image/jpeg',
+          initialQuality: 0.8,
+        };
+
+        const compressedFile = await imageCompression(file, previewOptions);
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          setImagePreview(reader.result);
+          setBuildingImage(reader.result); // Keep for compatibility
+        };
+        reader.readAsDataURL(compressedFile);
+
+        // Clear any previous errors
+        setErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.image;
+          return newErrors;
+        });
       } catch (error) {
         console.error("Error processing image:", error);
-        alert("Failed to process image. Please try again with a smaller file.");
+        setErrors((prev) => ({
+          ...prev,
+          image: 'Failed to process image. Please try a different file.',
+        }));
         setImageFile(null);
+      } finally {
+        setLoading(false);
       }
-    }
-  };
-  
-  const handleUrlChange = (e) => {
-    const url = e.target.value;
-    setImageUrl(url);
-    setBuildingImage(url);
-  };
-  
-  const toggleImageInputType = () => {
-    setIsUsingUrl(!isUsingUrl);
-    if (isUsingUrl) {
-      setImageUrl('');
-    } else {
-      setImageFile(null);
     }
   };
 
-  const handleSubmit = async () => {
-    if (!buildingName.trim()) return;
+  const validateForm = () => {
+    const newErrors = {};
     
-    try {
-      // Create the building data object
-      const buildingData = {
-        buildingId: editData ? editData.buildingId : `BLD-${Date.now()}`,
-        buildingName: buildingName,
-        buildingDescription: buildingDescription,
-        updatedAt: new Date().toISOString()
-      };
-      
-      // Handle image based on whether we're using a URL or file upload
-      if (isUsingUrl) {
-        buildingData.buildingImage = imageUrl;
-      } else if (imageFile) {
-        buildingData.buildingImage = await processImage(imageFile);
-      } else if (editData && editData.buildingImage && !isUsingUrl) {
-        // Keep existing image if editing and no new image was selected
-        buildingData.buildingImage = buildingImage;
+    if (!buildingName.trim()) {
+      newErrors.name = 'Building name is required';
+    }
+    
+    if (!imageFile && !editData?.buildingImage) {
+      newErrors.image = 'Please upload an image';
+    }
+    
+    if (buildingDescription && buildingDescription.length > 500) {
+      newErrors.description = 'Description must be less than 500 characters';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (validateForm()) {
+      try {
+        setLoading(true);
+        
+        // Create the building data object
+        const buildingData = {
+          buildingId: editData ? editData.buildingId : Date.now(),
+          buildingName: buildingName,
+          buildingDescription: buildingDescription,
+          updatedAt: new Date().toISOString()
+        };
+        
+        // Handle image
+        if (imageFile) {
+          // We need to pass the raw file for FormData
+          buildingData._imageFile = imageFile;
+        } else if (editData && editData.buildingImage) {
+          // Keep existing image if editing and no new image was selected
+          buildingData.buildingImage = editData.buildingImage;
+        }
+        
+        // If it's a new building, add createdAt timestamp
+        if (!editData) {
+          buildingData.createdAt = new Date().toISOString();
+        }
+        
+        // Save the building
+        onSave(buildingData);
+      } catch (error) {
+        console.error("Error preparing building data:", error);
+        setErrors((prev) => ({
+          ...prev, 
+          general: 'An error occurred while preparing the data. Please try again.'
+        }));
+      } finally {
+        setLoading(false);
       }
-      
-      // If it's a new building, add createdAt timestamp
-      if (!editData) {
-        buildingData.createdAt = new Date().toISOString();
-      }
-      
-      // Save the building
-      onSave(buildingData);
-    } catch (error) {
-      console.error("Error preparing building data:", error);
-      alert("An error occurred while preparing the data. Please try again.");
     }
   };
 
@@ -155,24 +198,32 @@ const BuildingModal = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-semibold mb-4">
           {editData ? 'Edit Building' : 'Add New Building'}
         </h2>
         
+        {errors.general && (
+          <div className="mb-4 p-2 bg-red-100 border border-red-400 text-red-700 rounded">
+            {errors.general}
+          </div>
+        )}
+        
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Building Name
+              Building Name*
             </label>
             <input
               type="text"
               value={buildingName}
               onChange={(e) => setBuildingName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
               placeholder="Enter building name"
-              required
             />
+            {errors.name && (
+              <p className="text-red-500 text-xs mt-1">{errors.name}</p>
+            )}
           </div>
           
           <div>
@@ -182,52 +233,45 @@ const BuildingModal = ({
             <textarea
               value={buildingDescription}
               onChange={(e) => setBuildingDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border ${errors.description ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
               placeholder="Enter building description"
               rows="3"
             />
+            <div className="flex justify-between">
+              {errors.description ? (
+                <p className="text-red-500 text-xs mt-1">{errors.description}</p>
+              ) : (
+                <span className="text-xs text-gray-500 mt-1">
+                  {buildingDescription ? buildingDescription.length : 0}/500 characters
+                </span>
+              )}
+            </div>
           </div>
           
           <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Building Image
-              </label>
-              <button 
-                type="button" 
-                onClick={toggleImageInputType}
-                className="text-xs text-blue-600 hover:underline"
-              >
-                {isUsingUrl ? "Upload image file instead" : "Use image URL instead"}
-              </button>
-            </div>
-            
-            {isUsingUrl ? (
-              <input
-                type="text"
-                value={imageUrl}
-                onChange={handleUrlChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter image URL (https://...)"
-              />
-            ) : (
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Building Image*
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className={`w-full px-3 py-2 border ${errors.image ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
+            />
+            {errors.image && (
+              <p className="text-red-500 text-xs mt-1">{errors.image}</p>
             )}
             
-            {buildingImage && (
+            {imagePreview && (
               <div className="mt-2">
                 <img 
-                  src={buildingImage} 
+                  src={imagePreview} 
                   alt="Building preview" 
-                  className="h-32 object-cover rounded-md"
+                  className="h-32 object-cover rounded-md w-full"
                   onError={(e) => {
                     e.target.onerror = null;
                     e.target.src = '/placeholder-building.png';
+                    setErrors((prev) => ({...prev, image: 'Invalid image file'}));
                   }}
                 />
               </div>
@@ -238,16 +282,17 @@ const BuildingModal = ({
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+              disabled={loading}
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!buildingName}
-              className={`px-4 py-2 rounded-md ${!buildingName ? 
+              disabled={loading}
+              className={`px-4 py-2 rounded-md ${loading ? 
                 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
             >
-              {editData ? 'Update Building' : 'Add Building'}
+              {loading ? 'Processing...' : (editData ? 'Update Building' : 'Add Building')}
             </button>
           </div>
         </div>
@@ -319,13 +364,54 @@ const BuildingManagement = () => {
     window.dispatchEvent(event);
   };
 
+  // Handle deleting a building
+  const handleDeleteBuilding = async (buildingId) => {
+    if (window.confirm('Are you sure you want to delete this building? This action cannot be undone.')) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/buildings/${buildingId}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
+        }
+
+        // Remove the building from the local state
+        setBuildings(buildings.filter(building => building.buildingId !== buildingId));
+        
+        // Signal that building data has changed
+        signalBuildingDataChanged();
+        
+        alert('Building deleted successfully!');
+      } catch (error) {
+        console.error('Error deleting building:', error);
+        alert(`Failed to delete building: ${error.message}`);
+      }
+    }
+  };
+
   // Handle saving building data (create or update)
   const handleSaveBuilding = async (buildingData) => {
     try {
+      // Extract special properties we added for handling in this function
+      const imageFile = buildingData._imageFile;
+      
+      // Remove the special properties before sending to the server
+      delete buildingData._imageFile;
+      
       let response;
-      const headers = {
-        'Content-Type': 'application/json'
-      };
+      
+      // Create FormData object for the multipart/form-data request
+      const formData = new FormData();
+      
+      // Add building data as JSON string
+      formData.append('buildingData', JSON.stringify(buildingData));
+      
+      // If there's an image file, add it to FormData
+      if (imageFile) {
+        formData.append('buildingImage', imageFile);
+      }
       
       if (editingBuilding) {
         // Update existing building
@@ -333,8 +419,7 @@ const BuildingManagement = () => {
           `${API_BASE_URL}/api/buildings/${buildingData.buildingId}`, 
           {
             method: 'PUT',
-            headers: headers,
-            body: JSON.stringify(buildingData)
+            body: formData
           }
         );
       } else {
@@ -343,8 +428,7 @@ const BuildingManagement = () => {
           `${API_BASE_URL}/api/buildings`, 
           {
             method: 'POST',
-            headers: headers,
-            body: JSON.stringify(buildingData)
+            body: formData
           }
         );
       }
@@ -358,7 +442,9 @@ const BuildingManagement = () => {
       
       if (editingBuilding) {
         // Update the local state with the updated building
-        setBuildings(buildings.map(bldg => (bldg.buildingId === newBuilding.buildingId ? newBuilding : bldg)));
+        setBuildings(buildings.map(bldg => 
+          (bldg.buildingId === newBuilding.buildingId ? newBuilding : bldg)
+        ));
         alert('Building updated successfully!');
       } else {
         // Add the new building to the state
@@ -373,39 +459,6 @@ const BuildingManagement = () => {
     } catch (error) {
       console.error('Error saving building:', error);
       alert(`Failed to save building: ${error.message}`);
-    }
-  };
-
-  // Handle deleting a building
-  const handleDeleteBuilding = async (buildingId) => {
-    if (!window.confirm('Are you sure you want to delete this building?')) return;
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/buildings/${buildingId}`, {
-        method: 'DELETE'
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
-      }
-
-      // Remove the building from the state after successful deletion
-      setBuildings(buildings.filter(building => building.buildingId !== buildingId));
-      
-      // Signal that building data has changed
-      signalBuildingDataChanged();
-      
-      alert('Building deleted successfully!');
-    } catch (error) {
-      console.error('Error deleting building:', error);
-      
-      // Show specific message for dependency issues
-      if (error.message.includes('associated')) {
-        alert(error.message);
-      } else {
-        alert(`Failed to delete building: ${error.message}`);
-      }
     }
   };
 
@@ -486,17 +539,11 @@ const BuildingManagement = () => {
                           {building.buildingImage ? (
                             <div className="flex flex-col items-center">
                               <img 
-                                src={building.buildingImage} 
-                                alt={building.buildingName}
-                                className="h-16 w-24 object-cover rounded"
+                                src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
+                                alt="Building" 
+                                className="h-20 w-20 object-cover rounded-md"
                                 onError={handleImageError}
                               />
-                              <button 
-                                className="mt-1 text-xs text-blue-600 hover:text-blue-800"
-                                onClick={() => window.open(building.buildingImage, '_blank')}
-                              >
-                                View Full
-                              </button>
                             </div>
                           ) : (
                             <div className="h-16 w-24 bg-gray-200 rounded flex items-center justify-center text-gray-500">
@@ -554,7 +601,7 @@ const BuildingManagement = () => {
                                 <div className="flex justify-center items-center">
                                   {building.buildingImage ? (
                                     <img 
-                                      src={building.buildingImage} 
+                                      src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
                                       alt={building.buildingName}
                                       className="max-h-48 max-w-full object-cover rounded shadow-lg"
                                       onError={handleImageError}
