@@ -42,11 +42,11 @@ const Profile = () => {
       try {
         console.log(`Fetching user data for userId: ${userId}`);
         const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
-          headers: { 
-            Authorization: `Bearer ${token}`
-          }
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
-        
+
         const userData = response.data;
         setUser({
           firstName: userData.firstName,
@@ -55,32 +55,32 @@ const Profile = () => {
           birthdate: userData.birthdate || '', // Handle Sequelize DATEONLY format
           email: userData.email,
           profileImage: userData.profileImage || '',
-          role: userData.role || userRole || ''
+          role: userData.role || userRole || '',
         });
-        
+
         // Set preview image with proper URL path
         if (userData.profileImage) {
           setPreviewImage(`${API_BASE_URL}/uploads/${userData.profileImage}`);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
-        
+
         setUseLocalData(true);
-        
-        const firstName = localStorage.getItem("firstName") || '';
-        const lastName = localStorage.getItem("lastName") || '';
-        const email = localStorage.getItem("email") || '';
-        
+
+        const firstName = localStorage.getItem('firstName') || '';
+        const lastName = localStorage.getItem('lastName') || '';
+        const email = localStorage.getItem('email') || '';
+
         setUser({
           firstName,
           lastName,
           email,
-          department: 'ICT', 
+          department: 'ICT',
           role: userRole || 'User',
           profileImage: '',
-          birthdate: ''
+          birthdate: '',
         });
-        
+
         setError('Could not fetch profile data from server. Using available local data.');
       }
     };
@@ -137,7 +137,6 @@ const Profile = () => {
           setPreviewImage(reader.result);
         };
         reader.readAsDataURL(compressedFile);
-
       } catch (error) {
         console.error('Error processing image:', error);
         setError('Failed to process image. Please try a different file.');
@@ -147,55 +146,63 @@ const Profile = () => {
     }
   };
 
-  // Handle form submission - updated for Multer
+  // Handle form submission - updated for fetch API
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
     setLoading(true);
 
     try {
-      // Create FormData for Multer
-      const formData = new FormData();
-      formData.append('firstName', user.firstName);
-      formData.append('lastName', user.lastName);
-      formData.append('department', user.department);
-      formData.append('birthdate', user.birthdate || '');
-      formData.append('email', user.email);
-      
-      // Only append image if a new one is selected
-      if (profileImageFile) {
-        formData.append('profileImage', profileImageFile);
+      const token = localStorage.getItem("token");
+
+      console.log("Authorization Header:", `Bearer ${token}`);
+
+      // Ensure userId is defined
+      if (!userId) {
+        toast.error("User ID is missing. Please log in again.");
+        setLoading(false);
+        return;
       }
 
-      const response = await axios.put(
-        `${API_BASE_URL}/users/${userId}`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(user),
+      });
 
-      if (response.status === 200) {
-        setSuccess('Profile updated successfully');
-        toast.success('Profile updated successfully');
-        
-        // Update localStorage with new user data
-        localStorage.setItem("firstName", user.firstName);
-        localStorage.setItem("lastName", user.lastName);
+      if (response.ok) {
+        const updatedUser = await response.json();
+        setUser(updatedUser); 
+        toast.success("Profile updated successfully!");
       } else {
-        setError('Failed to update profile. Please try again.');
-        toast.error('Failed to update profile');
+        const errorData = await response.json().catch(() => null); // Handle empty response
+        toast.error(errorData?.message || "Failed to update profile");
       }
     } catch (error) {
-      console.error('Error updating profile:', error);
-      setError('Something went wrong! Please try again.');
-      toast.error(error.response?.data?.message || 'Failed to update profile');
+      console.error("Error updating profile:", error);
+      toast.error("Something went wrong! Please try again.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Helper function to decode JWT tokens
+  const parseJwt = (token) => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('Error parsing JWT:', error);
+      return null;
     }
   };
 
@@ -212,25 +219,29 @@ const Profile = () => {
     setLoading(true);
 
     try {
-      await axios.put(
-        `${API_BASE_URL}/auth/update-password`, 
+      const response = await axios.put(
+        `${API_BASE_URL}/auth/update-password`,
         {
-          userId: userId,
+          email: user.email,
           currentPassword: passwords.oldPassword,
-          newPassword: passwords.newPassword
+          newPassword: passwords.newPassword,
         },
         {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      toast.success('Password changed successfully');
-      // Reset password fields
-      setPasswords({
-        oldPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
+      if (response.status === 200) {
+        toast.success('Password changed successfully');
+        // Reset password fields
+        setPasswords({
+          oldPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+        });
+      } else {
+        toast.error('Failed to change password. Please try again.');
+      }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to change password');
       console.error('Error changing password:', error);
@@ -359,17 +370,6 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Birthdate</label>
-                    <input
-                      type="date"
-                      name="birthdate"
-                      value={user.birthdate}
-                      onChange={handleInputChange}
-                      className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                     <select
                       name="department"
@@ -393,17 +393,6 @@ const Profile = () => {
                       name="email"
                       value={user.email}
                       onChange={handleInputChange}
-                      className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      readOnly
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                    <input
-                      type="text"
-                      name="role"
-                      value={user.role}
                       className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       readOnly
                     />

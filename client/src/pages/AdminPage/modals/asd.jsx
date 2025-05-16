@@ -1002,6 +1002,7 @@ const handleNameChange = (e) => {
     return filteredEndTimes;
   };
   
+  // BookingForm component
   const BookingForm = React.memo(({ isEdit }) => {
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -1036,6 +1037,10 @@ const handleNameChange = (e) => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
             <input
+              type="text"
+              name="firstName"
+              defaultValue={formData.firstName} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
               required
               placeholder="Enter first name"
               autoComplete="off"
@@ -1181,7 +1186,7 @@ const handleNameChange = (e) => {
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
             >
               <option value="">Select Start Time</option>
-              {TIME_OPTIONS.map((time) => (
+              {getFilteredStartTimes().map((time) => (
                 <option key={time} value={time}>
                   {time}
                 </option>
@@ -1401,27 +1406,25 @@ const handleNameChange = (e) => {
     setSelectedStatus(status);
     setIsStatusModalOpen(true);
   };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
       <TopBar onSearch={setSearchTerm} />
       <div className="p-4 bg-gray-100 w-full flex flex-col">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Bookings</h2>
-          <div className="flex gap-2">
-            <button
-              onClick={handleAddNewClick}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-            >
-              + Add New Booking
-            </button>
-            <ExcelEventBulletinExporter bookings={bookings} />
-          </div>
+          <button
+            onClick={handleAddNewClick}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            + Add New Booking
+          </button>
         </div>
 
         {/* Filter Buttons */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-4">
-            {['All', 'Pending', 'Confirmed', 'Declined'].map((status) => (
+            {['All', 'Pending', 'Approved', 'Declined'].map((status) => (
               <TabButton
                 key={status}
                 label={status}
@@ -1458,7 +1461,7 @@ const handleNameChange = (e) => {
                   { key: 'isMealRoom', label: 'Meal Room' },
                   { key: 'isBreakRoom', label: 'Break Room' },
                   { key: 'status', label: 'Status' },
-                  { key: 'recurring', label: 'Recurring' },
+                  //{ key: 'recurring', label: 'Recurring' },
                 ].map(({ key, label }) => (
                   <th
                     key={key}
@@ -1499,7 +1502,7 @@ const handleNameChange = (e) => {
                       )}
                     </td>
                     <td className="px-4 py-2 border-b">
-                       {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
+                      {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
                       {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="px-4 py-2 border-b">{booking.bookingCapacity || '1'}</td>
@@ -1530,15 +1533,12 @@ const handleNameChange = (e) => {
                         >
                           {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                         </span>
-                        {/* Only show "Changed by" if status is confirmed/declined and changedBy exists */}
-                        {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
-                          <small className="block text-gray-500 mt-1">
-                            Changed by: {booking.changedBy}
-                          </small>
-                        )}
+                        <small className="block text-gray-500 mt-1">
+                          Changed by {booking.bookedBy || ': '}
+                        </small>
                       </div>
                     </td>
-                    <td className="px-4 py-2 border-b">{booking.recurring}</td>
+                    {/* <td className="px-4 py-2 border-b">{booking.recurring}</td> */}
                     <td className="px-4 py-2 border-b">
                       <div className="flex space-x-2">
                         <button
@@ -1549,13 +1549,13 @@ const handleNameChange = (e) => {
                         </button>
                         <button
                           className="text-green-600 hover:underline"
-                          onClick={() => handleStatusChange(booking.bookingId, 'confirmed')} // Ensure booking.bookingId is used
+                          onClick={() => handleStatusChange(booking._id, 'confirmed')}
                         >
                           Confirm
                         </button>
                         <button
                           className="text-red-600 hover:underline"
-                          onClick={() => handleStatusChange(booking.bookingId, 'declined')} // Ensure booking.bookingId is used
+                          onClick={() => handleStatusChange(booking._id, 'declined')}
                         >
                           Decline
                         </button>
@@ -1580,7 +1580,7 @@ const handleNameChange = (e) => {
         {filteredBookings.length > 0 && (
           <div className="flex justify-between items-center mt-4">
             <button
-              onClick={handlePreviousPage}  
+              onClick={handlePreviousPage}
               disabled={currentPage === 1}
             >
               Previous
@@ -1616,90 +1616,44 @@ const handleNameChange = (e) => {
         isOpen={isStatusModalOpen}
         currentStatus={selectedStatus}
         onClose={() => setIsStatusModalOpen(false)}
-        onConfirm={async () => {
-          try {
-            setSubmitLoading(true); // Show loading state
+onConfirm={async () => {
+  try {
+    // Attempt to update the booking status
+    await axios.put(
+      `${API_BASE_URL}/bookings/${selectedBookingId}`,
+      { 
+        status: selectedStatus,
+        changedBy: localStorage.getItem('username') || 'Admin User' 
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-            // Validate selectedBookingId
-            if (!selectedBookingId) {
-              console.error("Error: selectedBookingId is undefined.");
-              setError("Failed to update booking. Booking ID is missing.");
-              setSubmitLoading(false);
-              return;
-            }
+    // After successfully updating, refresh the bookings list and close the modal
+    fetchBookings();
+    setIsStatusModalOpen(false);
+  } catch (err) {
+    console.error('Error updating status:', err);
+    if (err.response) {
+      // The server returned an error response
+      console.error('Error status:', err.response.status);   // Status code (e.g. 400, 500)
+      console.error('Error data:', err.response.data);         // Error message or details from the server
+      
+      // Show the error message received from the server
+      setError(`Server Error: ${err.response.data?.message || 'Failed to update booking status.'}`);
+    } else if (err.request) {
+      // No response was received from the server
+      setError('Network error. Please check your connection and try again.');
+    } else {
+      // Unknown error in the request setup
+      setError('Failed to update booking status. Please try again.');
+    }
+  }
+}}
 
-            console.log("Updating booking with ID:", selectedBookingId);
-
-            // Fetch the full booking object first
-            const bookingRes = await axios.get(
-              `${API_BASE_URL}/bookings/${selectedBookingId}`,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-
-            if (!bookingRes.data) {
-              throw new Error("Could not fetch booking details");
-            }
-
-            const booking = bookingRes.data;
-            console.log("Original booking data:", booking);
-
-            // Get current user's ID and fetch details
-            const userId = localStorage.getItem('userId');
-            let changedBy = 'Unknown User';
-
-            if (userId) {
-              try {
-                const userResponse = await axios.get(`${API_BASE_URL}/users/${userId}`, {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
-
-                if (userResponse.data) {
-                  changedBy = `${userResponse.data.firstName} ${userResponse.data.lastName}`;
-                }
-              } catch (error) {
-                console.error('Error fetching user details:', error);
-                // Continue with default name
-              }
-            }
-
-            // Create a simplified update payload - only send necessary fields
-            const updatePayload = {
-              status: selectedStatus.toLowerCase(),
-              changedBy: changedBy,
-              bookingId: booking.bookingId || booking._id,
-            };
-
-            console.log("Sending update payload:", updatePayload);
-
-            // Make the update request
-            const updateResponse = await axios.put(
-              `${API_BASE_URL}/bookings/${selectedBookingId}`,
-              updatePayload,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-
-            console.log("Update response:", updateResponse.data);
-
-            // Success - refresh bookings and close modal
-            await fetchBookings();
-            setIsStatusModalOpen(false);
-          } catch (err) {
-            console.error('Error updating status:', err);
-
-            // Better error handling
-            if (err.response) {
-              setError(`Failed to update booking: ${err.response.data?.message || err.response.status}`);
-            } else if (err.request) {
-              setError('Network error. Please check your connection.');
-            } else {
-              setError('Failed to update booking status. Please try again.');
-            }
-          } finally {
-            setSubmitLoading(false);
-          }
-        }}
       />
 
+     
+ 
     </div>
   );
 };

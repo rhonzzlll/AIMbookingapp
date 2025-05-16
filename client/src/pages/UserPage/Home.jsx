@@ -94,6 +94,9 @@ const HomePage = () => {
   useEffect(() => {
     const fetchUserAndBookings = async () => {
       try {
+        console.log("Token being sent:", token);
+
+        // Get user data from API
         // Get user data from API
         const userResponse = await axios.get(`${API_BASE_URL}/api/users/${userId}`, {
           headers: {
@@ -269,7 +272,7 @@ const HomePage = () => {
                           }`}
                           onClick={() => {
                             setActiveTab(tab);
-                            if (tab === 'all') setVisibleCount(filteredBookings.length);  
+                            if (tab === 'all') setVisibleCount(filteredBookings.length);
                           }}
                         >
                           {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -280,14 +283,12 @@ const HomePage = () => {
 
                   <div
                     className={`space-y-4 ${
-                      activeTab === 'all' && displayedBookings.length > 3 
-                        ? 'max-h-96 overflow-y-auto' 
-                        : ''
+                      displayedBookings.length > 3 ? 'max-h-96 overflow-y-auto' : ''
                     }`}
                   >
                     {displayedBookings.length > 0 ? (
                       displayedBookings.map((booking) => (
-                        <BookingCard key={booking._id} booking={booking} />
+                        <BookingCard key={booking.bookingId} booking={booking} />
                       ))
                     ) : (
                       <div className="text-center py-8">
@@ -440,21 +441,40 @@ const ErrorState = ({ message }) => (
 
 // Booking Card Component
 const BookingCard = ({ booking }) => {
-  // Function to format date from startTime (ISO format) to readable date
+  const [roomName, setRoomName] = useState('Loading...');
+
+  // Fetch room details using roomId
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        // Fetch room name
+        if (booking.roomId) {
+          const roomResponse = await axios.get(
+            `http://localhost:5000/api/rooms/${booking.roomId}`
+          );
+          setRoomName(roomResponse.data.roomName || 'Unknown Room');
+        } else {
+          setRoomName('Unknown Room');
+        }
+      } catch (error) {
+        console.error('Error fetching room details:', error);
+        setRoomName('Unknown Room');
+      }
+    };
+
+    fetchDetails();
+  }, [booking.roomId]);
+
   const formatBookingDate = (dateString) => {
     try {
-      // Try to use startTime first, fall back to date field if available
-      const bookingDate = dateString ? new Date(dateString) : 
-                        booking.startTime ? new Date(booking.startTime) : null;
-      
+      const bookingDate = dateString ? new Date(dateString) : null;
       if (!bookingDate || isNaN(bookingDate)) {
         return { day: '', date: '', month: '' };
       }
-      
       return {
         day: format(bookingDate, 'EEE'),
         date: format(bookingDate, 'dd'),
-        month: format(bookingDate, 'MMM')
+        month: format(bookingDate, 'MMM'),
       };
     } catch (error) {
       console.error('Date formatting error:', error);
@@ -462,27 +482,12 @@ const BookingCard = ({ booking }) => {
     }
   };
 
-  // Format time from 24-hour format to 12-hour format
   const formatTime = (timeString) => {
     if (!timeString) return '';
-    
     try {
-      // Handle ISO date strings
-      if (timeString.includes('T') || timeString.includes('Z')) {
-        const date = new Date(timeString);
-        if (isNaN(date)) return '';
-        return format(date, 'h:mm a');
-      }
-
-      // Handle 24-hour format (HH:MM)
-      if (timeString.includes(':')) {
-        const [hours, minutes] = timeString.split(':').map(Number);
-        const date = new Date();
-        date.setHours(hours, minutes);
-        return format(date, 'h:mm a');
-      }
-      
-      return timeString;  // Return as is if format is unknown
+      const date = new Date(timeString);
+      if (isNaN(date)) return '';
+      return format(date, 'h:mm a');
     } catch (error) {
       console.error('Time formatting error:', error);
       return timeString;
@@ -490,21 +495,10 @@ const BookingCard = ({ booking }) => {
   };
 
   const { day, date, month } = formatBookingDate(booking.date);
-  
-  // Get room title (handle different property names)
-  const roomTitle = booking.title || booking.room || 'Untitled Booking';
-  
-  // Format start and end times
   const startTimeFormatted = formatTime(booking.startTime);
   const endTimeFormatted = formatTime(booking.endTime);
-  
-  // Get building and floor information
-  const buildingName = booking.building || '';
-  const roomName = booking.room || '';
-  const floorName = booking.floor || '';
-  
-  // Default to 'pending' if status is not provided
   const status = booking.status || 'pending';
+
   return (
     <div className="border border-gray-200 rounded-lg hover:shadow-md transition-shadow overflow-hidden">
       <div className="flex flex-col md:flex-row">
@@ -529,25 +523,19 @@ const BookingCard = ({ booking }) => {
         <div className="p-4 flex-grow">
           <div className="flex justify-between items-start">
             <div>
-              <h3 className="font-bold text-lg">{roomTitle}</h3>
+              <h3 className="font-bold text-lg">{booking.title || 'Untitled Booking'}</h3>
               <div className="flex items-center text-gray-500 text-sm mt-1">
                 <Clock size={14} className="mr-1" />
-                {startTimeFormatted} - {endTimeFormatted}
+                <span className="font-medium">Time:</span> {startTimeFormatted} - {endTimeFormatted}
               </div>
               <div className="flex items-center text-gray-500 text-sm mt-1">
                 <MapPin size={14} className="mr-1" />
-                {buildingName}
-                {buildingName && (floorName || roomName) ? ', ' : ''}
-                {floorName}
-                {floorName && roomName ? ', ' : ''}
-                {roomName && <span className="font-medium">{roomName}</span>}
+                <span className="font-medium">Location:</span> {roomName}
               </div>
-              
-              {/* Add this new section for the admin who changed the status */}
-              {booking.bookedBy && (
+              {booking.changedBy && (
                 <div className="flex items-center text-gray-500 text-sm mt-1">
                   <User size={14} className="mr-1" />
-                  changed by {booking.bookedBy}
+                  Changed by {booking.changedBy}
                 </div>
               )}
             </div>

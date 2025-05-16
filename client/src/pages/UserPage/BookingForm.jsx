@@ -375,62 +375,61 @@ const BookingForm = ({ onBookingSubmit }) => {
     if (name === 'buildingId') {
       const selectedBuilding = buildings.find(b => b.id === value) || { name: '' };
       console.log("Selected building:", selectedBuilding); // Debug log
-      
+  
       setFormData({
         ...formData,
-        [name]: value,
-        buildingName: selectedBuilding.name,
-        categoryId: '',
-        categoryName: '',
-        roomId: '',
+        [name]: value, // Set the buildingId correctly
+        buildingName: selectedBuilding.name, // Set the buildingName from the selected building
+        categoryId: '', // Reset categoryId when building changes
+        categoryName: '', // Reset categoryName when building changes
+        roomId: '', // Reset roomId when building changes
       });
-      setAvailabilityStatus(null);
+      setAvailabilityStatus(null); // Reset availability status
     } else if (name === 'categoryId') {
-      // Find the selected category to get its name
       const selectedCategory = categories.find(c => c.id === value) || { name: '' };
-      
+  
       setFormData({
         ...formData,
-        [name]: value,
-        categoryName: selectedCategory.name,
-        roomId: '',
+        [name]: value, // Set the categoryId correctly
+        categoryName: selectedCategory.name, // Set the categoryName from the selected category
+        roomId: '', // Reset roomId when category changes
       });
       setAvailabilityStatus(null);
     } else if (name === 'roomId') {
       const selectedRoom = roomMap[value] || {};
       setFormData({
         ...formData,
-        [name]: value,
-        roomName: selectedRoom.roomName || '',
+        [name]: value, // Set the roomId correctly
+        roomName: selectedRoom.roomName || '', // Set the roomName from the selected room
       });
       setAvailabilityStatus(null);
-      
+  
       // Check availability after a short delay
       if (formData.buildingId && value && formData.date && formData.startTime && formData.endTime) {
         checkTimeAvailability({
           ...formData,
-          [name]: value
+          [name]: value,
         });
       }
     } else if (name === 'date' || name === 'startTime' || name === 'endTime') {
       setFormData({
         ...formData,
-        [name]: value,
+        [name]: value, // Update the respective field
       });
       setAvailabilityStatus(null);
-      
-      // When key booking details change, check availability after a short delay
-      if (formData.buildingId && formData.roomId && formData.date && 
+  
+      // Check availability after a short delay
+      if (formData.buildingId && formData.roomId && formData.date &&
           (name === 'roomId' || name === 'date' || name === 'startTime' || name === 'endTime')) {
         checkTimeAvailability({
           ...formData,
-          [name]: value
+          [name]: value,
         });
       }
     } else {
       setFormData({
         ...formData,
-        [name]: type === 'checkbox' ? checked : value,
+        [name]: type === 'checkbox' ? checked : value, // Handle other fields
       });
     }
   };
@@ -620,83 +619,62 @@ const BookingForm = ({ onBookingSubmit }) => {
 
     setLoading(true);
     setError('');
-  
+
     try {
       // Fetch user data to ensure it's up-to-date
       await fetchUserData();
-  
+
       // Ensure date and time are valid
       if (!formData.date || !formData.startTime || !formData.endTime) {
         setError('Please provide a valid date, start time, and end time.');
         setLoading(false);
         return;
       }
-  
+
       // Convert time formats correctly
-      const startTime24 = convertTo24HourFormat(formData.startTime);
-      const endTime24 = convertTo24HourFormat(formData.endTime);
-  
+      const startTime24 = `${convertTo24HourFormat(formData.startTime)}:00`; // Add ":00" for seconds
+      const endTime24 = `${convertTo24HourFormat(formData.endTime)}:00`; // Add ":00" for seconds
+
       // Validate that the dates are valid
-      if (isNaN(new Date(`${formData.date}T${startTime24}:00`).getTime()) || 
-          isNaN(new Date(`${formData.date}T${endTime24}:00`).getTime())) {
+      if (isNaN(new Date(`${formData.date}T${startTime24}`).getTime()) || 
+          isNaN(new Date(`${formData.date}T${endTime24}`).getTime())) {
         setError('Invalid date or time. Please check your input.');
         setLoading(false);
         return;
       }
-  
+
       // Validate that start time is before end time
-      const startDateTime = new Date(`${formData.date}T${startTime24}:00`);
-      const endDateTime = new Date(`${formData.date}T${endTime24}:00`);
+      const startDateTime = new Date(`${formData.date}T${startTime24}`);
+      const endDateTime = new Date(`${formData.date}T${endTime24}`);
       
       if (startDateTime >= endDateTime) {
         setError('Start time must be earlier than end time.');
         setLoading(false);
         return;
       }
-  
-      // Check availability one last time before submitting
-      const availabilityCheck = await axios.post(
-        `${API_BASE_URL}/bookings/check-availability`,
-        {
-          buildingId: formData.buildingId,
-          roomId: formData.roomId,
-          categoryId: formData.categoryId,
-          startTime: startDateTime.toISOString(),
-          endTime: endDateTime.toISOString(),
-          status: 'confirmed',
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-  
-      if (!availabilityCheck.data.available) {
-        setError(`Booking conflict: ${availabilityCheck.data.message}`);
-        setLoading(false);
-        return;
-      }
-  
+
       // Prepare payload with ISO strings and user data
-      // Remove unnecessary fields if present to avoid duplicate key error
-      const { _id, ...cleanFormData } = formData;
-  
+      const { _id, ...cleanFormData } = formData; // Remove unnecessary fields if present
       const bookingPayload = {
         ...cleanFormData,
         date: formData.date,
-        startTime: startTime24, // Send time in 24h format for DB
-        endTime: endTime24, // Send time in 24h format for DB
+        startTime: startTime24, // Send time in HH:mm:ss format
+        endTime: endTime24, // Send time in HH:mm:ss format
         userId: parseInt(userId), // Ensure it's an integer as expected by the model
         timeSubmitted: new Date().toISOString(),
         status: 'pending',
         bookingCapacity: formData.bookingCapacity || 1
       };
-  
+
+      // Log the payload for debugging
+      console.log('Booking submission payload:', bookingPayload);
+
       // Make API request
       const response = await axios.post(`${API_BASE_URL}/bookings`, bookingPayload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
-      await fetchBookings();  // Fetch updated bookings
+
+      await fetchBookings(); // Fetch updated bookings
 
       if (formData.buildingId && formData.roomId && formData.date) {
         processBookingsForTimeSlots(existingBookings); 
@@ -704,6 +682,7 @@ const BookingForm = ({ onBookingSubmit }) => {
             
       onBookingSubmit(response.data); // Notify parent component of successful booking
 
+      // Reset form data
       setFormData({
         title: '',
         firstName: '',
