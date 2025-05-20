@@ -25,7 +25,7 @@ const RoomManagement = () => {
   
   // Pagination states
   const [page, setPage] = useState(1);
-  const [roomsPerPage] = useState(5);
+  const [roomsPerPage] = useState(10);
 
   useEffect(() => {
     // Fetch all required data when component mounts
@@ -263,7 +263,6 @@ const RoomManagement = () => {
   const totalPages = Math.ceil(filteredRooms.length / roomsPerPage);
 
   return (
-    <AdminContentTemplate>
       <div className="p-2 md:p-4 max-w-7xl mx-auto">
         {toast && (
           <Toast
@@ -359,7 +358,6 @@ const RoomManagement = () => {
           </div>
         </div>
       </div>
-    </AdminContentTemplate>
   );
 };
 

@@ -94,17 +94,18 @@ const AdminSidebar = () => {
       text: 'Rooms',
       path: '/admin/rooms',
       children: [
-        {
-          id: 'building',
-          text: 'Building',
-          path: '/admin/building',
-        },
-        {
-          id: 'category',
-          text: 'Category',
-          path: '/admin/category',
-        },
-        
+            {
+              id: 'building',
+              icon: '🏢',
+              text: 'Building',
+              path: '/admin/building',
+            },
+            {
+              id: 'category',
+              icon: '📂',
+              text: 'Category',
+              path: '/admin/category',
+            },
       ],
     },
     { id: 'bookings', icon: '📝', text: 'Bookings', path: '/admin/bookings' },
@@ -138,15 +139,15 @@ const AdminSidebar = () => {
                       <span className="mr-4 text-lg">{item.icon}</span>
                       <span className="text-sm font-medium">{item.text}</span>
                     </Link>
-                    <span 
-                      className="text-xs ml-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleDropdown(item.id);
-                      }}
-                    >
-                      {expandedItems[item.id] ? '▼' : '►'}
-                    </span>
+                      <span 
+                        className="text-lg ml-2 select-none"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleDropdown(item.id);
+                        }}
+                      >
+                        {expandedItems[item.id] ? '▼' : '▶'}
+                      </span>
                   </div>
                   
                   {/* Dropdown items */}

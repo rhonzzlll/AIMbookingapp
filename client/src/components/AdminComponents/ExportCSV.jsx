@@ -84,7 +84,8 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
         { header: 'Time', key: 'time', width: 20 },
         { header: 'PAX', key: 'pax', width: 8 },
         { header: 'Date', key: 'date', width: 15 },
-        { header: 'Remarks', key: 'remarks', width: 25 }
+        { header: 'Notes', key: 'notes', width: 25 },
+        { header: '', key: 'remarks', width: 25 }
       ];
       
       // Add title row and merge cells
@@ -111,7 +112,7 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
       
       // Add header row
       const headerRow = worksheet.addRow([
-        'Person-In-Charge', 'Department', 'Function Room', 'Time', 'PAX', 'Date', 'Remarks'
+        'Person-In-Charge', 'Department', 'Function Room', 'Time', 'PAX', 'Date', 'Notes', 'Remarks'
       ]);
       
       // Style header row
@@ -125,7 +126,7 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
       };
       
       // Add borders to header
-      for (let i = 1; i <= 7; i++) {
+      for (let i = 1; i <= 8; i++) {
         const cell = headerRow.getCell(i);
         cell.border = {
           top: { style: 'thin' },
@@ -145,14 +146,17 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
       
       // Add data rows
       filteredBookings.forEach((booking, index) => {
+        const paxValue = booking.bookingCapacity > 0 ? booking.bookingCapacity : '-';
+        
         const row = worksheet.addRow([
-          booking.bookedBy,
+          booking.changedBy || booking.bookedBy || '-', // Person-In-Charge
           booking.department,
           booking.roomName,
           `${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`,
-          booking.bookingCapacity || '-', // <-- changed from booking.attendees
+          paxValue,
           formatDate(booking.date),
-          booking.notes || 'REFER TO TFO'
+          booking.notes || '-', // Notes column
+          booking.remarks || '-' // Remarks column
         ]);
         
         // Style Person-In-Charge cell with alternating background
@@ -166,12 +170,12 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
         personCell.font = { bold: true };
         
         // Center align all cells except Person-In-Charge
-        for (let i = 2; i <= 7; i++) {
+        for (let i = 2; i <= 8; i++) {
           row.getCell(i).alignment = { horizontal: 'center', vertical: 'middle' };
         }
         
         // Apply borders to all cells in the row
-        for (let i = 1; i <= 7; i++) {
+        for (let i = 1; i <= 8; i++) {
           const cell = row.getCell(i);
           cell.border = {
             top: { style: 'thin' },
@@ -375,13 +379,13 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
                 <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center border-r border-gray-200 w-1/6">Time</th>
                 <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center border-r border-gray-200 w-1/12">PAX</th>
                 <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center border-r border-gray-200 w-1/6">Date</th>
+                <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center border-r border-gray-200 w-1/6">Notes</th>
                 <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center w-1/6">Remarks</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredBookings.length > 0 ? (
                 filteredBookings.map((booking, index) => {
-                  // Alternate row colors for each person in charge
                   const personColor = index % 4 === 0 ? 'bg-teal-100' : 
                                      index % 4 === 1 ? 'bg-blue-100' :
                                      index % 4 === 2 ? 'bg-gray-100' : 'bg-amber-100';
@@ -389,7 +393,7 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
                   return (
                     <tr key={index} className="hover:bg-gray-50">
                       <td className={`${personColor} px-4 py-2 border-r border-gray-200 text-sm font-medium`}>
-                        {booking.bookedBy}
+                        {booking.changedBy || booking.bookedBy || '-'}
                       </td>
                       <td className="px-4 py-2 border-r border-gray-200 text-sm text-center">
                         {booking.department}
@@ -401,20 +405,23 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
                         {`${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`}
                       </td>
                       <td className="px-4 py-2 border-r border-gray-200 text-sm text-center">
-                        {booking.bookingCapacity || '-'}
+                        {booking.bookingCapacity > 0 ? booking.bookingCapacity : '-'}
                       </td>
                       <td className="px-4 py-2 border-r border-gray-200 text-sm text-center">
                         {formatDate(booking.date)}
                       </td>
+                      <td className="px-4 py-2 border-r border-gray-200 text-sm text-center">
+                        {booking.notes || '-'}
+                      </td>
                       <td className="px-4 py-2 text-sm text-center">
-                        {booking.notes || 'REFER TO TFO'}
+                        {booking.remarks || '-'}
                       </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan="7" className="px-4 py-4 text-center text-gray-500">
+                  <td colSpan="8" className="px-4 py-4 text-center text-gray-500">
                     No events match your current filters
                   </td>
                 </tr>

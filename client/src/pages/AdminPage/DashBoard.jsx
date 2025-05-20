@@ -82,6 +82,9 @@ const Dashboard = ({ openModal }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const roomMap = {};
+  const categoryMap = {};
+  const buildingMap = {};
   const [dashboardStats, setDashboardStats] = useState({
     totalRooms: 0,
     totalBookings: 0,
@@ -168,21 +171,22 @@ const Dashboard = ({ openModal }) => {
       setUsers(allUsers);
       
       // Create a map of room names for lookup
-      const roomMap = {};
       allRooms.forEach(room => {
-        roomMap[room._id] = room.roomName;
-        if (room.subRooms && room.subRooms.length > 0) {
-          room.subRooms.forEach((subRoom, index) => {
-            roomMap[`${room._id}-sub-${index}`] = subRoom.roomName;
-          });
-        }
+        // Map roomId to roomName, category, and building
+        roomMap[room.roomId] = room.roomName;
+        categoryMap[room.roomId] = room.category || room.Category?.categoryName || ''; // Room Type
+        buildingMap[room.roomId] = room.building || room.Building?.buildingName || ''; // Building Name
+        // If you have subRooms, handle them similarly if needed
       });
-  
+
+      // When mapping bookings, use booking.roomId to look up values
       const enrichedBookings = bookingsRes.data.map((booking) => ({
         ...booking,
-        meetingRoom: roomMap[booking.room] || booking.room,
+        meetingRoom: roomMap[booking.roomId] || booking.roomName || '', // Meeting Room
+        category: categoryMap[booking.roomId] || booking.category || '', // Room Type
+        buildingName: buildingMap[booking.roomId] || booking.building || '', // Building
       }));
-  
+
       setRecentBookings(enrichedBookings);
       calculateDashboardStats(enrichedBookings, allRooms, allUsers);
     } catch (err) {
@@ -412,7 +416,7 @@ const Dashboard = ({ openModal }) => {
                     { label: 'Department', key: 'department' },
                     { label: 'Room Type', key: 'category' },
                     { label: 'Meeting Room', key: 'meetingRoom' },
-                    { label: 'Building', key: 'building' },
+                    { label: 'Building', key: 'buildingName' },
                     { label: 'Date', key: 'date' },
                     { label: 'Time', key: 'startTime' },
                     { label: 'Status', key: 'status' },
@@ -433,7 +437,7 @@ const Dashboard = ({ openModal }) => {
               {sortedBookings.length > 0 ? (
                 sortedBookings
                   .filter(booking =>
-                    `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.category} ${booking.meetingRoom} ${booking.building}`
+                    `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.roomName} ${booking.meetingRoom} ${booking.buildingId}`
                       .toLowerCase()
                       .includes(searchTerm.toLowerCase())
                   )
@@ -452,7 +456,7 @@ const Dashboard = ({ openModal }) => {
                         <td className="px-4 py-2 border-b">{booking.department}</td>
                         <td className="px-4 py-2 border-b">{booking.category}</td>
                         <td className="px-4 py-2 border-b">{booking.meetingRoom}</td>
-                        <td className="px-4 py-2 border-b">{booking.building}</td>
+                        <td className="px-4 py-2 border-b">{booking.buildingName}</td>
                         <td className="px-4 py-2 border-b">
                           {recurringDates.map((date, index) => (
                             <div key={index}>{formatDate(date)}</div>

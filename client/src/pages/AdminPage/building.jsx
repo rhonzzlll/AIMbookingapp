@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AdminContentTemplate from './AdminContentTemplate';
 import imageCompression from 'browser-image-compression';
+import TopBar from '../../components/AdminComponents/TopBar';
 
 // Define the API base URL
 const API_BASE_URL = 'http://localhost:5000';
@@ -8,20 +9,14 @@ const API_BASE_URL = 'http://localhost:5000';
 // Enhanced image handling function using imageCompression library
 const processImage = async (file) => {
   if (!file) return null;
-  
   try {
-    // Compression options
     const options = {
-      maxSizeMB: 1,         
-      maxWidthOrHeight: 800, // Resize to this maximum width or height
-      useWebWorker: true,    // Use web worker for better performance
-      initialQuality: 0.7,   // Initial quality setting
+      maxSizeMB: 1,
+      maxWidthOrHeight: 800,
+      useWebWorker: true,
+      initialQuality: 0.7,
     };
-
-    // Compress the image
     const compressedFile = await imageCompression(file, options);
-    
-    // Convert to base64
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(compressedFile);
@@ -35,11 +30,11 @@ const processImage = async (file) => {
 };
 
 // Modal component for adding/editing buildings
-const BuildingModal = ({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  editData = null 
+const BuildingModal = ({
+  isOpen,
+  onClose,
+  onSave,
+  editData = null
 }) => {
   const [buildingId, setBuildingId] = useState('');
   const [buildingName, setBuildingName] = useState('');
@@ -56,15 +51,11 @@ const BuildingModal = ({
       setBuildingId(editData.buildingId || '');
       setBuildingName(editData.buildingName || '');
       setBuildingDescription(editData.buildingDescription || '');
-      
       if (editData.buildingImageUrl) {
-        // Use the direct URL if available
         setImagePreview(editData.buildingImageUrl);
       } else if (editData.buildingImage) {
-        // Fallback to constructing the URL
         setImagePreview(`${API_BASE_URL}/uploads/${editData.buildingImage}`);
       }
-      
       setImageFile(null);
     } else {
       // Reset form
@@ -83,7 +74,6 @@ const BuildingModal = ({
     if (file) {
       try {
         setLoading(true);
-        
         // Validate file size (10MB max)
         if (file.size > 10 * 1024 * 1024) {
           setErrors((prev) => ({
@@ -93,11 +83,7 @@ const BuildingModal = ({
           setLoading(false);
           return;
         }
-
-        // Store the original file for later submission
         setImageFile(file);
-        
-        // Create and display compressed preview
         const previewOptions = {
           maxSizeMB: 0.5,
           maxWidthOrHeight: 800,
@@ -105,17 +91,13 @@ const BuildingModal = ({
           fileType: 'image/jpeg',
           initialQuality: 0.8,
         };
-
         const compressedFile = await imageCompression(file, previewOptions);
-
         const reader = new FileReader();
         reader.onload = () => {
           setImagePreview(reader.result);
-          setBuildingImage(reader.result); // Keep for compatibility
+          setBuildingImage(reader.result);
         };
         reader.readAsDataURL(compressedFile);
-
-        // Clear any previous errors
         setErrors((prev) => {
           const newErrors = { ...prev };
           delete newErrors.image;
@@ -136,19 +118,15 @@ const BuildingModal = ({
 
   const validateForm = () => {
     const newErrors = {};
-    
     if (!buildingName.trim()) {
       newErrors.name = 'Building name is required';
     }
-    
     if (!imageFile && !editData?.buildingImage) {
       newErrors.image = 'Please upload an image';
     }
-    
     if (buildingDescription && buildingDescription.length > 500) {
       newErrors.description = 'Description must be less than 500 characters';
     }
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -157,35 +135,25 @@ const BuildingModal = ({
     if (validateForm()) {
       try {
         setLoading(true);
-        
-        // Create the building data object
         const buildingData = {
           buildingId: editData ? editData.buildingId : Date.now(),
           buildingName: buildingName,
           buildingDescription: buildingDescription,
           updatedAt: new Date().toISOString()
         };
-        
-        // Handle image
         if (imageFile) {
-          // We need to pass the raw file for FormData
           buildingData._imageFile = imageFile;
         } else if (editData && editData.buildingImage) {
-          // Keep existing image if editing and no new image was selected
           buildingData.buildingImage = editData.buildingImage;
         }
-        
-        // If it's a new building, add createdAt timestamp
         if (!editData) {
           buildingData.createdAt = new Date().toISOString();
         }
-        
-        // Save the building
         onSave(buildingData);
       } catch (error) {
         console.error("Error preparing building data:", error);
         setErrors((prev) => ({
-          ...prev, 
+          ...prev,
           general: 'An error occurred while preparing the data. Please try again.'
         }));
       } finally {
@@ -202,13 +170,11 @@ const BuildingModal = ({
         <h2 className="text-xl font-semibold mb-4">
           {editData ? 'Edit Building' : 'Add New Building'}
         </h2>
-        
         {errors.general && (
           <div className="mb-4 p-2 bg-red-100 border border-red-400 text-red-700 rounded">
             {errors.general}
           </div>
         )}
-        
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -225,7 +191,6 @@ const BuildingModal = ({
               <p className="text-red-500 text-xs mt-1">{errors.name}</p>
             )}
           </div>
-          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Description
@@ -247,7 +212,6 @@ const BuildingModal = ({
               )}
             </div>
           </div>
-          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Building Image*
@@ -261,23 +225,21 @@ const BuildingModal = ({
             {errors.image && (
               <p className="text-red-500 text-xs mt-1">{errors.image}</p>
             )}
-            
             {imagePreview && (
               <div className="mt-2">
-                <img 
-                  src={imagePreview} 
-                  alt="Building preview" 
+                <img
+                  src={imagePreview}
+                  alt="Building preview"
                   className="h-32 object-cover rounded-md w-full"
                   onError={(e) => {
                     e.target.onerror = null;
                     e.target.src = '/placeholder-building.png';
-                    setErrors((prev) => ({...prev, image: 'Invalid image file'}));
+                    setErrors((prev) => ({ ...prev, image: 'Invalid image file' }));
                   }}
                 />
               </div>
             )}
           </div>
-          
           <div className="flex justify-end gap-3 pt-2">
             <button
               onClick={onClose}
@@ -289,7 +251,7 @@ const BuildingModal = ({
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className={`px-4 py-2 rounded-md ${loading ? 
+              className={`px-4 py-2 rounded-md ${loading ?
                 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
             >
               {loading ? 'Processing...' : (editData ? 'Update Building' : 'Add Building')}
@@ -308,6 +270,11 @@ const BuildingManagement = () => {
   const [editingBuilding, setEditingBuilding] = useState(null);
   const [expandedBuilding, setExpandedBuilding] = useState(null);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredBuildings = buildings.filter(bldg =>
+    bldg.buildingName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     // Fetch buildings on component mount
@@ -318,14 +285,11 @@ const BuildingManagement = () => {
   const fetchBuildings = async () => {
     setLoading(true);
     setError(null);
-    
     try {
       const response = await fetch(`${API_BASE_URL}/api/buildings`);
-      
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-      
       const data = await response.json();
       setBuildings(data);
     } catch (error) {
@@ -335,7 +299,7 @@ const BuildingManagement = () => {
       setLoading(false);
     }
   };
-  
+
   const openAddModal = () => {
     setEditingBuilding(null);
     setModalOpen(true);
@@ -469,171 +433,182 @@ const BuildingManagement = () => {
   };
   
   return (
-    <AdminContentTemplate>
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Building Management</h1>
-        <p className="text-gray-600 mb-6">Add and manage buildings in your facility</p>
-        
-        {/* Add Building Button */}
-        <div className="mb-6">
-          <button
-            onClick={openAddModal}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Add New Building
-          </button>
-        </div>
-        
-        {/* Error message display */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-            {error}
-            <button 
-              className="ml-2 font-bold"
-              onClick={() => fetchBuildings()}
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 257,
+        width: 'calc(100% - 257px)',
+        zIndex: 500,
+        overflowY: 'auto',
+        height: '120vh',
+      }}
+    >
+      <TopBar onSearch={setSearchTerm} />
+      <AdminContentTemplate>
+        <div className="p-6 bg-white rounded-lg shadow">
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Building Management</h1>
+          <p className="text-gray-600 mb-6">Add and manage buildings in your facility</p>
+          <div className="mb-6">
+            <button
+              onClick={openAddModal}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
-              Retry
+              Add New Building
             </button>
           </div>
-        )}
-        
-        {/* Buildings Table */}
-        <div className="overflow-x-auto">
-          <h2 className="text-lg font-semibold mb-4">Buildings</h2>
-          {loading ? (
-            <div className="text-center py-4">
-              <p>Loading buildings...</p>
-            </div>
-          ) : buildings.length === 0 ? (
-            <p>No buildings found. Add your first building using the button above.</p>
-          ) : (
-            <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Image
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Building ID
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Building Name
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Description
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Updated
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {buildings.map((building) => (
-                    <React.Fragment key={building.buildingId}>
-                      <tr>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {building.buildingImage ? (
-                            <div className="flex flex-col items-center">
-                              <img 
-                                src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
-                                alt="Building" 
-                                className="h-20 w-20 object-cover rounded-md"
-                                onError={handleImageError}
-                              />
-                            </div>
-                          ) : (
-                            <div className="h-16 w-24 bg-gray-200 rounded flex items-center justify-center text-gray-500">
-                              No Image
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {building.buildingId}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {building.buildingName}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          <div className="max-w-xs truncate">
-                            {building.buildingDescription || "No description provided"}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
-                          {building.updatedAt ? new Date(building.updatedAt).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button
-                            onClick={() => toggleBuildingDetails(building.buildingId)}
-                            className="text-gray-600 hover:text-gray-900 mr-4"
-                          >
-                            {expandedBuilding === building.buildingId ? 'Hide Details' : 'Show Details'}
-                          </button>
-                          <button
-                            onClick={() => openEditModal(building)}
-                            className="text-blue-600 hover:text-blue-900 mr-4"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteBuilding(building.buildingId)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                      {expandedBuilding === building.buildingId && (
-                        <tr>
-                          <td colSpan="6" className="px-6 py-4 bg-gray-50">
-                            <div className="ml-4">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <h4 className="font-medium text-sm mb-2">Building Details</h4>
-                                  <p><strong>Name:</strong> {building.buildingName}</p>
-                                  <p><strong>Description:</strong> {building.buildingDescription || "No description"}</p>
-                                  <p><strong>Created:</strong> {building.createdAt ? new Date(building.createdAt).toLocaleString() : 'N/A'}</p>
-                                  <p><strong>Updated:</strong> {building.updatedAt ? new Date(building.updatedAt).toLocaleString() : 'N/A'}</p>
-                                </div>
-                                <div className="flex justify-center items-center">
-                                  {building.buildingImage ? (
-                                    <img 
-                                      src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
-                                      alt={building.buildingName}
-                                      className="max-h-48 max-w-full object-cover rounded shadow-lg"
-                                      onError={handleImageError}
-                                    />
-                                  ) : (
-                                    <div className="h-32 w-48 bg-gray-200 rounded flex items-center justify-center text-gray-500">
-                                      No Image Available
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
+          {error && (
+            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+              <button
+                className="ml-2 font-bold"
+                onClick={() => fetchBuildings()}
+              >
+                Retry
+              </button>
             </div>
           )}
+          <div className="overflow-x-auto">
+            <h2 className="text-lg font-semibold mb-4">Buildings</h2>
+            {loading ? (
+              <div className="text-center py-4">
+                <p>Loading buildings...</p>
+              </div>
+            ) : buildings.length === 0 ? (
+              <p>No buildings found. Add your first building using the button above.</p>
+            ) : (
+              <div className="shadow overflow-hidden border border-gray-300 sm:rounded-lg">
+                <table className="min-w-full divide-y divide-gray-300 border-collapse border border-gray-300">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                        Image
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                        Building ID
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                        Building Name
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                        Description
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                        Last Updated
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-300">
+                    {filteredBuildings.map((building) => (
+                      <React.Fragment key={building.buildingId}>
+                        <tr>
+                          <td className="px-6 py-4 whitespace-nowrap border border-gray-300">
+                            {building.buildingImage ? (
+                              <div className="flex flex-col items-center">
+                                <img
+                                  src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
+                                  alt={building.buildingName}
+                                  className="h-16 w-24 object-cover rounded"
+                                  onError={handleImageError}
+                                />
+                                <button
+                                  className="mt-1 text-xs text-blue-600 hover:text-blue-800"
+                                  onClick={() => window.open(building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`, '_blank')}
+                                >
+                                  View Full
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="h-16 w-24 bg-gray-200 rounded flex items-center justify-center text-gray-500">
+                                No Image
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">
+                            {building.buildingId}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border border-gray-300">
+                            {building.buildingName}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900 border border-gray-300">
+                            <div className="max-w-xs truncate">
+                              {building.buildingDescription || 'No description provided'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900 border border-gray-300">
+                            {building.updatedAt ? new Date(building.updatedAt).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300">
+                            <button
+                              onClick={() => toggleBuildingDetails(building.buildingId)}
+                              className="text-gray-600 hover:text-gray-900 mr-4"
+                            >
+                              {expandedBuilding === building.buildingId ? 'Hide Details' : 'Show Details'}
+                            </button>
+                            <button
+                              onClick={() => openEditModal(building)}
+                              className="text-blue-600 hover:text-blue-900 mr-4"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBuilding(building.buildingId)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                        {expandedBuilding === building.buildingId && (
+                          <tr>
+                            <td colSpan="6" className="px-6 py-4 bg-gray-50 border border-gray-300">
+                              <div className="ml-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <h4 className="font-medium text-sm mb-2">Building Details</h4>
+                                    <p><strong>Name:</strong> {building.buildingName}</p>
+                                    <p><strong>Description:</strong> {building.buildingDescription || 'No description'}</p>
+                                    <p><strong>Created:</strong> {building.createdAt ? new Date(building.createdAt).toLocaleString() : 'N/A'}</p>
+                                    <p><strong>Updated:</strong> {building.updatedAt ? new Date(building.updatedAt).toLocaleString() : 'N/A'}</p>
+                                  </div>
+                                  <div className="flex justify-center items-center">
+                                    {building.buildingImage ? (
+                                      <img
+                                        src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
+                                        alt={building.buildingName}
+                                        className="max-h-48 max-w-full object-cover rounded shadow-lg"
+                                        onError={handleImageError}
+                                      />
+                                    ) : (
+                                      <div className="h-32 w-48 bg-gray-200 rounded flex items-center justify-center text-gray-500">
+                                        No Image Available
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-      
-      {/* Modal for Adding/Editing Buildings */}
-      <BuildingModal
-        isOpen={modalOpen}
-        onClose={closeModal}
-        onSave={handleSaveBuilding}
-        editData={editingBuilding}
-      />
-    </AdminContentTemplate>
+        <BuildingModal
+          isOpen={modalOpen}
+          onClose={closeModal}
+          onSave={handleSaveBuilding}
+          editData={editingBuilding}
+        />
+      </AdminContentTemplate>
+    </div>
   );
 };
 

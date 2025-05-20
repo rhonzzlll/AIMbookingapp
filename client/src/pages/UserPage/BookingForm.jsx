@@ -11,24 +11,52 @@ const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
   '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
   '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
+  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM','10:30 PM', '11:00 PM', '11:30 PM',
 ];
 
 const convertTo24HourFormat = (time12h) => {
   if (!time12h) return '';
-  
+
   const [time, modifier] = time12h.split(' ');
   let [hours, minutes] = time.split(':');
-  
+
   if (hours === '12') {
     hours = modifier === 'PM' ? '12' : '00';
   } else {
     hours = modifier === 'PM' ? String(parseInt(hours, 10) + 12) : hours.padStart(2, '0');
   }
-  
-  return `${hours}:${minutes}`;
+
+  // Ensure seconds are always included
+  return `${hours}:${minutes}:00`;
 };
 
+const toTimeHHMM = (time12h) => {
+  if (!time12h) return '';
+  
+  const [time, modifier] = time12h.split(' ');
+  let [hours, minutes] = time.split(':');
+  hours = parseInt(hours, 10);
+  
+  // Convert hours to 24-hour format
+  if (modifier === 'PM' && hours !== 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  
+  // Format to HH:MM with leading zeros
+  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+};
+
+const toTimeISOString = (time12h) => {
+
+  if (!time12h) return '';
+  const [time, modifier] = time12h.split(' ');
+  let [hours, minutes] = time.split(':');
+  hours = parseInt(hours, 10);
+  if (modifier === 'PM' && hours !== 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  // Always UTC for time-only
+  return new Date(Date.UTC(2025, 0, 1, hours, parseInt(minutes, 10))).toISOString();
+};
+ 
 const BookingForm = ({ onBookingSubmit }) => {
   const location = useLocation();
   const bookingData = location.state?.bookingData;
@@ -119,11 +147,16 @@ const BookingForm = ({ onBookingSubmit }) => {
   const fetchUserData = async () => {
     try {
       console.log(`Fetching user data for userId: ${userId}`);
-      const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      
+      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-
-      const userData = response.data;
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user data: ${response.statusText}`);
+      }
+      
+      const userData = await response.json();
 
       // Update form data with user information
       setFormData((prevFormData) => ({
@@ -267,11 +300,17 @@ const BookingForm = ({ onBookingSubmit }) => {
   // Fetch existing bookings
   const fetchBookings = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/bookings`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await fetch(`${API_BASE_URL}/bookings`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      const bookings = response.data.bookings || response.data;
-  
+      
+      if (!response.ok) {
+        throw new Error(`Error fetching bookings: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      const bookings = data.bookings || data;
+
       const enrichedBookings = bookings.map(booking => {
         const roomData = roomMap[booking.roomId];
         return {
@@ -280,7 +319,7 @@ const BookingForm = ({ onBookingSubmit }) => {
           buildingId: roomData?.buildingId || booking.buildingId,
         };
       });
-  
+
       setExistingBookings(enrichedBookings);
       processBookingsForTimeSlots(enrichedBookings);
     } catch (err) {
@@ -450,16 +489,15 @@ const BookingForm = ({ onBookingSubmit }) => {
       const startTime24 = convertTo24HourFormat(data.startTime);
       const endTime24 = convertTo24HourFormat(data.endTime);
   
-      // Ensure the time format is correct (HH:MM:SS)
-      const formatTimeString = (timeStr) => {
-        return timeStr.includes(':') ? 
-          (timeStr.split(':').length === 2 ? `${timeStr}:00` : timeStr) : 
-          `${timeStr}:00:00`;
-      };
-  
-      const formattedStartTime = formatTimeString(startTime24);
-      const formattedEndTime = formatTimeString(endTime24);
-  
+      // Ensure the time format is correct (HH:MM:SS) as required by backend validation
+      const formattedStartTime = startTime24.includes(':') && startTime24.split(':').length === 2 
+        ? `${startTime24}:00` 
+        : startTime24;
+        
+      const formattedEndTime = endTime24.includes(':') && endTime24.split(':').length === 2 
+        ? `${endTime24}:00` 
+        : endTime24;
+
       // Log the payload being sent to the API
       console.log('Payload for availability check:', {
         buildingId: data.buildingId,
@@ -470,28 +508,34 @@ const BookingForm = ({ onBookingSubmit }) => {
         endTime: formattedEndTime,
       });
   
-      // Call the availability check endpoint
-      const response = await axios.post(
-        `${API_BASE_URL}/bookings/check-availability`,
-        {
+      // Call the availability check endpoint using fetch
+      const response = await fetch(`${API_BASE_URL}/bookings/check-availability`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
           buildingId: data.buildingId,
           roomId: data.roomId,
           categoryId: data.categoryId,
           date: data.date,
           startTime: formattedStartTime,
           endTime: formattedEndTime,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-  
-      setAvailabilityStatus(response.data);
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error checking availability: ${response.statusText}`);
+      }
+
+      const responseData = await response.json();
+      setAvailabilityStatus(responseData);
     } catch (err) {
       console.error('Error checking availability:', err);
       setAvailabilityStatus({
         available: false,
-        message: err.response?.data?.message || 'Error checking availability. Please try again.',
+        message: err.message || 'Error checking availability. Please try again.',
       });
     } finally {
       setIsCheckingAvailability(false);
@@ -611,9 +655,8 @@ const BookingForm = ({ onBookingSubmit }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Check if all required fields are filled
-    if (!formData.startTime || !formData.endTime || !formData.roomId || !formData.date || !formData.categoryId) {
-      setError('All fields (startTime, endTime, roomId, date, category) are required.');
+    if (!formData.startTime || !formData.endTime || !formData.roomId || !formData.buildingId || !userId) {
+      setError('All fields (startTime, endTime, roomId, buildingId, and userId) are required.');
       return;
     }
 
@@ -621,97 +664,60 @@ const BookingForm = ({ onBookingSubmit }) => {
     setError('');
 
     try {
-      // Fetch user data to ensure it's up-to-date
-      await fetchUserData();
+      // Convert times to proper format for SQL (HH:mm:ss)
+      const startTimeSQL = convertTo24HourFormat(formData.startTime);
+      const endTimeSQL = convertTo24HourFormat(formData.endTime);
 
-      // Ensure date and time are valid
-      if (!formData.date || !formData.startTime || !formData.endTime) {
-        setError('Please provide a valid date, start time, and end time.');
-        setLoading(false);
-        return;
-      }
+      // Log the converted times for debugging
+      console.log('Converted Start Time:', startTimeSQL);
+      console.log('Converted End Time:', endTimeSQL);
 
-      // Convert time formats correctly
-      const startTime24 = `${convertTo24HourFormat(formData.startTime)}:00`; // Add ":00" for seconds
-      const endTime24 = `${convertTo24HourFormat(formData.endTime)}:00`; // Add ":00" for seconds
+      // Format timeSubmitted in a SQL Server-friendly format without timezone
+      const now = new Date();
+      const timeSubmitted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
-      // Validate that the dates are valid
-      if (isNaN(new Date(`${formData.date}T${startTime24}`).getTime()) || 
-          isNaN(new Date(`${formData.date}T${endTime24}`).getTime())) {
-        setError('Invalid date or time. Please check your input.');
-        setLoading(false);
-        return;
-      }
-
-      // Validate that start time is before end time
-      const startDateTime = new Date(`${formData.date}T${startTime24}`);
-      const endDateTime = new Date(`${formData.date}T${endTime24}`);
-      
-      if (startDateTime >= endDateTime) {
-        setError('Start time must be earlier than end time.');
-        setLoading(false);
-        return;
-      }
-
-      // Prepare payload with ISO strings and user data
-      const { _id, ...cleanFormData } = formData; // Remove unnecessary fields if present
       const bookingPayload = {
-        ...cleanFormData,
+        userId,
+        title: formData.title,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        buildingId: formData.buildingId,
+        categoryId: formData.categoryId,
+        roomId: formData.roomId,
         date: formData.date,
-        startTime: startTime24, // Send time in HH:mm:ss format
-        endTime: endTime24, // Send time in HH:mm:ss format
-        userId: parseInt(userId), // Ensure it's an integer as expected by the model
-        timeSubmitted: new Date().toISOString(),
-        status: 'pending',
-        bookingCapacity: formData.bookingCapacity || 1
+        startTime: startTimeSQL,
+        endTime: endTimeSQL,
+        department: formData.department,
+        isRecurring: formData.isRecurring,
+        recurrenceEndDate: formData.recurrenceEndDate === '' ? null : formData.recurrenceEndDate,
+        notes: formData.notes === '' ? null : formData.notes,
+        isMealRoom: formData.isMealRoom,
+        isBreakRoom: formData.isBreakRoom,
+        bookingCapacity: formData.bookingCapacity,
+        status: formData.status,
+        // Do NOT send timeSubmitted
       };
 
-      // Log the payload for debugging
-      console.log('Booking submission payload:', bookingPayload);
+      console.log('Booking Payload:', bookingPayload); // <-- Only this line
 
-      // Make API request
-      const response = await axios.post(`${API_BASE_URL}/bookings`, bookingPayload, {
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await fetch(`${API_BASE_URL}/bookings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(bookingPayload),
       });
 
-      await fetchBookings(); // Fetch updated bookings
-
-      if (formData.buildingId && formData.roomId && formData.date) {
-        processBookingsForTimeSlots(existingBookings); 
-      }      
-            
-      onBookingSubmit(response.data); // Notify parent component of successful booking
-
-      // Reset form data
-      setFormData({
-        title: '',
-        firstName: '',
-        lastName: '',
-        email: '',
-        buildingId: '',
-        categoryId: '',
-        roomId: '',
-        date: format(new Date(), 'yyyy-MM-dd'),
-        startTime: '09:00 AM',
-        endTime: '10:00 AM',
-        department: '',
-        isRecurring: false,
-        recurrenceType: '',
-        recurrenceDays: [],
-        recurrenceEndDate: '',
-        notes: '',
-        isMealRoom: false,
-        isBreakRoom: false,
-        bookingCapacity: 1
-      });
-      
-    } catch (err) {
-      if (err.response && err.response.status === 400) {
-        setError(err.response.data.message);
-      } else {
-        setError('An unexpected error occurred. Please try again.');
-        console.error('Booking error:', err);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create booking.');
       }
+
+      const data = await response.json();
+      onBookingSubmit(data);
+    } catch (err) {
+      setError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -993,7 +999,7 @@ const BookingForm = ({ onBookingSubmit }) => {
                       onChange={handleChange}
                       min={formData.date}
                       className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required={formData.isRecurring}
+                      required={formData.isRecurring} // Only required if "isRecurring" is true
                     />
                   </div>
                 </div>
@@ -1057,5 +1063,3 @@ const BookingForm = ({ onBookingSubmit }) => {
 };
 
 export default BookingForm;
-
-
