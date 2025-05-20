@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isToday, isBefore, parse, set } from 'date-fns';
 import Header from './Header';
 import BookingForm from './BookingForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
@@ -9,7 +9,6 @@ import { X, AlertCircle } from 'lucide-react';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import PrivacyModal from '../../components/ui/PrivacyModal';
 import CancelBookingConfirmation from './modals/CancelBookingConfirmation';
-import { parse, add } from 'date-fns'; 
  
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -87,6 +86,147 @@ const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+};
+
+const AvailableTime = ({ selectedDate, bookings, businessHours = { start: "08:00", end: "22:00" } }) => {
+  const availableTimeSlots = useMemo(() => {
+    // Filter bookings for the selected date that are confirmed
+    const dateBookings = bookings
+      .filter(booking => 
+        booking.date === selectedDate && 
+        booking.status?.toLowerCase() === 'confirmed'
+      )
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    
+    if (dateBookings.length === 0) {
+      // If no bookings, return the full business hours
+      const slots = [];
+      const isCurrentDay = isToday(parseISO(selectedDate));
+      
+      // For current day, only show times from now onwards
+      let startTime;
+      if (isCurrentDay) {
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        
+        // Round up to the nearest 30 minutes
+        const roundedMinute = currentMinute < 30 ? 30 : 0;
+        const roundedHour = currentMinute < 30 ? currentHour : currentHour + 1;
+        
+        startTime = `${roundedHour.toString().padStart(2, '0')}:${roundedMinute.toString().padStart(2, '0')}`;
+        
+        // If current time is after business hours, return empty array
+        if (startTime > businessHours.end) {
+          return [];
+        }
+      } else {
+        startTime = businessHours.start;
+      }
+      
+      slots.push({
+        start: startTime,
+        end: businessHours.end
+      });
+      
+      return slots;
+    }
+    
+    // Create available time slots between bookings
+    const slots = [];
+    let currentTime = businessHours.start;
+    
+    // Check if today and adjust start time if needed
+    if (isToday(parseISO(selectedDate))) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      
+      // Round up to the nearest 30 minutes
+      const roundedMinute = currentMinute < 30 ? 30 : 0;
+      const roundedHour = currentMinute < 30 ? currentHour : currentHour + 1;
+      
+      const nowTime = `${roundedHour.toString().padStart(2, '0')}:${roundedMinute.toString().padStart(2, '0')}`;
+      
+      if (nowTime > currentTime) {
+        currentTime = nowTime;
+      }
+    }
+    
+    // Add slots between bookings
+    for (const booking of dateBookings) {
+      const bookingStart = booking.startTime.includes('T') 
+        ? format(parseISO(booking.startTime), 'HH:mm')
+        : booking.startTime;
+        
+      // If there's time before this booking, add it as available
+      if (currentTime < bookingStart) {
+        slots.push({
+          start: currentTime,
+          end: bookingStart
+        });
+      }
+      
+      // Update current time to after this booking
+      const bookingEnd = booking.endTime.includes('T')
+        ? format(parseISO(booking.endTime), 'HH:mm')
+        : booking.endTime;
+        
+      currentTime = bookingEnd;
+    }
+    
+    // Add time after the last booking until end of business hours
+    if (currentTime < businessHours.end) {
+      slots.push({
+        start: currentTime,
+        end: businessHours.end
+      });
+    }
+    
+    return slots;
+  }, [selectedDate, bookings, businessHours]);
+
+  // Format time from 24h to 12h format
+  const formatTimeDisplay = (time) => {
+    try {
+      const [hours, minutes] = time.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes);
+      return format(date, 'h:mm a');
+    } catch (error) {
+      console.error('Time formatting error:', error);
+      return time;
+    }
+  };
+
+  const formattedDate = selectedDate ? 
+    format(parseISO(selectedDate), 'MMMM dd, yyyy') : 'Select a date';
+
+  return (
+    <div className="relative bg-white rounded-lg shadow-md p-4 mt-4">
+      <h2 className="text-xl font-bold mb-4">
+        Available time for {formattedDate}
+      </h2>
+      <div className="overflow-y-auto max-h-96">
+        {availableTimeSlots.length > 0 ? (
+          availableTimeSlots.map((slot, index) => (
+            <div
+              key={index}
+              className="bg-green-100 text-gray-800 rounded-md p-4 mb-4 shadow"
+            >
+              <div className="font-semibold text-lg">
+                {formatTimeDisplay(slot.start)} - {formatTimeDisplay(slot.end)}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-500 py-10">
+            No available time slots for this day.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -286,6 +426,7 @@ const handlePrivacyConfirm = async () => {
     const bookingPayload = {
       ...pendingBooking,
       userId: userId,
+      submittedAt: new Date().toISOString(), // <-- Add this line
     };
 
     const response = await fetch(`${API_BASE_URL}/bookings`, {
@@ -297,13 +438,12 @@ const handlePrivacyConfirm = async () => {
       body: JSON.stringify(bookingPayload),
     });
 
-    await response.json(); // No need to manually push into setBookings
+    await response.json();
 
     setPendingBooking(null);
     setIsConfirmationModalOpen(true);
 
-    // ✅ Wait for server to give back full and clean booking data (with populated rooms)
-    await fetchBookings(); // Ensure fresh and full booking data is loaded
+    await fetchBookings();
   } catch (error) {
     console.error('Error submitting booking:', error);
   }
@@ -397,6 +537,11 @@ const handlePrivacyConfirm = async () => {
               selectedDate={selectedDate}
               onDateSelect={handleDateSelect}
               bookings={confirmedBookings}
+            />
+            <AvailableTime 
+              selectedDate={selectedDate}
+              bookings={bookingsForSelectedDate}
+              businessHours={{ start: "08:00", end: "22:00" }}
             />
             <DaySchedule 
               selectedDate={selectedDate} 

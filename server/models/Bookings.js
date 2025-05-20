@@ -1,3 +1,6 @@
+const Sequelize = require('sequelize');
+const { Op, literal } = Sequelize;
+
 module.exports = (sequelize, DataTypes) => {
   const Booking = sequelize.define('Booking', {
     bookingId: {
@@ -63,12 +66,10 @@ module.exports = (sequelize, DataTypes) => {
     },
     startTime: {
       type: DataTypes.TIME, // Matches time(7)
-      field: 'startTime',
       allowNull: false
     },
     endTime: {
       type: DataTypes.TIME, // Matches time(7)
-      field: 'endTime',
       allowNull: false
     },
     notes: {
@@ -108,21 +109,22 @@ module.exports = (sequelize, DataTypes) => {
         isIn: [['pending', 'confirmed', 'declined']]
       }
     },
-    timeSubmitted: {
-      type: DataTypes.DATE, // Matches datetime
-      field: 'timeSubmitted',
-      allowNull: true,
-      defaultValue: DataTypes.NOW
-    },
+timeSubmitted: {
+  type: DataTypes.DATE, // Matches datetime
+  allowNull: false,
+  defaultValue: Sequelize.fn('GETDATE'), // Change from sequelize.literal to Sequelize.fn
+},
     remarks: {
       type: DataTypes.STRING(255), // Matches nvarchar(255)
       field: 'remarks',
       allowNull: true
+      
     },
     changedBy: {
       type: DataTypes.STRING(255), // Matches nvarchar(255)
       field: 'changedBy',
       allowNull: true
+      
     }
   }, {
     tableName: 'bookings',

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AdminContentTemplate from './AdminContentTemplate';
+import TopBar from '../../components/AdminComponents/TopBar';
 
 // Modal component for adding/editing categories
 const CategoryModal = ({ 
@@ -130,6 +131,7 @@ const CategoryManagement = () => {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     // Fetch categories and buildings on component mount
@@ -267,6 +269,11 @@ const CategoryManagement = () => {
       alert(`Failed to save category: ${error.message}. Please try again.`);
     }
   };
+
+  const filteredCategories = categories.filter(category =>
+    category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    category.building.toLowerCase().includes(searchTerm.toLowerCase())
+  );
   
   const handleDeleteCategory = async (id) => {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
@@ -289,6 +296,8 @@ const CategoryManagement = () => {
   };
   
   return (
+  <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
+      <TopBar onSearch={setSearchTerm} />
     <AdminContentTemplate>
       <div className="p-6 bg-white rounded-lg shadow">
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Category Management</h1>
@@ -312,55 +321,55 @@ const CategoryManagement = () => {
           ) : categories.length === 0 ? (
             <p>No categories found. Add your first category using the button above.</p>
           ) : (
-            <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Category Name
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Building
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Description
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {categories.map((category) => (
-                    <tr key={category.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {category.name || 'No Name'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {category.building || 'No Building Assigned'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {category.description || 'No Description'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => openEditModal(category)}
-                          className="text-blue-600 hover:text-blue-900 mr-4"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+<div className="shadow overflow-hidden border border-gray-300 sm:rounded-lg">
+  <table className="min-w-full divide-y divide-gray-300 border-collapse border border-gray-300">
+    <thead className="bg-gray-50">
+      <tr>
+        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+          Category Name
+        </th>
+        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+          Building
+        </th>
+        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+          Description
+        </th>
+        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+          Actions
+        </th>
+      </tr>
+    </thead>
+    <tbody className="bg-white divide-y divide-gray-300">
+      {filteredCategories.map((category) => (
+        <tr key={category.id}>
+          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border border-gray-300">
+            {category.name || 'No Name'}
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">
+            {category.building || 'No Building Assigned'}
+          </td>
+          <td className="px-6 py-4 text-sm text-gray-900 border border-gray-300">
+            {category.description || 'No Description'}
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300">
+            <button
+              onClick={() => openEditModal(category)}
+              className="text-blue-600 hover:text-blue-900 mr-4"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => handleDeleteCategory(category.id)}
+              className="text-red-600 hover:text-red-900"
+            >
+              Delete
+            </button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
           )}
         </div>
       </div>
@@ -374,6 +383,7 @@ const CategoryManagement = () => {
         editData={editingCategory}
       />
     </AdminContentTemplate>
+    </div>
   );
 };
 
