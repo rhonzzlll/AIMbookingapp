@@ -1353,19 +1353,34 @@ const handleNameChange = (e) => {
     );
   });
 
-  // Memoized Modal component
-  const Modal = React.memo(({ isOpen, title, children }) => {
-    if (!isOpen) return null;
+// Memoized Modal component
+const Modal = React.memo(({ isOpen, title, children, onClose }) => {
+  if (!isOpen) return null;
 
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-screen overflow-y-auto">
-          <h3 className="text-xl font-bold mb-4">{title}</h3>
-          {children}
-        </div>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="relative bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        
+        {/* Close (X) Button */}
+        <button
+            onClick={() => {
+              setIsAddModalOpen(false);
+              setIsEditModalOpen(false);
+              resetForm();
+            }}
+          className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-xl font-bold"
+          aria-label="Close modal"
+        >
+          ×
+        </button>
+
+        <h3 className="text-xl font-bold mb-4">{title}</h3>
+        {children}
       </div>
-    );
-  });
+    </div>
+  );
+});
+
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const handleSort = (key) => {
