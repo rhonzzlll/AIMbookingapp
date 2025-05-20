@@ -23,7 +23,7 @@ const convertTo24HourFormat = (time12h) => {
   if (hours === '12') {
     hours = modifier === 'PM' ? '12' : '00';
   } else {
-    hours = modifier === 'PM' ? String(parseInt(hours, 10) + 12) : hours.padStart(2, '0');
+    hours = modifier === 'PM' ? String(parseInt(hours, 10)  +12) : hours.padStart(2, '0');
   }
 
   // Ensure seconds are always included

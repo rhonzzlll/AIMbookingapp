@@ -109,11 +109,14 @@ module.exports = (sequelize, DataTypes) => {
         isIn: [['pending', 'confirmed', 'declined']]
       }
     },
+
+
 timeSubmitted: {
-  type: DataTypes.DATE, // Matches datetime
+  type: DataTypes.DATE,
   allowNull: false,
-  defaultValue: Sequelize.fn('GETDATE'), // Change from sequelize.literal to Sequelize.fn
+  defaultValue: Sequelize.fn('GETUTCDATE'),
 },
+
     remarks: {
       type: DataTypes.STRING(255), // Matches nvarchar(255)
       field: 'remarks',
