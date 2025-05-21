@@ -20,17 +20,15 @@ const parseISODate = (dateString) => {
 // Convert from 12-hour format (e.g. "8:00 AM") to 24-hour format (e.g. "08:00:00")
 const convertTo24HourFormat = (time12h) => {
   if (!time12h) return '';
-  
   const [time, modifier] = time12h.split(' ');
   let [hours, minutes] = time.split(':');
-  
   if (hours === '12') {
     hours = modifier === 'PM' ? '12' : '00';
   } else {
     hours = modifier === 'PM' ? String(parseInt(hours, 10) + 12) : hours.padStart(2, '0');
   }
-  
-  return `${hours}:${minutes}`;
+  // Always return with seconds for SQL Server
+  return `${hours}:${minutes}:00`;
 };
 
 // Base API URL
@@ -287,7 +285,7 @@ const Bookings = () => {
   // Filter bookings based on active tab
   const filteredBookings = useMemo(() => {
     if (activeBookingTab === 'all') return bookings;
-    
+
     return bookings.filter(booking => {
       if (activeBookingTab === 'pending') return booking.status === 'pending';
       if (activeBookingTab === 'approved') return booking.status === 'Approved';
@@ -660,38 +658,30 @@ const handleNameChange = (e) => {
     let hasError = false;
     const errors = {};
 
-    // Enhanced validation
-    if (!formData.firstName || !formData.lastName) {
+     if (!formData.firstName || !formData.lastName) {
       errors.name = 'First name and last name are required';
       hasError = true;
     }
-
     if (!formData.startTime || !formData.endTime) {
       errors.time = 'Start and end times are required';
       hasError = true;
     }
-
-    // Validate bookingCapacity/pax
     if (formData.bookingCapacity < 1) {
       errors.bookingCapacity = 'Pax must be at least 1';
       hasError = true;
     }
-
     if (!formData.roomId) {
       errors.room = 'Room selection is required';
       hasError = true;
     }
-
     if (!formData.buildingId) {
       errors.building = 'Building is required';
       hasError = true;
     }
-
     if (formData.isRecurring && !formData.recurrenceEndDate) {
       errors.recurrence = 'Recurrence end date is required for recurring bookings';
       hasError = true;
     }
-
     if (hasError) {
       setFormError(errors);
       setSubmitLoading(false);
@@ -699,116 +689,95 @@ const handleNameChange = (e) => {
     }
 
     try {
-      // Convert times to 24-hour format expected by the API
-      const startTime24 = convertTo24HourFormat(formData.startTime);
-      const endTime24 = convertTo24HourFormat(formData.endTime);
-      
-      // Create a timestamp for when the form is submitted
-      const now = new Date();
-      const timeSubmitted = now.toISOString();
-      
-      // Validate the timeSubmitted value before adding it to payload
-      console.log('Generated timeSubmitted:', timeSubmitted);
-      
-      // Ensure correct data types for IDs (convert to numbers if the API expects numbers)
-      const roomId = formData.roomId; // Keep as string for nvarchar field
-      const buildingId = formData.buildingId; // Keep as string for nvarchar field
-      const categoryId = Number(formData.categoryId); // Convert to number as expected by DB schema
-      
-      // Make sure date is in ISO format
-      const bookingDate = new Date(formData.date).toISOString().split('T')[0];
-      let recurrenceEndDate = null;
-      if (formData.isRecurring && formData.recurrenceEndDate) {
-        recurrenceEndDate = new Date(formData.recurrenceEndDate).toISOString().split('T')[0];
-      }
-      
-      // Create a payload with properly formatted date/time values and correct types
+      // Convert times to 24-hour format
+      const startTimeSQL = convertTo24HourFormat(formData.startTime);
+      const endTimeSQL = convertTo24HourFormat(formData.endTime);
+
+      // Use date as 'yyyy-MM-dd' string directly
+      const bookingDate = formData.date;
+
+      // Use null for empty recurrenceEndDate and notes
+      const recurrenceEndDate = formData.isRecurring && formData.recurrenceEndDate
+        ? formData.recurrenceEndDate
+        : null;
+
+      // Build payload
       const payload = {
-        roomId: roomId,
-        userId: loggedInUserId ? Number(loggedInUserId) : (formData.userId ? Number(formData.userId) : Number(2)),
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        department: formData.department || '',
-        title: formData.title.trim(),
-        buildingId: buildingId,
-        categoryId: categoryId,
-        bookingCapacity: Number(formData.bookingCapacity) || 1,
+        userId: loggedInUserId ? Number(loggedInUserId) : (formData.userId ? Number(formData.userId) : 2),
+        title: formData.title,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        buildingId: formData.buildingId,
+        categoryId: formData.categoryId,
+        roomId: formData.roomId,
         date: bookingDate,
-        startTime: startTime24,
-        endTime: endTime24,
-        notes: formData.notes || '',
+        startTime: startTimeSQL,
+        endTime: endTimeSQL,
+        department: formData.department,
         isRecurring: Boolean(formData.isRecurring),
+        recurrenceEndDate: recurrenceEndDate,
+        notes: formData.notes === '' ? null : formData.notes,
         isMealRoom: Boolean(formData.isMealRoom),
         isBreakRoom: Boolean(formData.isBreakRoom),
-        recurrenceEndDate: recurrenceEndDate,
+        bookingCapacity: Number(formData.bookingCapacity) || 1,
         status: (formData.status || 'pending').toLowerCase(),
-        timeSubmitted: timeSubmitted,
-        remarks: formData.remarks || '',
-        changedBy: formData.changedBy || 'System'
       };
 
-      // Get the details of the logged-in user who is making this booking
-      const adminResponse = await axios.get(`${API_BASE_URL}/users/${loggedInUserId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const adminData = adminResponse.data;
-      const changedByName = `${adminData.firstName} ${adminData.lastName}`;
-
-      // Add additional fields to payload
-      payload.changedBy = changedByName;
-
-      console.log('Sending payload to server:', payload);
-
-      let response;
-
-      // Handle different API calls for create vs update
+      // Only add bookingId for edit
       if (isEditModalOpen && editBookingId) {
         payload.bookingId = Number(editBookingId) || editBookingId;
-        response = await axios.put(
-          `${API_BASE_URL}/bookings/${editBookingId}`,
-          payload,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        console.log('Update response:', response.data);
-      } else {
-        response = await axios.post(
-          `${API_BASE_URL}/bookings`,
-          payload,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        console.log('Create response:', response.data);
       }
 
-      // Success - reset form and close modal
-      resetForm();
-      setIsAddModalOpen(false);
-      setIsEditModalOpen(false);
-      fetchBookings();
-    } catch (err) {
-      console.error('Booking error:', err);
-      
-      // More detailed error handling
-      if (err.response) {
-        console.error('Error status:', err.response.status);
-        console.error('Error data:', err.response.data);
-        
-        if (err.response.data?.message) {
-          setError(err.response.data.message);
-        } else if (err.response.data?.error) {
-          setError(err.response.data.error);
-        } else {
-          setError(`Server error (${err.response.status}). Please try again.`);
-        }
-      } else if (err.request) {
-        setError('Network error. Please check your connection.');
+      console.log('Booking Payload:', payload);
+
+      let response;
+      if (isEditModalOpen && editBookingId) {
+        // Remove bookingId from payload if present
+        const { bookingId, ...payloadWithoutId } = payload;
+        response = await fetch(
+          `${API_BASE_URL}/bookings/${editBookingId}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(payloadWithoutId),
+          }
+        );
       } else {
-        setError('Failed to save booking. Please try again.');
+        // Use fetch for POST
+        response = await fetch(
+          `${API_BASE_URL}/bookings`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+          }
+        );
       }
-    } finally {
-      setSubmitLoading(false);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to save booking.');
     }
-  };
+
+    const data = await response.json();
+
+    // Success - reset form and close modal
+    resetForm();
+    setIsAddModalOpen(false);
+    setIsEditModalOpen(false);
+    fetchBookings();
+  } catch (err) {
+    setError(err.message || 'Failed to save booking. Please try again.');
+  } finally {
+    setSubmitLoading(false);
+  }
+};
 
   // Add this missing resetForm function that will properly reset all fields
 
@@ -1002,20 +971,20 @@ const handleNameChange = (e) => {
     return filteredEndTimes;
   };
   
-  const BookingForm = React.memo(({ isEdit }) => {
-    return (
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-            <span className="block sm:inline">{error}</span>
-          </div>
-        )}
-
-        {formError.name && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-            <span className="block sm:inline">{formError.name}</span>
-          </div>
-        )}
+   
+const BookingForm = React.memo(({ isEdit }) => (
+  <form onSubmit={handleSubmit} className="space-y-6">
+    {/* Error messages */}
+    {error && (
+      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-2" role="alert">
+        <span>{error}</span>
+      </div>
+    )}
+    {formError.name && (
+      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-2" role="alert">
+        <span>{formError.name}</span>
+      </div>
+    )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -1207,151 +1176,141 @@ const handleNameChange = (e) => {
           </div>
         </div>
 
-        <div className="space-y-4 mt-4">
-          {/* Other Request Text */}
-          <div className="text-center">
-            <label className="block text-sm font-medium text-gray-700">Other Request</label>
-          </div>
-
-          {/* Checkboxes Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-center">
-            {/* Is this a recurring booking */}
-            <div className="flex justify-center items-center">
-              <input
-                type="checkbox"
-                id="isRecurring"
-                name="isRecurring"
-                checked={formData.isRecurring}
-                onChange={(e) => {
-                  setFormData(prev => ({
-                    ...prev,
-                    isRecurring: e.target.checked,
-                    recurring: e.target.checked ? 'Daily' : 'No',
-                    recurrenceEndDate: e.target.checked ? prev.recurrenceEndDate || formData.date : ''
-                  }))
-                }}
-                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="isRecurring" className="ml-2 block text-sm text-gray-700">
-                Is this a recurring booking?
-              </label>
-            </div>
-
-            {/* Meal Room */}
-            <div className="flex justify-center items-center">
-              <input
-                type="checkbox"
-                id="isMealRoom"
-                name="isMealRoom"
-                checked={formData.isMealRoom}
-                onChange={(e) => setFormData((prev) => ({ ...prev, isMealRoom: e.target.checked }))}
-                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="isMealRoom" className="ml-2 block text-sm text-gray-700">
-                Meal Room
-              </label>
-            </div>
-          </div>
-
-          {/* Break Room checkbox */}
-          <div className="flex justify-center items-center mt-4">
-            <input
-              type="checkbox"
-              id="isBreakRoom"
-              name="isBreakRoom"
-              checked={formData.isBreakRoom}
-              onChange={(e) => setFormData((prev) => ({ ...prev, isBreakRoom: e.target.checked }))}
-              className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <label htmlFor="isBreakRoom" className="ml-2 block text-sm text-gray-700">
-              Break Room
-            </label>
-          </div>
-
-          {/* Conditional fields that appear when recurring is checked */}
-          {formData.isRecurring && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 border-t border-gray-200 pt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Recurrence Pattern</label>
-                <select
-                  name="recurring"
-                  value={formData.recurring || "Daily"}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="Daily">Daily</option>
-                  <option value="Weekly">Weekly</option>
-                  <option value="Monthly">Monthly</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Recurrence End Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  name="recurrenceEndDate"
-                  value={formData.recurrenceEndDate || ""}
-                  onChange={handleInputChange}
-                  required={formData.isRecurring}
-                  min={formData.date} // Can't end before it starts
-                  className={`w-full p-2 border ${formError.recurrence ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
-                />
-                {formError.recurrence && <p className="text-red-500 text-xs mt-1">{formError.recurrence}</p>}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-          <textarea
-            name="notes"
-            defaultValue={formData.notes} // Use defaultValue for uncontrolled input
-            onBlur={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} // Update state on blur
-            rows="3"
-            placeholder="Add any additional notes here"
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-          ></textarea>
-        </div>
-
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Additional Remarks</label>
-          <textarea
-            name="remarks"
-            defaultValue={formData.remarks}
-            onBlur={(e) => setFormData((prev) => ({ ...prev, remarks: e.target.value }))}
-            rows="2"
-            placeholder="Add any additional remarks here"
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-          ></textarea>
-        </div>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              setIsAddModalOpen(false);
-              setIsEditModalOpen(false);
-              resetForm();
+    {/* Divider */}
+    <div className="border-t pt-4 mt-2">
+      <div className="flex flex-wrap gap-6">
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="isRecurring"
+            name="isRecurring"
+            checked={formData.isRecurring}
+            onChange={(e) => {
+              setFormData(prev => ({
+                ...prev,
+                isRecurring: e.target.checked,
+                recurring: e.target.checked ? 'Daily' : 'No',
+                recurrenceEndDate: e.target.checked ? prev.recurrenceEndDate || formData.date : ''
+              }))
             }}
-            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-            disabled={submitLoading}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${submitLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
-            disabled={submitLoading}
-          >
-            {submitLoading ? 'Processing...' : isEdit ? 'Update Booking' : 'Create Booking'}
-          </button>
+            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <label htmlFor="isRecurring" className="ml-2 text-sm text-gray-700">
+            Recurring Booking
+          </label>
         </div>
-      </form>
-    );
-  });
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="isMealRoom"
+            name="isMealRoom"
+            checked={formData.isMealRoom}
+            onChange={(e) => setFormData((prev) => ({ ...prev, isMealRoom: e.target.checked }))}
+            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <label htmlFor="isMealRoom" className="ml-2 text-sm text-gray-700">
+            Meal Room
+          </label>
+        </div>
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="isBreakRoom"
+            name="isBreakRoom"
+            checked={formData.isBreakRoom}
+            onChange={(e) => setFormData((prev) => ({ ...prev, isBreakRoom: e.target.checked }))}
+            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <label htmlFor="isBreakRoom" className="ml-2 text-sm text-gray-700">
+            Break Room
+          </label>
+        </div>
+      </div>
+      {/* Recurring fields */}
+      {formData.isRecurring && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Recurrence Pattern</label>
+            <select
+              name="recurring"
+              value={formData.recurring || "Daily"}
+              onChange={handleInputChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
+            >
+              <option value="Daily">Daily</option>
+              <option value="Weekly">Weekly</option>
+              <option value="Monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">
+              Recurrence End Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              name="recurrenceEndDate"
+              value={formData.recurrenceEndDate || ""}
+              onChange={handleInputChange}
+              required={formData.isRecurring}
+              min={formData.date}
+              className={`w-full p-2 border ${formError.recurrence ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-2 focus:ring-blue-400`}
+            />
+            {formError.recurrence && <p className="text-red-500 text-xs mt-1">{formError.recurrence}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+
+    {/* Notes and Remarks */}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
+        <textarea
+          name="notes"
+          value={formData.notes || ''}
+          onChange={handleInputChange}
+          rows="3"
+          placeholder="Add any additional notes here"
+          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
+        ></textarea>
+      </div>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Additional Remarks</label>
+        <textarea
+          name="remarks"
+          value={formData.remarks || ''}
+          onChange={handleInputChange}
+          rows="3"
+          placeholder="Add any additional remarks here"
+          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
+        ></textarea>
+      </div>
+    </div>
+
+    {/* Actions */}
+    <div className="flex justify-end gap-3 pt-4">
+      <button
+        type="button"
+        onClick={() => {
+          setIsAddModalOpen(false);
+          setIsEditModalOpen(false);
+          resetForm();
+        }}
+        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+        disabled={submitLoading}
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${submitLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
+        disabled={submitLoading}
+      >
+        {submitLoading ? 'Processing...' : isEdit ? 'Update Booking' : 'Create Booking'}
+      </button>
+    </div>
+  </form>
+));
 
 // Memoized Modal component
 const Modal = React.memo(({ isOpen, title, children, onClose }) => {
@@ -1477,6 +1436,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                   { key: 'department', label: 'School' },
                   { key: 'category', label: 'Category' },
                   { key: 'roomName', label: 'Room' },
+                  { key: 'roomName', label: 'Room' },
                   { key: 'building', label: 'Building' },
                   { key: 'date', label: 'Date' },
                   { key: 'startTime', label: 'Time' },
@@ -1485,6 +1445,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                   { key: 'isBreakRoom', label: 'Break Room' },
                   { key: 'status', label: 'Status' },
                   { key: 'recurring', label: 'Recurring' },
+                  { key: 'timeSubmitted', label: 'Time Submitted' }, // <-- Add this line
                 ].map(({ key, label }) => (
                   <th
                     key={key}
@@ -1547,7 +1508,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                       <div>
                         <span
                           className={`px-2 py-1 rounded-full text-xs ${
-                            booking.status === 'Approved'
+                            booking.status === 'confirmed'
                               ? 'bg-green-100 text-green-600'
                               : booking.status === 'pending'
                               ? 'bg-yellow-100 text-yellow-600'
@@ -1556,8 +1517,8 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                         >
                           {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                         </span>
-                        {/* Only show "Changed by" if status is Approved/declined and changedBy exists */}
-                        {['Approved', 'declined'].includes(booking.status) && booking.changedBy && (
+                        {/* Only show "Changed by" if status is confirmed/declined and changedBy exists */}
+                        {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
                           <small className="block text-gray-500 mt-1">
                             Changed by: {booking.changedBy}
                           </small>
@@ -1575,7 +1536,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                         </button>
                         <button
                           className="text-green-600 hover:underline"
-                          onClick={() => handleStatusChange(booking.bookingId, 'Approved')} // Ensure booking.bookingId is used
+                          onClick={() => handleStatusChange(booking.bookingId, 'confirmed')} // Ensure booking.bookingId is used
                         >
                           Confirm
                         </button>
@@ -1592,7 +1553,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
               ) : (
                 !loading && (
                   <tr>
-                    <td colSpan="16" className="px-4 py-4 text-center text-gray-500">
+                    <td colSpan="17" className="px-4 py-4 text-center text-gray-500">
                       No bookings found. Add a new booking to get started.
                     </td>
                   </tr>
@@ -1628,12 +1589,12 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
       </div>
 
       {/* Add Booking Modal */}
-      <Modal isOpen={isAddModalOpen} title="Add New Booking">
+      <Modal isOpen={isAddModalOpen} title="Add New Booking" onClose={() => { setIsAddModalOpen(false); resetForm(); }}>
         <BookingForm isEdit={false} />
       </Modal>
 
       {/* Edit Booking Modal */}
-      <Modal isOpen={isEditModalOpen} title="Edit Booking">
+      <Modal isOpen={isEditModalOpen} title="Edit Booking" onClose={() => { setIsEditModalOpen(false); resetForm(); }}>
         <BookingForm isEdit={true} />
       </Modal>
 
@@ -1654,20 +1615,17 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
               return;
             }
 
-            console.log("Updating booking with ID:", selectedBookingId);
-
-            // Fetch the full booking object first
-            const bookingRes = await axios.get(
+            // Fetch the full booking object first using fetch
+            const bookingRes = await fetch(
               `${API_BASE_URL}/bookings/${selectedBookingId}`,
-              { headers: { Authorization: `Bearer ${token}` } }
+              {
+                headers: { Authorization: `Bearer ${token}` }
+              }
             );
-
-            if (!bookingRes.data) {
+            if (!bookingRes.ok) {
               throw new Error("Could not fetch booking details");
             }
-
-            const booking = bookingRes.data;
-            console.log("Original booking data:", booking);
+            const booking = await bookingRes.json();
 
             // Get current user's ID and fetch details
             const userId = localStorage.getItem('userId');
@@ -1675,15 +1633,14 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
 
             if (userId) {
               try {
-                const userResponse = await axios.get(`${API_BASE_URL}/users/${userId}`, {
-                  headers: { Authorization: `Bearer ${token}` },
+                const userResponse = await fetch(`${API_BASE_URL}/users/${userId}`, {
+                  headers: { Authorization: `Bearer ${token}` }
                 });
-
-                if (userResponse.data) {
-                  changedBy = `${userResponse.data.firstName} ${userResponse.data.lastName}`;
+                if (userResponse.ok) {
+                  const userData = await userResponse.json();
+                  changedBy = `${userData.firstName} ${userData.lastName}`;
                 }
               } catch (error) {
-                console.error('Error fetching user details:', error);
                 // Continue with default name
               }
             }
@@ -1695,28 +1652,31 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
               bookingId: booking.bookingId || booking._id,
             };
 
-            console.log("Sending update payload:", updatePayload);
-
-            // Make the update request
-            const updateResponse = await axios.put(
+            // Make the update request using fetch
+            const response = await fetch(
               `${API_BASE_URL}/bookings/${selectedBookingId}`,
-              updatePayload,
-              { headers: { Authorization: `Bearer ${token}` } }
+              {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(updatePayload),
+              }
             );
 
-            console.log("Update response:", updateResponse.data);
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.message || 'Failed to update booking.');
+            }
 
             // Success - refresh bookings and close modal
             await fetchBookings();
             setIsStatusModalOpen(false);
           } catch (err) {
-            console.error('Error updating status:', err);
-
             // Better error handling
-            if (err.response) {
-              setError(`Failed to update booking: ${err.response.data?.message || err.response.status}`);
-            } else if (err.request) {
-              setError('Network error. Please check your connection.');
+            if (err.message) {
+              setError(`Failed to update booking: ${err.message}`);
             } else {
               setError('Failed to update booking status. Please try again.');
             }
@@ -1725,7 +1685,6 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
           }
         }}
       />
-
     </div>
   );
 };

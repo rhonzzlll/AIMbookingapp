@@ -114,6 +114,14 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: Sequelize.fn('GETDATE'), // Change from sequelize.literal to Sequelize.fn
     },
+
+
+timeSubmitted: {
+  type: DataTypes.DATE,
+  allowNull: false,
+  defaultValue: Sequelize.fn('GETUTCDATE'),
+},
+
     remarks: {
       type: DataTypes.STRING(255), // Matches nvarchar(255)
       field: 'remarks',
