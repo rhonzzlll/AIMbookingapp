@@ -395,11 +395,6 @@ const HomePage = () => {
               <div className="text-sm text-purple-200 mb-2 md:mb-0">
                 &copy; {new Date().getFullYear()} AIM Room Booking. All rights reserved.
               </div>
-              <div className="flex space-x-6 text-sm">
-                <a href="/terms" className="text-purple-200 hover:text-white transition-colors">
-                  Terms Privacy
-                </a>
-              </div>
             </div>
           </footer>
         </main>
@@ -415,7 +410,7 @@ const HomePage = () => {
 
 // Loading State Component
 const LoadingState = () => (
-  <div className="flex items-center justify-center min-h-screen bg-gray-50">
+  <div className="flex items-center justify-center">
     <div className="text-center">
       <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
       <p className="text-gray-600">Loading your dashboard...</p>
@@ -425,7 +420,7 @@ const LoadingState = () => (
 
 // Error State Component
 const ErrorState = ({ message }) => (
-  <div className="flex items-center justify-center min-h-screen bg-gray-50">
+  <div className="flex items-center justify-center">
     <div className="text-center p-8 bg-white rounded-xl shadow-md max-w-md">
       <div className="text-red-500 mb-4">
         <AlertCircle size={48} className="mx-auto" />
@@ -524,14 +519,14 @@ const BookingCard = ({ booking }) => {
           <div className="flex justify-between items-start">
             <div>
               <h3 className="font-bold text-lg">{booking.title || 'Untitled Booking'}</h3>
-              <div className="flex items-center text-gray-500 text-sm mt-1">
-                <Clock size={14} className="mr-1" />
-                <span className="font-medium">Time:</span> {startTimeFormatted} - {endTimeFormatted}
-              </div>
-              <div className="flex items-center text-gray-500 text-sm mt-1">
-                <MapPin size={14} className="mr-1" />
-                <span className="font-medium">Location:</span> {roomName}
-              </div>
+                <div className="flex items-center text-gray-500 text-sm mt-1">
+                  <Clock size={14} className="mr-1" />
+                  <span className="font-medium">Time:</span>{startTimeFormatted} - {endTimeFormatted}
+                </div>
+                <div className="flex items-center text-gray-500 text-sm mt-1">
+                  <MapPin size={14} className="mr-1" />
+                  <span className="font-medium">Location:</span>{roomName}
+                </div>
               {booking.changedBy && (
                 <div className="flex items-center text-gray-500 text-sm mt-1">
                   <User size={14} className="mr-1" />

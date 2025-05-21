@@ -6,12 +6,12 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 // Department colors for visual differentiation
 const departmentColors = {
-  'Engineering': 'bg-blue-200',
-  'Marketing': 'bg-green-200',
-  'HR': 'bg-purple-200',
-  'Finance': 'bg-amber-200',
-  'Sales': 'bg-red-200',
-  'IT': 'bg-sky-200'
+  'Asite': 'bg-purple-200',
+  'Gsb': 'bg-green-200',
+  'Zsdm': 'bg-yellow-200',
+  'Seell': 'bg-blue-200',
+  'Units': 'bg-orange-200',
+  'External': 'bg-pink-200'
 };
 
 
@@ -34,7 +34,7 @@ const BookingCalendar = () => {
   ];
 
   // Fetch bookings from the API
- useEffect(() => {
+  
   const fetchBookings = async () => {
     try {
       setLoading(true);
@@ -52,11 +52,14 @@ const BookingCalendar = () => {
       const rooms = roomsRes.data;
 
       const roomMap = {};
+      const buildingMap = {};
       rooms.forEach(room => {
-        roomMap[room._id] = room.roomName;
+        roomMap[room.roomId] = room.roomName;
+        buildingMap[room.roomId] = room.building || room.Building?.buildingName || '';
         if (room.subRooms) {
           room.subRooms.forEach((sub, idx) => {
             roomMap[`${room._id}-sub-${idx}`] = sub.roomName;
+            buildingMap[`${room._id}-sub-${idx}`] = room.buildingName || '';
           });
         }
       });
@@ -65,19 +68,18 @@ const BookingCalendar = () => {
         ? bookingsRes.data
         : bookingsRes.data.bookings || [];
 
-      const formatted = bookings.map(b => {
-        const start = new Date(b.startTime);
-        const formattedTime = start.toLocaleTimeString([], {
-          hour: 'numeric', minute: '2-digit', hour12: true
+        const formatted = bookings.map(b => {
+          const roomKey = b.roomId;
+          return {
+            ...b,
+            date: b.date,
+            time: new Date(b.startTime).toLocaleTimeString([], {
+              hour: 'numeric', minute: '2-digit', hour12: true
+            }),
+            roomName: roomMap[roomKey] || b.roomName || roomKey,
+            buildingName: buildingMap[roomKey] || b.building || '',
+          };
         });
-
-        return {
-          ...b,
-          date: b.date,
-          time: formattedTime,
-          roomName: roomMap[b.room] || b.room // fallback to ID
-        };
-      });
 
       setBookings(formatted);
     } catch (err) {
@@ -89,69 +91,57 @@ const BookingCalendar = () => {
     }
   };
 
-  fetchBookings();
-}, [currentMonth, currentYear, daysInMonth]);
   
+useEffect(() => {
+  fetchBookings();
+  // eslint-disable-next-line
+}, [currentMonth, currentYear]);
+    
 
   // Process bookings to account for recurring events
-  const processedBookings = useMemo(() => {
-
-    
-    const expandedBookings = [];
-    
-    bookings.forEach(booking => {
-
-      if (booking.status === 'pending' || booking.status === 'declined') {
-        return; // ✅ Skip pending and declined
+const processedBookings = useMemo(() => {
+  const expandedBookings = [];
+  bookings.forEach(booking => {
+    if (booking.status === 'pending' || booking.status === 'declined') {
+      return;
+    }
+    if (booking.recurring === 'No' || !booking.recurring) {
+      expandedBookings.push(booking);
+      return;
+    }
+    const startDate = new Date(booking.date);
+    const endDate = booking.recurrenceEndDate 
+      ? new Date(booking.recurrenceEndDate) 
+      : new Date(currentYear, currentMonth + 1, 0);
+    if (startDate > new Date(currentYear, currentMonth + 1, 0) || 
+        endDate < new Date(currentYear, currentMonth, 1)) {
+      return;
+    }
+    let currentOccurrence = new Date(Math.max(
+      startDate,
+      new Date(currentYear, currentMonth, 1)
+    ));
+    while (currentOccurrence <= endDate && 
+           currentOccurrence <= new Date(currentYear, currentMonth + 1, 0)) {
+      const occurrenceDate = currentOccurrence.toISOString().split('T')[0];
+      expandedBookings.push({
+        ...booking,
+        date: occurrenceDate,
+        isRecurring: true,
+        roomName: booking.roomName, // ensure these are copied
+        buildingName: booking.buildingName,
+      });
+      if (booking.recurring === 'Daily') {
+        currentOccurrence.setDate(currentOccurrence.getDate() + 1);
+      } else if (booking.recurring === 'Weekly') {
+        currentOccurrence.setDate(currentOccurrence.getDate() + 7);
+      } else if (booking.recurring === 'Monthly') {
+        currentOccurrence.setMonth(currentOccurrence.getMonth() + 1);
       }
-
-      // For non-recurring bookings, add as-is
-      if (booking.recurring === 'No' || !booking.recurring) {
-        expandedBookings.push(booking);
-        return;
-      }
-      
-      // For recurring bookings, generate all occurrences within the current month
-      const startDate = new Date(booking.date);
-      const endDate = booking.recurrenceEndDate 
-        ? new Date(booking.recurrenceEndDate) 
-        : new Date(currentYear, currentMonth + 1, 0); // End of current month
-      
-      // Skip if start date is after end of month or end date is before start of month
-      if (startDate > new Date(currentYear, currentMonth + 1, 0) || 
-          endDate < new Date(currentYear, currentMonth, 1)) {
-        return;
-      }
-      
-      // Calculate dates based on recurrence pattern
-      let currentOccurrence = new Date(Math.max(
-        startDate,
-        new Date(currentYear, currentMonth, 1) // Start of current month
-      ));
-      
-      while (currentOccurrence <= endDate && 
-             currentOccurrence <= new Date(currentYear, currentMonth + 1, 0)) {
-        // Clone the booking and update the date
-        const occurrenceDate = currentOccurrence.toISOString().split('T')[0];
-        expandedBookings.push({
-          ...booking,
-          date: occurrenceDate,
-          isRecurring: true
-        });
-        
-        // Move to next occurrence based on recurrence type
-        if (booking.recurring === 'Daily') {
-          currentOccurrence.setDate(currentOccurrence.getDate() + 1);
-        } else if (booking.recurring === 'Weekly') {
-          currentOccurrence.setDate(currentOccurrence.getDate() + 7);
-        } else if (booking.recurring === 'Monthly') {
-          currentOccurrence.setMonth(currentOccurrence.getMonth() + 1);
-        }
-      }
-    });
-    
-    return expandedBookings;
-  }, [bookings, currentMonth, currentYear]);
+    }
+  });
+  return expandedBookings;
+}, [bookings, currentMonth, currentYear]);
 
   useEffect(() => {
     console.log("✅ Processed bookings:", processedBookings);
@@ -512,7 +502,7 @@ const BookingCalendar = () => {
                           </div>
                           <p className="text-base font-semibold">{booking.title}</p>
                           <p className="text-base font-semibold">{booking.firstName} {booking.lastName}</p>
-                          <p className="text-sm text-gray-800">Building: {booking.building}</p>
+                          <p className="text-sm text-gray-800">Building: {booking.buildingName}</p>
                           <p className="text-sm italic text-gray-700">
                             ⏰ {start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                           </p>

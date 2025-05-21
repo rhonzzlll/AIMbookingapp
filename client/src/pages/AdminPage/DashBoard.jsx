@@ -413,14 +413,13 @@ const Dashboard = ({ openModal }) => {
                   {[
                     { label: 'Booking Title', key: 'title' },
                     { label: 'Name', key: 'lastName' },
-                    { label: 'Department', key: 'department' },
+                    { label: 'School', key: 'department' },
                     { label: 'Room Type', key: 'category' },
                     { label: 'Meeting Room', key: 'meetingRoom' },
                     { label: 'Building', key: 'buildingName' },
                     { label: 'Date', key: 'date' },
                     { label: 'Time', key: 'startTime' },
                     { label: 'Status', key: 'status' },
-                    { label: 'Recurring', key: 'recurring' }
                   ].map(({ label, key }) => (
                     <th
                       key={key}
@@ -484,7 +483,6 @@ const Dashboard = ({ openModal }) => {
                             </small>
                           </div>
                         </td>
-                        <td className="px-4 py-2 border-b">{booking.recurring}</td>
                       </tr>
                     );
                   })
@@ -506,7 +504,7 @@ const Dashboard = ({ openModal }) => {
                 <p><strong>Title:</strong> {selectedBooking.title}</p>
                 <p><strong>First Name:</strong> {selectedBooking.firstName}</p>
                 <p><strong>Last Name:</strong> {selectedBooking.lastName}</p>
-                <p><strong>Department:</strong> {selectedBooking.department}</p>
+                <p><strong>School:</strong> {selectedBooking.department}</p>
                 <p><strong>Room Type:</strong> {selectedBooking.category}</p>
                 <p><strong>Meeting Room:</strong> {selectedBooking.meetingRoom}</p>
                 <p><strong>Building:</strong> {selectedBooking.building}</p>

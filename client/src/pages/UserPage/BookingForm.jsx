@@ -11,7 +11,7 @@ const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
   '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
   '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM','10:30 PM', '11:00 PM', '11:30 PM',
+  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
 
 const convertTo24HourFormat = (time12h) => {
@@ -741,8 +741,8 @@ const BookingForm = ({ onBookingSubmit }) => {
           <div className="absolute inset-0 bg-black bg-opacity-10" />
         </div>
 
-        <div className="relative bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
+        <div className="relative bg-white rounded-lg shadow-md p-8 max-w-xl mx-auto">  
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
           
           {error && (
             <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -786,11 +786,6 @@ const BookingForm = ({ onBookingSubmit }) => {
                   </option>
                 ))}
               </select>
-              {formData.buildingId && (
-                <p className="mt-1 text-sm text-gray-600">
-                  Selected: {formData.buildingName || buildings.find(b => b.id === formData.buildingId)?.name || formData.buildingId}
-                </p>
-              )}
             </div>
 
             {/* Category Selection */}
@@ -813,11 +808,6 @@ const BookingForm = ({ onBookingSubmit }) => {
                   </option>
                 ))}
               </select>
-              {formData.categoryId && (
-                <p className="mt-1 text-sm text-gray-600">
-                  Selected: {formData.categoryName || categories.find(c => c.id === formData.categoryId)?.name || formData.categoryId}
-                </p>
-              )}
             </div>
 
             {/* Room Selection */}
@@ -840,9 +830,12 @@ const BookingForm = ({ onBookingSubmit }) => {
                   </option>
                 ))}
               </select>
-              {formData.roomId && roomMap[formData.roomId] && (
-                <p className="mt-1 text-sm text-gray-600">Selected: {roomMap[formData.roomId].roomName}</p>
-              )}
+            </div>
+
+            {/* Additional Room Options */}
+
+            <div className="text-center">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Other Request</label>
             </div>
 
             {/* Additional Room Options */}
@@ -850,13 +843,13 @@ const BookingForm = ({ onBookingSubmit }) => {
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  id="isMealRoom"
-                  name="isMealRoom"
-                  checked={formData.isMealRoom}
+                  id="needsMealRoom"
+                  name="needsMealRoom"
+                  checked={formData.needsMealRoom}
                   onChange={handleChange}
                   className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="isMealRoom" className="ml-2 text-gray-700 font-medium">
+                <label htmlFor="needsMealRoom" className="ml-2 text-gray-700 font-medium">
                   Need Meal Room
                 </label>
               </div>
@@ -864,36 +857,19 @@ const BookingForm = ({ onBookingSubmit }) => {
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  id="isBreakRoom"
-                  name="isBreakRoom"
-                  checked={formData.isBreakRoom}
+                  id="needsBreakoutRoom"
+                  name="needsBreakoutRoom"
+                  checked={formData.needsBreakoutRoom}
                   onChange={handleChange}
                   className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="isBreakRoom" className="ml-2 text-gray-700 font-medium">
+                <label htmlFor="needsBreakoutRoom" className="ml-2 text-gray-700 font-medium">
                   Need Breakout Room
                 </label>
               </div>
-              
-              <div className="flex items-center ml-6">
-                <label htmlFor="bookingCapacity" className="mr-2 text-gray-700 font-medium">
-                  Capacity:
-                </label>
-                <input
-                  type="number"
-                  id="bookingCapacity"
-                  name="bookingCapacity"
-                  min="1"
-                  max="100"
-                  value={formData.bookingCapacity}
-                  onChange={handleChange}
-                  className="w-20 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
             </div>
 
-            {/* Date and Time */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+             {/* Date*/}
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
                   Date <span className="text-red-500">*</span>
@@ -904,10 +880,14 @@ const BookingForm = ({ onBookingSubmit }) => {
                   value={formData.date}
                   min={format(new Date(), 'yyyy-MM-dd')}
                   onChange={handleChange}
+                    style={{ textAlign: 'center', width: '100%', padding: '1rem', border: '1px solid #ccc', borderRadius: '0.5rem', outline: 'none' }}
                   className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
+
+            {/* Time */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
                   Start Time <span className="text-red-500">*</span>

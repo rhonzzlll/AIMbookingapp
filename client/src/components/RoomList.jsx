@@ -69,7 +69,7 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
           ) : (
             sortedRooms.map((room) => {
               const roomImage = room.roomImage
-                ? `data:image/jpeg;base64,${room.roomImage}`
+                ? `/api/rooms/images/${room.roomImage}` // or your actual image endpoint
                 : localStorage.getItem(`roomImage_${room.roomName}`);
 
               return (

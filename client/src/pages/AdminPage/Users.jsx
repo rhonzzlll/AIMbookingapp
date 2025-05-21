@@ -21,7 +21,7 @@ const Users = () => {
   const [errors, setErrors] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
 
-  const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
+  const departments = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
 
   // Check if user is admin on component mount
   useEffect(() => {
@@ -325,7 +325,7 @@ const Users = () => {
                   Email {sortConfig.key === 'email' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
                 <th onClick={() => handleSort('department')} className="cursor-pointer px-4 py-2 border-b w-1/6">
-                  Department {sortConfig.key === 'department' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  School {sortConfig.key === 'department' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
                 <th className="px-4 py-2 border-b w-1/6">Status</th>
                 <th className="px-4 py-2 border-b w-1/6">Actions</th>
@@ -434,14 +434,14 @@ const Users = () => {
               </div>
 
               <div className="mb-4">
-                <label className="block mb-1 font-medium">Department</label>
+                <label className="block mb-1 font-medium">School</label>
                 <select
                   name="department"
                   value={formData.department}
                   onChange={handleChange}
                   className={`w-full p-2 border rounded ${errors.department ? 'border-red-500' : ''}`}
                 >
-                  <option value="">Select Department</option>
+                  <option value="">Select School</option>
                   {departments.map((dept) => (
                     <option key={dept} value={dept}>{dept}</option>
                   ))}
@@ -584,14 +584,14 @@ const Users = () => {
               </div>
 
               <div className="mb-4">
-                <label className="block mb-1 font-medium">Department</label>
+                <label className="block mb-1 font-medium">School</label>
                 <select
                   name="department"
                   value={formData.department}
                   onChange={handleChange}
                   className={`w-full p-2 border rounded ${errors.department ? 'border-red-500' : ''}`}
                 >
-                  <option value="">Select Department</option>
+                  <option value="">Select School</option>
                   {departments.map((dept) => (
                     <option key={dept} value={dept}>{dept}</option>
                   ))}

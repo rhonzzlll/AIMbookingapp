@@ -290,7 +290,7 @@ const Bookings = () => {
     
     return bookings.filter(booking => {
       if (activeBookingTab === 'pending') return booking.status === 'pending';
-      if (activeBookingTab === 'approved') return booking.status === 'confirmed';
+      if (activeBookingTab === 'approved') return booking.status === 'Approved';
       if (activeBookingTab === 'declined') return booking.status === 'declined';
       return true;
     });
@@ -897,7 +897,7 @@ const handleNameChange = (e) => {
       if (
         booking.building === selectedBuilding && 
         bookingDate === selectedDate && 
-        booking.status === 'confirmed'
+        booking.status === 'Approved'
       ) {
         const bookingStart = new Date(booking.startTime);
         const bookingEnd = new Date(booking.endTime);
@@ -926,7 +926,7 @@ const handleNameChange = (e) => {
     const relevantBookings = bookings.filter(booking =>
       booking.building === formData.building &&
       new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
-      booking.status?.toLowerCase() === 'confirmed'
+      booking.status?.toLowerCase() === 'Approved'
     );
   
     const unavailable = [];
@@ -1058,7 +1058,7 @@ const handleNameChange = (e) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">School</label>
             <select
               name="department"
               value={formData.department}
@@ -1066,7 +1066,7 @@ const handleNameChange = (e) => {
               required
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="">Select Department</option>
+              <option value="">Select School</option>
               {DEPARTMENTS.map(dept => (
                 <option key={dept} value={dept}>{dept}</option>
               ))}
@@ -1082,7 +1082,7 @@ const handleNameChange = (e) => {
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
+              <option value="Approved">Approved</option>
               <option value="declined">Declined</option>
             </select>
           </div>
@@ -1398,17 +1398,28 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
   const sortedBookings = [...currentBookings].sort((a, b) => {
     const { key, direction } = sortConfig;
     if (!key) return 0;
-  
-    const valA = a[key];
-    const valB = b[key];
-  
-    // Handle dates, numbers, or strings
-    const aVal = typeof valA === 'string' || valA instanceof Date ? String(valA) : valA;
-    const bVal = typeof valB === 'string' || valB instanceof Date ? String(valB) : valB;
-  
-    return direction === 'asc'
-      ? aVal.localeCompare(bVal)
-      : bVal.localeCompare(aVal);
+
+    let valA = a[key];
+    let valB = b[key];
+
+    // Special handling for booleans and numbers
+    if (key === 'isMealRoom' || key === 'isBreakRoom') {
+      valA = !!valA ? 1 : 0;
+      valB = !!valB ? 1 : 0;
+    } else if (key === 'bookingCapacity') {
+      valA = Number(valA) || 0;
+      valB = Number(valB) || 0;
+    } else if (key === 'date') {
+      valA = new Date(valA);
+      valB = new Date(valB);
+    } else {
+      valA = typeof valA === 'string' ? valA.toLowerCase() : valA;
+      valB = typeof valB === 'string' ? valB.toLowerCase() : valB;
+    }
+
+    if (valA < valB) return direction === 'asc' ? -1 : 1;
+    if (valA > valB) return direction === 'asc' ? 1 : -1;
+    return 0;
   });
  
   const handleStatusChange = (bookingId, status) => {
@@ -1436,7 +1447,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
         {/* Filter Buttons */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-4">
-            {['All', 'Pending', 'Confirmed', 'Declined'].map((status) => (
+            {['All', 'Pending', 'Approved', 'Declined'].map((status) => (
               <TabButton
                 key={status}
                 label={status}
@@ -1463,9 +1474,9 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                   { key: 'title', label: 'Booking Title' },
                   { key: 'firstName', label: 'First Name' },
                   { key: 'lastName', label: 'Last Name' },
-                  { key: 'department', label: 'Department' },
+                  { key: 'department', label: 'School' },
                   { key: 'category', label: 'Category' },
-                  { key: 'room', label: 'Room' },
+                  { key: 'roomName', label: 'Room' },
                   { key: 'building', label: 'Building' },
                   { key: 'date', label: 'Date' },
                   { key: 'startTime', label: 'Time' },
@@ -1536,7 +1547,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                       <div>
                         <span
                           className={`px-2 py-1 rounded-full text-xs ${
-                            booking.status === 'confirmed'
+                            booking.status === 'Approved'
                               ? 'bg-green-100 text-green-600'
                               : booking.status === 'pending'
                               ? 'bg-yellow-100 text-yellow-600'
@@ -1545,8 +1556,8 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                         >
                           {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                         </span>
-                        {/* Only show "Changed by" if status is confirmed/declined and changedBy exists */}
-                        {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
+                        {/* Only show "Changed by" if status is Approved/declined and changedBy exists */}
+                        {['Approved', 'declined'].includes(booking.status) && booking.changedBy && (
                           <small className="block text-gray-500 mt-1">
                             Changed by: {booking.changedBy}
                           </small>
@@ -1564,7 +1575,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                         </button>
                         <button
                           className="text-green-600 hover:underline"
-                          onClick={() => handleStatusChange(booking.bookingId, 'confirmed')} // Ensure booking.bookingId is used
+                          onClick={() => handleStatusChange(booking.bookingId, 'Approved')} // Ensure booking.bookingId is used
                         >
                           Confirm
                         </button>
