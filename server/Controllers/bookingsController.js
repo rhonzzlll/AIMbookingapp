@@ -50,13 +50,12 @@ exports.getBookingsByUserId = async (req, res) => {
 // Create a new booking
 exports.createBooking = async (req, res) => {
   try {
-    console.log('Request body received:', req.body); // Debug log to see incoming data
-    
-    // Destructure bookingId to prevent issues with auto-increment
-    const { bookingId, startTime, endTime, roomId, buildingId, userId, isRecurring, recurrenceEndDate, ...cleanedData } = req.body;
+    console.log('Request body received:', req.body);
+
+    const { bookingId, startTime, endTime, roomId, buildingId, userId, isRecurring, recurrenceEndDate, recurrencePattern, ...cleanedData } = req.body;
 
     if (!startTime || !endTime || !userId || !roomId || !buildingId) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Start time, end time, userId, roomId, and buildingId are required.',
         missingFields: {
           startTime: !startTime,
@@ -68,7 +67,6 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // Parse the dates
     const parsedDate = new Date(req.body.date);
     const parsedStartTime = new Date(`${req.body.date}T${startTime}`);
     const parsedEndTime = new Date(`${req.body.date}T${endTime}`);
@@ -77,79 +75,94 @@ exports.createBooking = async (req, res) => {
       return res.status(400).json({ message: 'Invalid start time or end time format.' });
     }
 
-    // Convert start and end times to formatted strings for buffer calculations
-    const bufferStartTime = new Date(parsedStartTime.getTime() - 30 * 60 * 1000);
-    const bufferEndTime = new Date(parsedEndTime.getTime() + 30 * 60 * 1000);
-
-    // FIXED: Validate conflicts for the initial booking - look only for confirmed bookings
-    const overlappingBooking = await Booking.findOne({
-      where: {
-        roomId,
-        buildingId,
-        date: parsedDate,
-        status: 'confirmed', // Status is now an ENUM in Sequelize, so case sensitivity is handled
-        [Op.or]: [
-          {
-            startTime: { [Op.lte]: bufferStartTime.toTimeString().substring(0, 8) },
-            endTime: { [Op.gt]: bufferStartTime.toTimeString().substring(0, 8) }
-          },
-          {
-            startTime: { [Op.lt]: bufferEndTime.toTimeString().substring(0, 8) },
-            endTime: { [Op.gte]: bufferEndTime.toTimeString().substring(0, 8) }
-          },
-          {
-            startTime: { [Op.gte]: bufferStartTime.toTimeString().substring(0, 8) },
-            endTime: { [Op.lte]: bufferEndTime.toTimeString().substring(0, 8) }
-          },
-          {
-            startTime: { [Op.lte]: bufferStartTime.toTimeString().substring(0, 8) },
-            endTime: { [Op.gte]: bufferEndTime.toTimeString().substring(0, 8) }
-          }
-        ]
-      }
-    });
-
-    if (overlappingBooking) {
-      return res.status(400).json({
-        message: 'This time slot is unavailable due to the 30-minute buffer rule.',
+    // Helper to check for conflicts
+    async function hasConflict(date, startTime, endTime) {
+      const bufferStartTime = new Date(startTime.getTime() - 30 * 60 * 1000);
+      const bufferEndTime = new Date(endTime.getTime() + 30 * 60 * 1000);
+      return await Booking.findOne({
+        where: {
+          roomId,
+          buildingId,
+          date,
+          status: 'confirmed',
+          [Op.or]: [
+            {
+              startTime: { [Op.lte]: bufferStartTime.toTimeString().substring(0, 8) },
+              endTime: { [Op.gt]: bufferStartTime.toTimeString().substring(0, 8) }
+            },
+            {
+              startTime: { [Op.lt]: bufferEndTime.toTimeString().substring(0, 8) },
+              endTime: { [Op.gte]: bufferEndTime.toTimeString().substring(0, 8) }
+            },
+            {
+              startTime: { [Op.gte]: bufferStartTime.toTimeString().substring(0, 8) },
+              endTime: { [Op.lte]: bufferEndTime.toTimeString().substring(0, 8) }
+            },
+            {
+              startTime: { [Op.lte]: bufferStartTime.toTimeString().substring(0, 8) },
+              endTime: { [Op.gte]: bufferEndTime.toTimeString().substring(0, 8) }
+            }
+          ]
+        }
       });
     }
 
-    // Handle recurring bookings
+    // Handle recurring bookings as multiple records
     if (isRecurring && recurrenceEndDate) {
-      const recurrenceEnd = new Date(recurrenceEndDate);
-      const bookings = [];
+      const pattern = recurrencePattern || 'Weekly';
+      const bookingsCreated = [];
+      const conflicts = [];
 
       let currentDate = new Date(parsedDate);
-      const recurrenceType = req.body.recurrenceType || 'Weekly'; // Default to Weekly if not specified
+      const endDate = new Date(recurrenceEndDate);
 
-      while (currentDate <= recurrenceEnd) {
-        const bookingData = {
-          ...cleanedData,
-          userId,
-          roomId,
-          buildingId,
-          date: new Date(currentDate),
-          startTime,
-          endTime,
-          isRecurring: true,
-          recurrenceEndDate
-        };
+      while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString().slice(0, 10);
+        const thisStartTime = new Date(`${dateStr}T${startTime}`);
+        const thisEndTime = new Date(`${dateStr}T${endTime}`);
 
-        bookings.push(bookingData);
+        const conflict = await hasConflict(currentDate, thisStartTime, thisEndTime);
+        if (conflict) {
+          conflicts.push(dateStr);
+        } else {
+          const booking = await Booking.create({
+            ...cleanedData,
+            userId,
+            roomId,
+            buildingId,
+            date: new Date(currentDate),
+            startTime,
+            endTime,
+            isRecurring: true,
+            recurrencePattern: pattern,
+            recurrenceEndDate,
+          });
+          bookingsCreated.push(booking);
+        }
 
-        // Adjust date based on recurrence type
-        if (recurrenceType === 'Daily') {
+        // Move to next recurrence
+        if (pattern === 'Daily') {
           currentDate.setDate(currentDate.getDate() + 1);
-        } else if (recurrenceType === 'Weekly') {
+        } else if (pattern === 'Weekly') {
           currentDate.setDate(currentDate.getDate() + 7);
-        } else if (recurrenceType === 'Monthly') {
+        } else if (pattern === 'Monthly') {
+          const prevDay = currentDate.getDate();
           currentDate.setMonth(currentDate.getMonth() + 1);
+          // Handle months with fewer days
+          if (currentDate.getDate() < prevDay) {
+            currentDate.setDate(0); // Last day of previous month
+          }
+        } else {
+          // Default to weekly if unknown
+          currentDate.setDate(currentDate.getDate() + 7);
         }
       }
 
-      await Booking.bulkCreate(bookings);
-      return res.status(201).json({ message: 'Recurring bookings created successfully.' });
+      return res.status(201).json({
+        message: 'Recurring bookings processed.',
+        bookingsCreated,
+        conflicts: conflicts.length > 0 ? conflicts : undefined,
+      });
     }
 
     // Save the single booking
@@ -164,7 +177,7 @@ exports.createBooking = async (req, res) => {
       isRecurring: !!isRecurring
     });
 
-    console.log('Booking saved:', newBooking); // Debug log
+    console.log('Booking saved:', newBooking);
 
     res.status(201).json({
       message: 'Booking created successfully',
@@ -176,14 +189,13 @@ exports.createBooking = async (req, res) => {
       return res.status(400).json({ message: 'Duplicate booking detected.' });
     }
     if (error.name === 'SequelizeValidationError') {
-      // Extract validation error details
       const validationErrors = error.errors.reduce((acc, err) => {
         acc[err.path] = err.message;
         return acc;
       }, {});
-      return res.status(400).json({ 
-        message: 'Validation error', 
-        errors: validationErrors 
+      return res.status(400).json({
+        message: 'Validation error',
+        errors: validationErrors
       });
     }
     res.status(500).json({ error: 'Failed to create booking', message: error.message });

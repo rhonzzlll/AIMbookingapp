@@ -128,6 +128,11 @@ timeSubmitted: {
       field: 'changedBy',
       allowNull: true
       
+    },
+    recurrencePattern: {
+      type: DataTypes.STRING(20), // or ENUM('Daily', 'Weekly', 'Monthly') if you want to restrict values
+      field: 'recurrencePattern',
+      allowNull: true
     }
   }, {
     tableName: 'bookings',

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { format } from 'date-fns';
+// Removed: import { utcToZonedTime } from 'date-fns-tz';
 import { Link } from 'react-router-dom';
 import Header from './Header';
 import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, User } from 'lucide-react';
@@ -9,8 +10,8 @@ import AIMLogo from "../../images/AIM_Logo.png";
 import home from "../../images/home.png";
  
 import FacilityModal from '../../components/FacilityModal';
+import { AuthContext } from '../../context/AuthContext';
 
-// Base URL for API requests
 const API_BASE_URL = 'http://localhost:5000';
 
 const token = localStorage.getItem('token');
@@ -19,12 +20,12 @@ const headers = {
   'Authorization': `Bearer ${token}`
 };
 
-// Default images for facilities when specific images aren't available
-const AIMImage = "/placeholder-building.png";
-const ACCImage = "/placeholder-building.png";
-
+ 
 const HomePage = () => {
-  const userId = localStorage.getItem('userId'); // Retrieve userId from localStorage
+  const { auth } = useContext(AuthContext);
+
+  // Use auth.userId and auth.token from context, not localStorage
+  const userId = auth.userId; // Retrieve userId from localStorage
 
   const [user, setUser] = useState({
     firstName: '',
@@ -47,11 +48,11 @@ const HomePage = () => {
   const fetchBuildings = async () => {
     setBuildingsLoading(true);
     setBuildingsError(null);
-    
+
     try {
       const response = await axios.get(`${API_BASE_URL}/api/buildings`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${auth.token}`,
         },
       });
       
@@ -63,7 +64,7 @@ const HomePage = () => {
           // Check if image URL is already complete or needs to be prefixed with API URL
           let imageUrl = facility.buildingImageUrl || facility.buildingImage;
           if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
-            imageUrl = `${API_BASE_URL}/uploads/${imageUrl}`;
+            imageUrl = `${API_BASE_URL}/api/uploads/${imageUrl}`;
           } else if (imageUrl && imageUrl.startsWith('/')) {
             imageUrl = `${API_BASE_URL}${imageUrl}`;
           }
@@ -94,13 +95,9 @@ const HomePage = () => {
   useEffect(() => {
     const fetchUserAndBookings = async () => {
       try {
-        console.log("Token being sent:", token);
-
-        // Get user data from API
-        // Get user data from API
         const userResponse = await axios.get(`${API_BASE_URL}/api/users/${userId}`, {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${auth.token}`,
           },
         });
 
@@ -108,48 +105,61 @@ const HomePage = () => {
         setUser({
           firstName: userData.firstName,
           lastName: userData.lastName,
-          profileImage: userData.profileImage || '/default-avatar.png',
+          profileImage: userData.profileImage
+            ? `${API_BASE_URL}/api/uploads/${userData.profileImage}`
+            : (localStorage.getItem('profileImage')
+              ? `${API_BASE_URL}/api/uploads/${localStorage.getItem('profileImage')}`
+              : '/default-avatar.png'),
           department: userData.department || '',
         });
-        
+
         // Fetch bookings but handle 404 gracefully
         try {
           const bookingsResponse = await axios.get(`${API_BASE_URL}/api/bookings/user/${userId}`, {
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${auth.token}`,
             },
           });
-          
           setBookings(bookingsResponse.data || []);
         } catch (bookingsErr) {
-          console.log('No bookings found or bookings API not available:', bookingsErr);
-          // Just set empty bookings instead of showing an error
           setBookings([]);
         }
-        
+
         setLoading(false);
       } catch (err) {
-        console.error('Error fetching user data:', err);
+        // Fallback to localStorage if API fails
+        setUser({
+          firstName: localStorage.getItem('firstName') || '',
+          lastName: localStorage.getItem('lastName') || '',
+          profileImage: localStorage.getItem('profileImage')
+            ? `${API_BASE_URL}/api/uploads/${localStorage.getItem('profileImage')}`
+            : '/default-avatar.png',
+          department: localStorage.getItem('department') || '',
+        });
         setError('Failed to load user profile');
         setLoading(false);
       }
     };
-    
+
+    // Listen for profile updates
+    const handleUserProfileUpdated = () => {
+      fetchUserAndBookings();
+    };
+    window.addEventListener('userProfileUpdated', handleUserProfileUpdated);
+
     // Call the function if userId and token exist
-    if (userId && token) {
+    if (userId && auth.token) {
       fetchUserAndBookings();
       fetchBuildings();
     } else {
       setError('User not authenticated');
       setLoading(false);
     }
-    
+
     // Listen for building data changes from the admin panel
     const handleBuildingsDataChanged = () => {
       fetchBuildings();
     };
-
-    // Add event listener for building data changes
     window.addEventListener('buildingsDataChanged', handleBuildingsDataChanged);
 
     // Check sessionStorage for updates
@@ -166,9 +176,10 @@ const HomePage = () => {
 
     return () => {
       window.removeEventListener('buildingsDataChanged', handleBuildingsDataChanged);
+      window.removeEventListener('userProfileUpdated', handleUserProfileUpdated);
       clearInterval(intervalId);
     };
-  }, [userId, token]);
+  }, [userId, auth.token]);
 
   // Filter bookings based on active tab
   const filteredBookings = bookings.filter((booking) => {
@@ -447,7 +458,6 @@ const BookingCard = ({ booking }) => {
   useEffect(() => {
     const fetchDetails = async () => {
       try {
-        // Fetch room name
         if (booking.roomId) {
           const roomResponse = await axios.get(
             `http://localhost:5000/api/rooms/${booking.roomId}`
@@ -465,16 +475,19 @@ const BookingCard = ({ booking }) => {
     fetchDetails();
   }, [booking.roomId]);
 
+  // Format booking date as UTC
   const formatBookingDate = (dateString) => {
     try {
-      const bookingDate = dateString ? new Date(dateString) : null;
-      if (!bookingDate || isNaN(bookingDate)) {
-        return { day: '', date: '', month: '' };
-      }
+      if (!dateString) return { day: '', date: '', month: '' };
+      const utcDate = new Date(dateString);
+      if (isNaN(utcDate)) return { day: '', date: '', month: '' };
+      // Use UTC methods to extract day, date, and month
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       return {
-        day: format(bookingDate, 'EEE'),
-        date: format(bookingDate, 'dd'),
-        month: format(bookingDate, 'MMM'),
+        day: days[utcDate.getUTCDay()],
+        date: String(utcDate.getUTCDate()).padStart(2, '0'),
+        month: months[utcDate.getUTCDay()],
       };
     } catch (error) {
       console.error('Date formatting error:', error);
@@ -485,9 +498,16 @@ const BookingCard = ({ booking }) => {
   const formatTime = (timeString) => {
     if (!timeString) return '';
     try {
+      // Parse as UTC and keep as UTC
       const date = new Date(timeString);
       if (isNaN(date)) return '';
-      return format(date, 'h:mm a');
+      // Use UTC time for formatting
+      const hours = String(date.getUTCHours()).padStart(2, '0');
+      const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+      // Format as 12-hour with AM/PM in UTC
+      const hour12 = ((date.getUTCHours() + 11) % 12) + 1;
+      const ampm = date.getUTCHours() >= 12 ? 'PM' : 'AM';
+      return `${hour12}:${minutes} ${ampm} `;
     } catch (error) {
       console.error('Time formatting error:', error);
       return timeString;

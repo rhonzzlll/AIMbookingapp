@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import TopBar from '../../components/AdminComponents/TopBar';
 import axios from 'axios';
 import Modal from '../../components/AdminComponents/Modal';
-import { useNavigate } from 'react-router-dom'; // Add this import at the top
+import { useNavigate } from 'react-router-dom';
+
 const API_BASE_URL = 'http://localhost:5000/api';
 
 const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
@@ -12,16 +13,10 @@ const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
 
   while (currentDate <= end) {
     dates.push(new Date(currentDate).toISOString().split('T')[0]);
-
-    if (recurrenceType === 'Daily') {
-      currentDate.setDate(currentDate.getDate() + 1);
-    } else if (recurrenceType === 'Weekly') {
-      currentDate.setDate(currentDate.getDate() + 7);
-    } else if (recurrenceType === 'Monthly') {
-      currentDate.setMonth(currentDate.getMonth() + 1);
-    }
+    if (recurrenceType === 'Daily') currentDate.setDate(currentDate.getDate() + 1);
+    else if (recurrenceType === 'Weekly') currentDate.setDate(currentDate.getDate() + 7);
+    else if (recurrenceType === 'Monthly') currentDate.setMonth(currentDate.getMonth() + 1);
   }
-
   return dates;
 };
 
@@ -29,14 +24,11 @@ const groupBookingsByDate = (bookings) => {
   const grouped = {};
   bookings.forEach((booking) => {
     const recurringDates =
-      booking.recurring !== 'No' && booking.recurrenceEndDate 
+      booking.recurrenceEndDate && booking.recurring !== 'No'
         ? calculateRecurringDates(booking.date, booking.recurring, booking.recurrenceEndDate)
         : [booking.date];
-
     recurringDates.forEach((date) => {
-      if (!grouped[date]) {
-        grouped[date] = [];
-      }
+      if (!grouped[date]) grouped[date] = [];
       grouped[date].push(booking);
     });
   });
@@ -48,10 +40,8 @@ const generateWeeklyCalendarDays = () => {
   const currentDayOfWeek = today.getDay();
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - currentDayOfWeek);
-
   const days = [];
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
   for (let i = 0; i < 7; i++) {
     const currentDate = new Date(startOfWeek);
     currentDate.setDate(startOfWeek.getDate() + i);
@@ -62,17 +52,21 @@ const generateWeeklyCalendarDays = () => {
       fullDate: `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`,
     });
   }
-
   return days;
 };
 
 const formatDate = (dateString) => {
-  const options = { year: 'numeric', month: 'long', day: '2-digit' };
-  return new Date(dateString).toLocaleDateString(undefined, options);
+  try {
+    const options = { year: 'numeric', month: 'long', day: '2-digit' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    return dateString;
+  }
 };
 
-const Dashboard = ({ openModal }) => {
-  const navigate = useNavigate(); 
+const Dashboard = () => {
+  const navigate = useNavigate();
   const [activeBookingTab, setActiveBookingTab] = useState('all');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -82,9 +76,6 @@ const Dashboard = ({ openModal }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const roomMap = {};
-  const categoryMap = {};
-  const buildingMap = {};
   const [dashboardStats, setDashboardStats] = useState({
     totalRooms: 0,
     totalBookings: 0,
@@ -92,122 +83,143 @@ const Dashboard = ({ openModal }) => {
     confirmedBookings: 0,
     declinedBookings: 0,
     totalUsers: 0,
-    occupancyRate: 0
   });
-  
+
   const token = localStorage.getItem('token');
-  
+
   const calculateDashboardStats = useCallback((bookings, rooms, users) => {
-    // Count total rooms (including subrooms)
-    const totalRooms = rooms.reduce((total, room) => {
-      // Count the main room
-      let count = 1;
-      // Add subrooms if they exist
-      if (room.subRooms && room.subRooms.length > 0) {
-        count += room.subRooms.length;
-      }
-      return total + count;
-    }, 0);
-    
-    // Count bookings by status
-    const pendingBookings = bookings.filter(b => b.status === 'pending').length;
-    const confirmedBookings = bookings.filter(b => b.status === 'confirmed').length;
-    const declinedBookings = bookings.filter(b => b.status === 'declined').length;
-    const totalBookings = bookings.length;
-    
-    // Calculate current occupancy rate
-    // Get today's date in YYYY-MM-DD format
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Get all bookings for today
-    const todaysBookings = bookings.filter(booking => {
-      // Check if the booking date is today
-      if (booking.date === today) return true;
-      
-      // Check if today falls within a recurring booking range
-      if (booking.recurring !== 'No' && booking.recurrenceEndDate) {
-        const recurringDates = calculateRecurringDates(booking.date, booking.recurring, booking.recurrenceEndDate);
-        return recurringDates.includes(today);
-      }
-      
-      return false;
-    });
-    
-    // Simple occupancy calculation (today's bookings / total rooms)
-    const occupancyRate = totalRooms > 0 ? Math.round((todaysBookings.length / totalRooms) * 100) : 0;
-    
-    setDashboardStats({
-      totalRooms,
-      totalBookings,
-      pendingBookings,
-      confirmedBookings,
-      declinedBookings,
-      totalUsers: users.length,
-      occupancyRate
-    });
+    try {
+      const totalRooms = rooms.reduce((total, room) => {
+        let count = 1;
+        if (room.subRooms && room.subRooms.length > 0) count += room.subRooms.length;
+        return total + count;
+      }, 0);
+      const pendingBookings = bookings.filter(b => b.status === 'pending').length;
+      const confirmedBookings = bookings.filter(b => b.status === 'confirmed').length;
+      const declinedBookings = bookings.filter(b => b.status === 'declined').length;
+      const totalBookings = bookings.length;
+      setDashboardStats({
+        totalRooms,
+        totalBookings,
+        pendingBookings,
+        confirmedBookings,
+        declinedBookings,
+        totalUsers: users.length,
+      });
+    } catch (error) {
+      console.error('Error calculating dashboard stats:', error);
+    }
   }, []);
 
   const fetchDashboardData = useCallback(async () => {
+    if (!token) {
+      setError('No authentication token found. Please login again.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
-  
+    
     try {
-      const [bookingsRes, roomsRes, usersRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/bookings`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${API_BASE_URL}/rooms`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(`${API_BASE_URL}/users`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
+      const headers = { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      console.log('Starting API calls...');
+
+      // Use axios instead of fetch for better error handling
+      const [bookingsRes, roomsRes, usersRes] = await Promise.allSettled([
+        axios.get(`${API_BASE_URL}/bookings`, { headers }),
+        axios.get(`${API_BASE_URL}/rooms`, { headers }),
+        axios.get(`${API_BASE_URL}/users`, { headers })
       ]);
-      
-      const allRooms = roomsRes.data;
+
+      console.log('API responses:', { bookingsRes, roomsRes, usersRes });
+
+      // Handle bookings response
+      let allBookings = [];
+      if (bookingsRes.status === 'fulfilled') {
+        allBookings = bookingsRes.value.data?.data || bookingsRes.value.data || [];
+        console.log('Bookings loaded:', allBookings.length);
+      } else {
+        console.error('Bookings fetch failed:', bookingsRes.reason);
+        // Continue with empty array instead of failing completely
+      }
+
+      // Handle rooms response
+      let allRooms = [];
+      if (roomsRes.status === 'fulfilled') {
+        allRooms = roomsRes.value.data?.data || roomsRes.value.data || [];
+        console.log('Rooms loaded:', allRooms.length);
+      } else {
+        console.error('Rooms fetch failed:', roomsRes.reason);
+      }
+
+      // Handle users response
+      let allUsers = [];
+      if (usersRes.status === 'fulfilled') {
+        allUsers = usersRes.value.data?.data || usersRes.value.data || [];
+        console.log('Users loaded:', allUsers.length);
+      } else {
+        console.error('Users fetch failed:', usersRes.reason);
+      }
+
       setRooms(allRooms);
-      
-      const allUsers = usersRes.data;
       setUsers(allUsers);
+
+      // Create room mapping for enriching bookings
+      const roomMap = {};
+      const categoryMap = {};
+      const buildingMap = {};
       
-      // Create a map of room names for lookup
       allRooms.forEach(room => {
-        // Map roomId to roomName, category, and building
-        roomMap[room.roomId] = room.roomName;
-        categoryMap[room.roomId] = room.category || room.Category?.categoryName || ''; // Room Type
-        buildingMap[room.roomId] = room.building || room.Building?.buildingName || ''; // Building Name
-        // If you have subRooms, handle them similarly if needed
+        const roomId = room.roomId || room.id;
+        if (roomId) {
+          roomMap[roomId] = room.roomName || room.name || '';
+          categoryMap[roomId] = room.category || room.Category?.categoryName || '';
+          buildingMap[roomId] = room.building || room.Building?.buildingName || '';
+        }
       });
 
-      // When mapping bookings, use booking.roomId to look up values
-      const enrichedBookings = bookingsRes.data.map((booking) => ({
+      // Enrich bookings with room information
+      const enrichedBookings = allBookings.map((booking) => ({
         ...booking,
-        meetingRoom: roomMap[booking.roomId] || booking.roomName || '', // Meeting Room
-        category: categoryMap[booking.roomId] || booking.category || '', // Room Type
-        buildingName: buildingMap[booking.roomId] || booking.building || '', // Building
+        meetingRoom: roomMap[booking.roomId] || booking.roomName || 'Unknown Room',
+        category: categoryMap[booking.roomId] || booking.category || 'Unknown Category',
+        buildingName: buildingMap[booking.roomId] || booking.building || 'Unknown Building',
+        // Ensure required fields have defaults
+        firstName: booking.firstName || '',
+        lastName: booking.lastName || '',
+        department: booking.department || '',
+        title: booking.title || 'Untitled Booking',
+        status: booking.status || 'pending',
+        date: booking.date || new Date().toISOString().split('T')[0],
+        startTime: booking.startTime || '',
+        endTime: booking.endTime || '',
+        recurring: booking.recurring || 'No',
+        notes: booking.notes || ''
       }));
 
+      console.log('Enriched bookings:', enrichedBookings.length);
       setRecentBookings(enrichedBookings);
       calculateDashboardStats(enrichedBookings, allRooms, allUsers);
+
     } catch (err) {
-      console.error('Error fetching dashboard data:', err);
-      setError('Failed to load dashboard data. Please try again.');
+      console.error('Dashboard data fetch error:', err);
+      setError(`Failed to load dashboard data: ${err.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   }, [token, calculateDashboardStats]);
-  
-  useEffect(() => {
-    fetchDashboardData();
+
+  useEffect(() => { 
+    fetchDashboardData(); 
   }, [fetchDashboardData]);
-  
+
   const statCards = [
-    { 
-      title: 'Total Rooms', 
-      value: dashboardStats.totalRooms.toString(), 
-      icon: '🏢', 
-      color: 'bg-blue-100' 
-    },
+    { title: 'Total Rooms', value: dashboardStats.totalRooms.toString(), icon: '🏢', color: 'bg-blue-100' },
     {
       title: 'Total Bookings',
       value: dashboardStats.totalBookings.toString(),
@@ -219,48 +231,34 @@ const Dashboard = ({ openModal }) => {
         { label: 'Declined', value: dashboardStats.declinedBookings.toString(), color: 'text-red-500' },
       ],
     },
-    { 
-      title: 'Total Users', 
-      value: dashboardStats.totalUsers.toString(), 
-      icon: '👥', 
-      color: 'bg-yellow-100' 
-    },
+    { title: 'Total Users', value: dashboardStats.totalUsers.toString(), icon: '👥', color: 'bg-yellow-100' },
   ];
 
   const weeklyCalendarDays = generateWeeklyCalendarDays();
+  const bookingsByDate = groupBookingsByDate(recentBookings);
 
   const getFilteredBookings = () => {
-    if (activeBookingTab === 'all') {
-      return recentBookings;
-    } else if (activeBookingTab === 'pending') {
-      return recentBookings.filter(booking => booking.status === 'pending');
-    } else if (activeBookingTab === 'approved') {
-      return recentBookings.filter(booking => booking.status === 'confirmed');
-    } else if (activeBookingTab === 'declined') {
-      return recentBookings.filter(booking => booking.status === 'declined');
-    }
+    if (activeBookingTab === 'all') return recentBookings;
+    if (activeBookingTab === 'pending') return recentBookings.filter(b => b.status === 'pending');
+    if (activeBookingTab === 'approved') return recentBookings.filter(b => b.status === 'confirmed');
+    if (activeBookingTab === 'declined') return recentBookings.filter(b => b.status === 'declined');
     return recentBookings;
   };
-
-  const bookingsByDate = groupBookingsByDate(recentBookings);
 
   const handleEditClick = (booking) => {
     setSelectedBooking(booking);
     setIsModalOpen(true);
   };
-
+  
   const closeModal = () => {
     setIsModalOpen(false);
     setSelectedBooking(null);
   };
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-
   const handleSort = (key) => {
     setSortConfig((prev) => {
-      if (prev.key === key) {
-        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-      }
+      if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       return { key, direction: 'asc' };
     });
   };
@@ -268,37 +266,59 @@ const Dashboard = ({ openModal }) => {
   const sortedBookings = [...getFilteredBookings()].sort((a, b) => {
     const { key, direction } = sortConfig;
     if (!key) return 0;
-
     const valA = a[key]?.toString().toLowerCase() ?? '';
     const valB = b[key]?.toString().toLowerCase() ?? '';
-
-    return direction === 'asc'
-      ? valA.localeCompare(valB)
-      : valB.localeCompare(valA);
+    return direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
   });
 
+  const formatTime = (timeString) => {
+    try {
+      if (!timeString) return 'N/A';
+      return new Date(timeString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (error) {
+      console.error('Time formatting error:', error);
+      return timeString;
+    }
+  };
+
   if (loading) {
-    return <div className="flex justify-center items-center h-screen">Loading dashboard data...</div>;
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p>Loading dashboard data...</p>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-red-500 p-4">{error}</div>;
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">{error}</div>
+          <button 
+            onClick={fetchDashboardData}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div>
       <div style={{position:'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh' }}>
-      <TopBar onSearch={setSearchTerm} />
-
+        <TopBar onSearch={setSearchTerm} />
         <div className="p-6 bg-gray-50 min-h-screen">
           <h1 className="text-2xl font-bold mb-6 text-gray-800">Dashboard Overview</h1>
-
+          
+          {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {statCards.map((card, index) => (
-              <div
-                key={index}
-                className={`p-6 rounded-lg shadow-md ${card.color} hover:shadow-lg transition-shadow`}
-              >
+              <div key={index} className={`p-6 rounded-lg shadow-md ${card.color} hover:shadow-lg transition-shadow`}>
                 <div className="flex items-center mb-3">
                   <div className="p-3 bg-white rounded-full shadow-sm mr-4">
                     <span className="text-2xl">{card.icon}</span>
@@ -309,10 +329,15 @@ const Dashboard = ({ openModal }) => {
                 {card.details && (
                   <div className="mt-3 text-sm">
                     {card.details.map((detail, i) => (
-                      <span key={i} className={`${detail.color} mr-2`}>
+                      <button
+                        key={i}
+                        className={`${detail.color} mr-2 underline hover:text-blue-700 focus:outline-none bg-transparent p-0 border-0 shadow-none`}
+                        onClick={() => navigate(`/admin/bookings?status=${detail.label.toLowerCase()}`)}
+                        type="button"
+                      >
                         {detail.value} {detail.label}
                         {i < card.details.length - 1 ? ' • ' : ''}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -320,67 +345,51 @@ const Dashboard = ({ openModal }) => {
             ))}
           </div>
 
+          {/* Weekly Calendar */}
           <div className="bg-white rounded-lg shadow-md mb-8 border border-gray-200">
             <div className="flex justify-between items-center p-4 border-b">
               <h2 className="font-bold text-gray-800">This Week</h2>
             </div>
             <div className="grid grid-cols-7">
               {weeklyCalendarDays.map((day, index) => (
-                <div
-                  key={index}
-                  className="p-4 text-center border-r last:border-r-0 hover:bg-gray-50 transition relative"
-                >
+                <div key={index} className="p-4 text-center border-r last:border-r-0 hover:bg-gray-50 transition relative">
                   <div className="text-sm text-gray-500">{day.day}</div>
-                  <div
-                    className={`text-lg ${day.isToday
-                      ? 'bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto'
-                      : 'text-gray-800'
-                      }`}
-                  >
+                  <div className={`text-lg ${day.isToday ? 'bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto' : 'text-gray-800'}`}>
                     {day.date}
                   </div>
-
                   {(() => {
-                          const confirmedBookings = bookingsByDate[day.fullDate]
-                            ?.filter((booking) => booking.status === 'confirmed') || [];
-
-                          if (confirmedBookings.length === 0) {
-                            return (
-                              <div className="text-xs text-gray-400 mt-2 italic">
-                                No bookings
-                              </div>
-                            );
-                          }
-
-                          const visibleBookings = confirmedBookings.slice(0, 3);
-                          const remainingCount = confirmedBookings.length - visibleBookings.length;
-
-                          return (
-                            <>
-                              {visibleBookings.map((booking, i) => (
-                                <div
-                                  key={i}
-                                  className="text-xs bg-blue-100 text-blue-600 rounded px-1 mt-1 truncate cursor-pointer"
-                                  title={`${booking.title} (${booking.startTime} - ${booking.endTime})`}
-                                  onClick={() => handleEditClick(booking)}
-                                >
-                                  {booking.title}
-                                </div>
-                              ))}
-
-                              {remainingCount > 0 && (
-                                <div className="text-xs text-blue-500 mt-1 cursor-pointer hover:underline" onClick={() => {}}>
-                                  +{remainingCount} more
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
+                    const confirmedBookings = bookingsByDate[day.fullDate]?.filter((booking) => booking.status === 'confirmed') || [];
+                    if (confirmedBookings.length === 0) {
+                      return <div className="text-xs text-gray-400 mt-2 italic">No bookings</div>;
+                    }
+                    const visibleBookings = confirmedBookings.slice(0, 3);
+                    const remainingCount = confirmedBookings.length - visibleBookings.length;
+                    return (
+                      <>
+                        {visibleBookings.map((booking, i) => (
+                          <div
+                            key={i}
+                            className="text-xs bg-blue-100 text-blue-600 rounded px-1 mt-1 truncate cursor-pointer"
+                            title={`${booking.title} (${formatTime(booking.startTime)} - ${formatTime(booking.endTime)})`}
+                            onClick={() => handleEditClick(booking)}
+                          >
+                            {booking.title}
+                          </div>
+                        ))}
+                        {remainingCount > 0 && (
+                          <div className="text-xs text-blue-500 mt-1 cursor-pointer hover:underline">
+                            +{remainingCount} more
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
           </div>
 
+          {/* Booking Tabs and Table */}
           <div className="flex justify-between items-center mb-6">
             <div className="flex gap-4">
               {['All', 'Pending', 'Approved', 'Declined'].map((status) => (
@@ -389,21 +398,19 @@ const Dashboard = ({ openModal }) => {
                   className={`px-4 py-2 rounded-lg font-medium transition ${activeBookingTab === status.toLowerCase()
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                    }`}
+                  }`}
                   onClick={() => setActiveBookingTab(status.toLowerCase())}
                 >
                   {status}
                 </button>
               ))}
             </div>
-            <div>
             <button
-      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-      onClick={() => navigate('/admin/bookings')} // Redirect to /admin/bookings
-    >
-      View All
-    </button>
-            </div>
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              onClick={() => navigate('/admin/bookings')}
+            >
+              View All
+            </button>
           </div>
 
           <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
@@ -413,85 +420,89 @@ const Dashboard = ({ openModal }) => {
                   {[
                     { label: 'Booking Title', key: 'title' },
                     { label: 'Name', key: 'lastName' },
-                    { label: 'Department', key: 'department' },
+                    { label: 'School', key: 'department' },
                     { label: 'Room Type', key: 'category' },
                     { label: 'Meeting Room', key: 'meetingRoom' },
                     { label: 'Building', key: 'buildingName' },
                     { label: 'Date', key: 'date' },
                     { label: 'Time', key: 'startTime' },
+                    { label: 'Time Submitted', key: 'timeSubmitted' }, // NEW COLUMN
                     { label: 'Status', key: 'status' },
-                    { label: 'Recurring', key: 'recurring' }
                   ].map(({ label, key }) => (
                     <th
                       key={key}
                       onClick={() => handleSort(key)}
-                      className="cursor-pointer px-4 py-2 border-b"
+                      className="cursor-pointer px-4 py-2 border-b hover:bg-gray-200 select-none"
                     >
                       {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                     </th>
                   ))}
                 </tr>
               </thead>
-
               <tbody>
-              {sortedBookings.length > 0 ? (
-                sortedBookings
-                  .filter(booking =>
-                    `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.roomName} ${booking.meetingRoom} ${booking.buildingId}`
-                      .toLowerCase()
-                      .includes(searchTerm.toLowerCase())
-                  )
-                  .map((booking) => {
-                    const recurringDates =
-                      booking.recurring !== 'No' && booking.recurrenceEndDate
-                        ? calculateRecurringDates(booking.date, booking.recurring, booking.recurrenceEndDate)
-                        : [booking.date];
-
-                    return (
-                      <tr key={booking._id} className="hover:bg-gray-50 transition">
-                        <td className="px-4 py-2 border-b">{booking.title}</td>
-                        <td className="px-4 py-2 border-b">
-                          {`${booking.lastName}, ${booking.firstName}`}
-                        </td>
-                        <td className="px-4 py-2 border-b">{booking.department}</td>
-                        <td className="px-4 py-2 border-b">{booking.category}</td>
-                        <td className="px-4 py-2 border-b">{booking.meetingRoom}</td>
-                        <td className="px-4 py-2 border-b">{booking.buildingName}</td>
-                        <td className="px-4 py-2 border-b">
-                          {recurringDates.map((date, index) => (
-                            <div key={index}>{formatDate(date)}</div>
-                          ))}
-                        </td>
-                        <td className="px-4 py-2 border-b">
-                          {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-                          {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="px-4 py-2 border-b">
-                          <div>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs ${
-                                booking.status === 'confirmed'
-                                  ? 'bg-green-100 text-green-600'
-                                  : booking.status === 'pending'
-                                  ? 'bg-yellow-100 text-yellow-600'
-                                  : 'bg-red-100 text-red-600'
-                              }`}
-                            >
-                              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                            </span>
-                            <small className="block text-gray-500 mt-1">
-                              Booked by {booking.firstName} {booking.lastName}
-                            </small>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 border-b">{booking.recurring}</td>
-                      </tr>
-                    );
-                  })
+                {sortedBookings.length > 0 ? (
+                  sortedBookings
+                    .filter(booking =>
+                      `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.meetingRoom} ${booking.buildingName}`
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase())
+                    )
+                    .slice(0, 5) // LIMIT TO 5 BOOKINGS
+                    .map((booking) => {
+                      const recurringDates =
+                        booking.recurrenceEndDate && booking.recurring !== 'No'
+                          ? calculateRecurringDates(booking.date, booking.recurring, booking.recurrenceEndDate)
+                          : [booking.date];
+                      return (
+                        <tr key={booking.bookingId || booking.id} className="hover:bg-gray-50 transition cursor-pointer" onClick={() => handleEditClick(booking)}>
+                          <td className="px-4 py-2 border-b">{booking.title}</td>
+                          <td className="px-4 py-2 border-b">
+                            {booking.lastName && booking.firstName ? `${booking.lastName}, ${booking.firstName}` : 'N/A'}
+                          </td>
+                          <td className="px-4 py-2 border-b">{booking.department}</td>
+                          <td className="px-4 py-2 border-b">{booking.category}</td>
+                          <td className="px-4 py-2 border-b">{booking.meetingRoom}</td>
+                          <td className="px-4 py-2 border-b">{booking.buildingName}</td>
+                          <td className="px-4 py-2 border-b">
+                            {recurringDates.map((date, index) => (
+                              <div key={index}>{formatDate(date)}</div>
+                            ))}
+                          </td>
+                          <td className="px-4 py-2 border-b">
+                            {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+                          </td>
+                          <td className="px-4 py-2 border-b">
+                            {booking.timeSubmitted
+                              ? new Date(booking.timeSubmitted).toLocaleString()
+                              : ''}
+                          </td>
+                          <td className="px-4 py-2 border-b">
+                            <div>
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs ${
+                                  booking.status === 'confirmed'
+                                    ? 'bg-green-100 text-green-600'
+                                    : booking.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-600'
+                                    : 'bg-red-100 text-red-600'
+                                }`}
+                              >
+                                {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                              </span>
+                              {booking.firstName && booking.lastName && (
+                                <small className="block text-gray-500 mt-1">
+                                  Booked by {booking.firstName} {booking.lastName}
+                                </small>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                 ) : (
                   <tr>
-                    <td colSpan="12" className="px-4 py-4 text-center text-gray-500">
-                      {loading ? "Loading bookings..." : "No bookings found. Add a new booking to get started."}
+                    <td colSpan="10" className="px-4 py-8 text-center text-gray-500">
+                      No bookings found. {searchTerm && `Try adjusting your search term "${searchTerm}".`}
                     </td>
                   </tr>
                 )}
@@ -499,28 +510,38 @@ const Dashboard = ({ openModal }) => {
             </table>
           </div>
 
+          {/* Modal */}
           <Modal isOpen={isModalOpen} onClose={closeModal}>
             {selectedBooking && (
               <div>
                 <h2 className="text-xl font-bold mb-4">Booking Details</h2>
-                <p><strong>Title:</strong> {selectedBooking.title}</p>
-                <p><strong>First Name:</strong> {selectedBooking.firstName}</p>
-                <p><strong>Last Name:</strong> {selectedBooking.lastName}</p>
-                <p><strong>Department:</strong> {selectedBooking.department}</p>
-                <p><strong>Room Type:</strong> {selectedBooking.category}</p>
-                <p><strong>Meeting Room:</strong> {selectedBooking.meetingRoom}</p>
-                <p><strong>Building:</strong> {selectedBooking.building}</p>
-                <p><strong>Date:</strong> {formatDate(selectedBooking.date)}</p>
-                <p><strong>Time:</strong> {
-                  `${new Date(selectedBooking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-                  ${new Date(selectedBooking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                }</p>
-                <p><strong>Notes:</strong> {selectedBooking.notes}</p>
-                <p><strong>Status:</strong> {selectedBooking.status}</p>
-                <p><strong>Recurring:</strong> {selectedBooking.recurring}</p>
-                {selectedBooking.recurring !== 'No' && selectedBooking.recurrenceEndDate && (
-                  <p><strong>Recurrence End Date:</strong> {formatDate(selectedBooking.recurrenceEndDate)}</p>
-                )}
+                <div className="space-y-2">
+                  <p><strong>Title:</strong> {selectedBooking.title}</p>
+                  <p><strong>First Name:</strong> {selectedBooking.firstName}</p>
+                  <p><strong>Last Name:</strong> {selectedBooking.lastName}</p>
+                  <p><strong>School:</strong> {selectedBooking.department}</p>
+                  <p><strong>Room Type:</strong> {selectedBooking.category}</p>
+                  <p><strong>Meeting Room:</strong> {selectedBooking.meetingRoom}</p>
+                  <p><strong>Building:</strong> {selectedBooking.buildingName}</p>
+                  <p><strong>Date:</strong> {formatDate(selectedBooking.date)}</p>
+                  <p><strong>Time:</strong> {formatTime(selectedBooking.startTime)} - {formatTime(selectedBooking.endTime)}</p>
+                  <p><strong>Notes:</strong> {selectedBooking.notes || 'No notes'}</p>
+                  <p><strong>Status:</strong> 
+                    <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                      selectedBooking.status === 'confirmed'
+                        ? 'bg-green-100 text-green-600'
+                        : selectedBooking.status === 'pending'
+                        ? 'bg-yellow-100 text-yellow-600'
+                        : 'bg-red-100 text-red-600'
+                    }`}>
+                      {selectedBooking.status.charAt(0).toUpperCase() + selectedBooking.status.slice(1)}
+                    </span>
+                  </p>
+                  <p><strong>Recurring:</strong> {selectedBooking.recurring}</p>
+                  {selectedBooking.recurring !== 'No' && selectedBooking.recurrenceEndDate && (
+                    <p><strong>Recurrence End Date:</strong> {formatDate(selectedBooking.recurrenceEndDate)}</p>
+                  )}
+                </div>
               </div>
             )}
           </Modal>

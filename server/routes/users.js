@@ -3,6 +3,21 @@ const router = express.Router();
 const { User, sequelize } = require("../models"); // Import sequelize instance
 const bcrypt = require("bcryptjs");
 const { authenticate, authorizeAdmin } = require("../routes/auth");
+const multer = require("multer");
+const path = require("path");
+
+// Multer config (reuse your main app's config if possible)
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, "../public/uploads"));
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileExt = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + fileExt);
+  }
+});
+const upload = multer({ storage: storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Input validation middleware
 const validateUserInput = (req, res, next) => {
@@ -109,8 +124,8 @@ router.put("/:id", authenticate, async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Allow if self OR admin
-    if (!(req.user.userId === id || req.user.role.toLowerCase() === "admin")) {
+    // Only allow if the user is updating their own profile or is admin
+    if (Number(req.user.userId) !== id && req.user.role.toLowerCase() !== "admin") {
       await transaction.rollback();
       return res.status(403).json({ message: "Access denied. You can only update your own profile." });
     }
@@ -203,6 +218,14 @@ router.delete("/:id", authenticate, authorizeAdmin, async (req, res) => {
     console.error("Error deleting user:", error);
     return res.status(500).json({ message: "Something went wrong! Please try again." });
   }
+});
+
+// --- Add this endpoint ---
+router.post("/:id/upload-profile-image", authenticate, upload.single("profileImage"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  // Optionally, update the user's profileImage field here
+  // await User.update({ profileImage: req.file.filename }, { where: { userId: req.params.id } });
+  res.json({ filename: req.file.filename });
 });
 
 module.exports = router;

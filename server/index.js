@@ -57,7 +57,11 @@ const upload = multer({
 app.locals.upload = upload;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173', // CORRECT: matches your frontend
+  credentials: true,
+}));
+
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
@@ -129,6 +133,13 @@ sequelize.authenticate()
   .catch((err) => {
     console.error('Failed to connect to the database:', err);
   });
+
+// Add a logout endpoint if you don't have one yet:
+app.post('/api/logout', (req, res) => {
+  // If you use cookies for auth, clear them here:
+  res.clearCookie('token'); // Use your cookie name if needed
+  res.status(200).json({ message: 'Logged out' });
+});
 
 // Start server
 const PORT = process.env.PORT || 5000;

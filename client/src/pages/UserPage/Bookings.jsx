@@ -78,6 +78,7 @@ const Bookings = () => {
         endTime: endTimeSQL,
         department: formData.department,
         isRecurring: formData.isRecurring,
+        recurrencePattern: formData.recurrencePattern || '', // <-- Add this line
         recurrenceEndDate: formData.recurrenceEndDate === '' ? null : formData.recurrenceEndDate,
         notes: formData.notes === '' ? null : formData.notes,
         isMealRoom: formData.isMealRoom,
@@ -124,6 +125,23 @@ const Bookings = () => {
         {loading ? 'Creating...' : 'Create Booking'}
       </button>
       {error && <div style={{ color: 'red' }}>{error}</div>}
+       {/* When rendering each booking: */}
+      {bookings.map(booking => (
+        <div key={booking.id}>
+          {booking.isRecurring && booking.recurrenceEndDate ? (
+            <div>
+              {formatDate(booking.date)} - {formatDate(booking.recurrenceEndDate)}{' '}
+              <span className="italic text-blue-700">
+                {booking.recurrencePattern
+                  ? booking.recurrencePattern.charAt(0).toUpperCase() + booking.recurrencePattern.slice(1)
+                  : 'Daily'}
+              </span>
+            </div>
+          ) : (
+            <div>{formatDate(booking.date)}</div>
+          )}
+        </div>
+      ))}
     </div>
   );
 };

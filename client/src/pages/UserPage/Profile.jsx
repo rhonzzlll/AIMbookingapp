@@ -60,7 +60,7 @@ const Profile = () => {
 
         // Set preview image with proper URL path
         if (userData.profileImage) {
-          setPreviewImage(`${API_BASE_URL}/uploads/${userData.profileImage}`);
+          setPreviewImage(`http://localhost:5000/api/uploads/${userData.profileImage}`);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -146,21 +146,56 @@ const Profile = () => {
     }
   };
 
-  // Handle form submission - updated for fetch API
+  // Handle form submission - updated for image upload
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
-
-      console.log("Authorization Header:", `Bearer ${token}`);
-
-      // Ensure userId is defined
       if (!userId) {
         toast.error("User ID is missing. Please log in again.");
         setLoading(false);
         return;
+      }
+
+      let uploadedImageName = user.profileImage;
+
+      // 1. If a new image is selected, upload it first
+      if (profileImageFile) {
+        const formData = new FormData();
+        formData.append('profileImage', profileImageFile);
+
+        const uploadRes = await fetch(`${API_BASE_URL}/users/${userId}/upload-profile-image`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const data = await uploadRes.json();
+          uploadedImageName = data.filename; // The backend should return { filename: '...' }
+        } else {
+          const err = await uploadRes.json().catch(() => null);
+          toast.error(err?.error || "Failed to upload image");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. Now update the user profile with the new image filename
+      const payload = {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        department: user.department,
+        birthdate: user.birthdate,
+        profileImage: uploadedImageName,
+      };
+
+      if (userRole && userRole.toLowerCase() === "admin") {
+        payload.role = user.role;
+        if (user.isActive !== undefined) payload.isActive = user.isActive;
       }
 
       const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
@@ -169,15 +204,28 @@ const Profile = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(user),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         const updatedUser = await response.json();
-        setUser(updatedUser); 
+        setUser(updatedUser);
+        if (uploadedImageName) {
+          setPreviewImage(`http://localhost:5000/api/uploads/${uploadedImageName}`);
+        }
+        // Update localStorage so HomePage can use the latest image
+        localStorage.setItem('profileImage', uploadedImageName || '');
+        localStorage.setItem('firstName', updatedUser.firstName || '');
+        localStorage.setItem('lastName', updatedUser.lastName || '');
+        // Notify HomePage to refresh user info
+        window.dispatchEvent(new Event('userProfileUpdated'));
         toast.success("Profile updated successfully!");
+        setSuccess("Profile updated successfully!"); // <-- Add this line
+
+        // Clear the success message after 3 seconds
+        setTimeout(() => setSuccess(''), 3000);
       } else {
-        const errorData = await response.json().catch(() => null); // Handle empty response
+        const errorData = await response.json().catch(() => null);
         toast.error(errorData?.message || "Failed to update profile");
       }
     } catch (error) {

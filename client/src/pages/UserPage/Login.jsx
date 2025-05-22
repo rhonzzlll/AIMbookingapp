@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { MdEmail, MdLock } from 'react-icons/md';
 import AIMLogo from '../../images/AIM_Logo.png';
 import AIMlogotest from '../../images/AIM_bldg.jpg';
+import { AuthContext } from '../../context/AuthContext';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { setAuth } = useContext(AuthContext);
 
   // Load remembered email on mount
   useEffect(() => {
@@ -32,18 +34,13 @@ const Login = () => {
       const url = 'http://localhost:5000/api/auth';
       const { data: res } = await axios.post(url, formData);
 
-      // Debug response
-      console.log('Login response:', res);
-      console.log('User role from server:', res.role);
+      // Save auth details in context
+      setAuth({
+        userId: res.userId,
+        token: res.token,
+        role: res.role,
+      });
 
-      // Save auth details - updating to use userId instead of _id
-      localStorage.setItem('userId', res.userId);
-      localStorage.setItem('token', res.token);
-      localStorage.setItem('role', res.role);
-
-      // Debug saved role
-      console.log('Role saved to localStorage:', res.role);
-      
       // Save or clear remembered email
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', formData.email);
@@ -51,19 +48,14 @@ const Login = () => {
         localStorage.removeItem('rememberedEmail');
       }
 
-      // Navigate by role - using more explicit check for admin
+      // Navigate by role
       const userRole = res.role ? res.role.toLowerCase() : '';
-      console.log('Normalized role for navigation check:', userRole);
-      
       if (userRole === 'admin') {
-        console.log('Navigating to admin dashboard');
         navigate('/admin/dashboard');
       } else {
-        console.log('Navigating to home');
         navigate('/home');
       }
     } catch (error) {
-      console.error('Error during login:', error.response?.data?.message || error.message);
       alert(error.response?.data?.message || 'Login failed');
     } finally {
       setLoading(false);

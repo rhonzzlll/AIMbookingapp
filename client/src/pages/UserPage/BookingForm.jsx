@@ -57,7 +57,7 @@ const toTimeISOString = (time12h) => {
   return new Date(Date.UTC(2025, 0, 1, hours, parseInt(minutes, 10))).toISOString();
 };
  
-const BookingForm = ({ onBookingSubmit }) => {
+const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
   const location = useLocation();
   const bookingData = location.state?.bookingData;
   const navigate = useNavigate(); // Initialize the navigate function
@@ -438,11 +438,16 @@ const BookingForm = ({ onBookingSubmit }) => {
       const selectedRoom = roomMap[value] || {};
       setFormData({
         ...formData,
-        [name]: value, // Set the roomId correctly
-        roomName: selectedRoom.roomName || '', // Set the roomName from the selected room
+        [name]: value,
+        roomName: selectedRoom.roomName || '',
       });
       setAvailabilityStatus(null);
-  
+
+      // Notify parent of room selection
+      if (onRoomSelect) {
+        onRoomSelect(value);
+      }
+
       // Check availability after a short delay
       if (formData.buildingId && value && formData.date && formData.startTime && formData.endTime) {
         checkTimeAvailability({

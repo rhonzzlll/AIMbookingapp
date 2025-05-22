@@ -1,8 +1,0 @@
-// Replace your current sync code with this:
-sequelize.sync({ force: true }) // WARNING: This will drop all tables and recreate them
-  .then(() => {
-    console.log('All models were synchronized successfully.');
-  })
-  .catch(err => {
-    console.error('❌ Failed to sync models with the database:', err);
-  });

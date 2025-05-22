@@ -39,11 +39,18 @@ const Header = () => {
       : 'text-gray-600 hover:text-blue-500';
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user'); // Clear user data
-    localStorage.removeItem('_id'); // Clear user ID
-    localStorage.removeItem('token'); // Clear token
-    navigate('/login'); // Redirect to login page
+  const handleLogout = async () => {
+    try {
+      await fetch('http://localhost:5000/api/logout', { method: 'POST', credentials: 'include' });
+      localStorage.removeItem('user');
+      localStorage.removeItem('_id');
+      localStorage.removeItem('token');
+      setUser(null);
+      setUserMenuOpen(false);
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
   };
 
   return (

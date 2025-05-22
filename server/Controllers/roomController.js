@@ -594,6 +594,126 @@ const processRoomUpdate = (req, res, next) => {
   });
 };
 
+// Update Room with file upload and subroom support
+const updateRoom = async (req, res) => {
+  try {
+    // Parse JSON data from form submission
+    let roomData;
+    try {
+      roomData = JSON.parse(req.body.roomData || '{}');
+    } catch (parseError) {
+      return res.status(400).json({ message: "Invalid roomData JSON", details: parseError.message });
+    }
+
+    const roomId = req.params.id;
+    const { subRooms, isQuadrant } = roomData;
+
+    // Find the existing room
+    const room = await Room.findByPk(roomId, { include: [{ model: Subroom, as: 'subRooms' }] });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+
+    // Handle file upload - file information is in req.file if Multer processed it
+    let roomImageFilename = room.roomImage;
+    if (req.file) {
+      // Delete old image if exists
+      if (room.roomImage) {
+        const oldImagePath = path.join(__dirname, '../public/uploads', room.roomImage);
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath);
+        }
+      }
+      roomImageFilename = req.file.filename;
+    }
+
+    // Update room fields
+    room.buildingId = String(roomData.buildingId);
+    room.categoryId = parseInt(roomData.categoryId, 10);
+    room.roomName = roomData.roomName;
+    room.roomCapacity = parseInt(roomData.roomCapacity, 10);
+    room.isQuadrant = Boolean(isQuadrant);
+    room.roomImage = roomImageFilename;
+    room.roomDescription = roomData.roomDescription || null;
+    room.updatedAt = new Date();
+
+    await room.save();
+
+    // Handle subrooms if quadrant
+    if (isQuadrant && Array.isArray(subRooms)) {
+      // Delete removed subrooms
+      const existingSubroomIds = room.subRooms.map(sr => sr.subRoomId);
+      const incomingSubroomIds = subRooms.map(sr => sr.subroomId);
+      const subroomsToDelete = existingSubroomIds.filter(id => !incomingSubroomIds.includes(id));
+      if (subroomsToDelete.length > 0) {
+        await Subroom.destroy({ where: { subRoomId: subroomsToDelete } });
+      }
+
+      // Upsert subrooms
+      for (const subroom of subRooms) {
+        const subroomData = {
+          subRoomId: subroom.subroomId,
+          roomId: room.roomId,
+          subRoomName: subroom.subroomName,
+          subRoomCapacity: parseInt(subroom.subroomCapacity, 10),
+          subRoomDescription: subroom.subroomDescription || null,
+          updatedAt: new Date()
+        };
+
+        // Handle subroom image upload
+        const subroomImageKey = `subroomImage_${subroom.subroomId}`;
+        if (req.files && req.files[subroomImageKey]) {
+          // Delete old image if exists
+          const existing = room.subRooms.find(sr => sr.subRoomId === subroom.subroomId);
+          if (existing && existing.subRoomImage) {
+            const oldSubImagePath = path.join(__dirname, '../public/uploads', existing.subRoomImage);
+            if (fs.existsSync(oldSubImagePath)) {
+              fs.unlinkSync(oldSubImagePath);
+            }
+          }
+          subroomData.subRoomImage = req.files[subroomImageKey][0].filename;
+        } else {
+          // Keep existing image if not replaced
+          const existing = room.subRooms.find(sr => sr.subRoomId === subroom.subroomId);
+          subroomData.subRoomImage = existing ? existing.subRoomImage : null;
+        }
+
+        // Upsert (update if exists, else create)
+        await Subroom.upsert({
+          ...subroomData,
+          createdAt: existingSubroomIds.includes(subroom.subroomId) ? undefined : new Date()
+        });
+      }
+    } else {
+      // If not quadrant, delete all subrooms
+      await Subroom.destroy({ where: { roomId: room.roomId } });
+    }
+
+    // Return updated room with subrooms and image URLs
+    const updatedRoom = await Room.findByPk(room.roomId, {
+      include: [{ model: Subroom, as: 'subRooms' }]
+    });
+    const responseData = updatedRoom.toJSON();
+    if (responseData.roomImage) {
+      responseData.roomImageUrl = `${req.protocol}://${req.get('host')}/api/uploads/${responseData.roomImage}`;
+    }
+    if (responseData.subRooms && responseData.subRooms.length > 0) {
+      responseData.subRooms = responseData.subRooms.map(subroom => {
+        if (subroom.subRoomImage) {
+          subroom.subRoomImageUrl = `${req.protocol}://${req.get('host')}/api/uploads/${subroom.subRoomImage}`;
+        }
+        return subroom;
+      });
+    }
+
+    res.status(200).json(responseData);
+  } catch (error) {
+    console.error("Error updating room:", error);
+    res.status(500).json({ message: "Error updating room", error: error.message });
+  }
+};
+
+// Export updateRoom as processRoomUpdate
 module.exports = {
   createRoom: processRoomCreate,
   getAllRooms,

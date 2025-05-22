@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import RoomList from './RoomList';
 import RoomForm from './RoomForm';
@@ -8,8 +8,20 @@ import TopBar from '../../components/AdminComponents/TopBar';
 import AdminContentTemplate from './AdminContentTemplate';
 import Pagination from '@mui/material/Pagination';
 import Stack from '@mui/material/Stack';
+import { AuthContext } from '../../context/AuthContext'; // <-- Add this import
 
 const RoomManagement = () => {
+  const { auth } = useContext(AuthContext); // <-- Use context
+
+  // Optional: Restrict access to admins
+  useEffect(() => {
+    if (auth.role !== 'admin') {
+      // You can redirect or show a message
+      alert('Access denied. Admins only.');
+      // Optionally, use navigate('/home') if you want to redirect
+    }
+  }, [auth]);
+
   const [rooms, setRooms] = useState([]);
   const [buildings, setBuildings] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -75,7 +87,11 @@ const RoomManagement = () => {
 
   const fetchRooms = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/rooms`);
+      const response = await fetch(`${API_BASE_URL}/rooms`, {
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+        },
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch rooms');
       }

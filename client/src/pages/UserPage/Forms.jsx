@@ -91,7 +91,8 @@ const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
   );
 };
 
-const AvailableTime = ({ selectedDate, bookings, businessHours = { start: "08:00", end: "22:00" } }) => {
+const AvailableTime = ({ selectedDate, bookings, businessHours = { start: "08:00", end: "22:00" }, roomName }) => {
+  // ...rest of your code
   const availableTimeSlots = useMemo(() => {
     // Filter bookings for the selected date that are confirmed
     const dateBookings = bookings
@@ -207,9 +208,9 @@ const AvailableTime = ({ selectedDate, bookings, businessHours = { start: "08:00
 
   return (
     <div className="relative bg-white rounded-lg shadow-md p-4 mt-4">
-      <h2 className="text-xl font-bold mb-4">
-        Available time for {formattedDate}
-      </h2>
+    <h2 className="text-xl font-bold mb-4">
+      Available time for {roomName ? `"${roomName}"` : "room"} on {formattedDate}
+    </h2>
       <div className="overflow-y-auto max-h-96">
         {availableTimeSlots.length > 0 ? (
           availableTimeSlots.map((slot, index) => (
@@ -296,10 +297,10 @@ const DaySchedule = ({ selectedDate, bookings }) => {
   
         const map = {};
         rooms.forEach(room => {
-          map[room._id] = room.roomName;
+          map[room.roomId] = room.roomName;
           if (room.subRooms) {
             room.subRooms.forEach((sub, idx) => {
-              map[`${room._id}-sub-${idx}`] = sub.roomName;
+              map[`${room.roomId}-sub-${idx}`] = sub.roomName;
             });
           }
         });
@@ -362,6 +363,8 @@ const BookingApp = () => {
   const [bookingError, setBookingError] = useState(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState(null);
+  const [selectedRoomId, setSelectedRoomId] = useState('');
+  const [selectedRoomName, setSelectedRoomName] = useState('');
 
   const fetchBookings = async () => {
     try {
@@ -384,15 +387,15 @@ const BookingApp = () => {
   
       const roomMap = {};
       rooms.forEach(room => {
-        roomMap[room._id] = room.roomName;
+        roomMap[room.roomId] = room.roomName;
         room.subRooms?.forEach((sub, idx) => {
-          roomMap[`${room._id}-sub-${idx}`] = sub.roomName;
+          roomMap[`${room.roomId}-sub-${idx}`] = sub.roomName;
         });
       });
   
       const processed = bookings.map(b => ({
         ...b,
-        roomName: roomMap[b.room] || b.room
+        roomName: roomMap[b.roomId] || b.roomId
       }));
   
       setBookings(processed);
@@ -420,7 +423,7 @@ const handlePrivacyConfirm = async () => {
   if (!pendingBooking) return;
 
   try {
-    const userId = localStorage.getItem('_id');
+    const userId = localStorage.getItem('userId');
     const token = localStorage.getItem('token');
 
     const bookingPayload = {
@@ -462,11 +465,11 @@ const handlePrivacyConfirm = async () => {
   };
 
   const confirmCancelBooking = async () => {
-    if (!bookingToCancel?._id) return;
+    if (!bookingToCancel?.bookingId) return;
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/bookings/${bookingToCancel._id}`, {
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingToCancel.bookingId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -479,7 +482,7 @@ const handlePrivacyConfirm = async () => {
       }
 
       // Remove the booking from local state
-      setBookings((prev) => prev.filter((booking) => booking._id !== bookingToCancel._id));
+      setBookings((prev) => prev.filter((booking) => booking.bookingId !== bookingToCancel.bookingId));
       setIsCancelModalOpen(false);
       setBookingToCancel(null);
     } catch (error) {
@@ -492,18 +495,20 @@ const handlePrivacyConfirm = async () => {
     return bookings.filter(b => b.status?.toLowerCase() === 'confirmed');
   }, [bookings]);
   
-  const bookingsForSelectedDate = useMemo(() => {
-    const formattedSelectedDate = format(
-      typeof selectedDate === 'string' ? parseISO(selectedDate) : selectedDate,
-      'yyyy-MM-dd'
-    );
-  
-    return bookings.filter(
-      (booking) =>
-        format(parseISO(booking.date), 'yyyy-MM-dd') === formattedSelectedDate &&
-        booking.status?.toLowerCase() === 'confirmed'
-    );
-  }, [bookings, selectedDate]);  
+const bookingsForSelectedDate = useMemo(() => {
+  const formattedSelectedDate = format(
+    typeof selectedDate === 'string' ? parseISO(selectedDate) : selectedDate,
+    'yyyy-MM-dd'
+  );
+
+  return bookings.filter(
+    (booking) =>
+      format(parseISO(booking.date), 'yyyy-MM-dd') === formattedSelectedDate &&
+      booking.status?.toLowerCase() === 'confirmed' &&
+      (!selectedRoomId || booking.roomId === selectedRoomId) // Filter by selectedRoomId if set
+  );
+}, [bookings, selectedDate, selectedRoomId]);
+
 
   return (
     <div className="relative min-h-screen bg-gray-50">
@@ -527,8 +532,11 @@ const handlePrivacyConfirm = async () => {
         
         <div className="relative flex flex-col lg:flex-row gap-6">
           <div className="w-full lg:w-1/2">
-            <BookingForm 
-              onBookingSubmit={handleBookingSubmit} 
+            <BookingForm
+              onBookingSubmit={handleBookingSubmit}
+              setSelectedRoomId={setSelectedRoomId}
+              setSelectedRoomName={setSelectedRoomName}
+              selectedRoomId={selectedRoomId}
             />
           </div>
           
@@ -538,15 +546,25 @@ const handlePrivacyConfirm = async () => {
               onDateSelect={handleDateSelect}
               bookings={confirmedBookings}
             />
-            <AvailableTime 
+            <AvailableTime
               selectedDate={selectedDate}
-              bookings={bookingsForSelectedDate}
+              bookings={
+                bookings.filter(
+                  (booking) =>
+                    booking.roomId === selectedRoomId &&
+                    format(parseISO(booking.date), 'yyyy-MM-dd') ===
+                      format(typeof selectedDate === 'string' ? parseISO(selectedDate) : selectedDate, 'yyyy-MM-dd') &&
+                    booking.status?.toLowerCase() === 'confirmed'
+                )
+              }
+              roomName={selectedRoomName}
               businessHours={{ start: "08:00", end: "22:00" }}
             />
-            <DaySchedule 
-              selectedDate={selectedDate} 
-              bookings={bookingsForSelectedDate} 
-            />
+          <DaySchedule
+            selectedDate={selectedDate}
+            bookings={bookingsForSelectedDate}
+            roomName={selectedRoomName}
+          />
           </div>
         </div>
       </div>

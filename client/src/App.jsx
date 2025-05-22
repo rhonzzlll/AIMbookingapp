@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 
 // Admin Pages
 import Bookings from './pages/AdminPage/Bookings';
@@ -68,9 +69,11 @@ const AppContent = () => {
 
 const App = () => {
     return (
-        <Router>
-            <AppContent />
-        </Router>
+        <AuthProvider>
+            <Router>
+                <AppContent />
+            </Router>
+        </AuthProvider>
     );
 };
 
