@@ -1,6 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import AdminContentTemplate from './AdminContentTemplate';
 import TopBar from '../../components/AdminComponents/TopBar';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TablePagination,
+  TableRow,
+  Paper,
+  Button,
+  Box,
+  TableFooter,
+  Typography,
+  Stack,
+} from '@mui/material';
+import CategoryIcon from '@mui/icons-material/Category'; // <-- Add this import
 
 // Modal component for adding/editing categories
 const CategoryModal = ({ 
@@ -13,6 +29,8 @@ const CategoryModal = ({
   const [categoryName, setCategoryName] = useState('');
   const [selectedBuilding, setSelectedBuilding] = useState('');
   const [description, setDescription] = useState('');
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
 
   // Initialize form with edit data if available
   useEffect(() => {
@@ -25,20 +43,31 @@ const CategoryModal = ({
       setCategoryName('');
       setSelectedBuilding('');
       setDescription('');
+      setErrors({});
     }
   }, [editData, isOpen]);
 
+  const validateForm = () => {
+    const newErrors = {};
+    if (!categoryName.trim()) newErrors.name = 'Category name is required';
+    if (!selectedBuilding) newErrors.building = 'Please select a building';
+    if (description && description.length > 500)
+      newErrors.description = 'Description must be less than 500 characters';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+    if (!validateForm()) return;
+    setLoading(true);
     onSave({
       id: editData ? editData.id : Date.now(), // Use existing ID or create new one
       name: categoryName,
       building: selectedBuilding,
       description: description
     });
-    
-    // Reset and close
+    setLoading(false);
     onClose();
   };
 
@@ -46,80 +75,103 @@ const CategoryModal = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-semibold mb-4">
           {editData ? 'Edit Category' : 'Add New Category'}
         </h2>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Building
-            </label>
-            <select
-              value={selectedBuilding}
-              onChange={(e) => setSelectedBuilding(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Please select a building</option>
-              {buildings && buildings.length > 0 ? (
-                buildings.map(building => (
-                  <option 
-                    key={building._id || building.buildingId || building.id} 
-                    value={building.buildingName || building.name}
-                  >
-                    {building.buildingName || building.name}
-                  </option>
-                ))
-              ) : (
-                <option disabled>No buildings available</option>
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Building*
+              </label>
+              <select
+                value={selectedBuilding}
+                onChange={(e) => setSelectedBuilding(e.target.value)}
+                className={`w-full px-3 py-2 border ${errors.building ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              >
+                <option value="">Please select a building</option>
+                {buildings && buildings.length > 0 ? (
+                  buildings.map(building => (
+                    <option 
+                      key={building._id || building.buildingId || building.id} 
+                      value={building.buildingName || building.name}
+                    >
+                      {building.buildingName || building.name}
+                    </option>
+                  ))
+                ) : (
+                  <option disabled>No buildings available</option>
+                )}
+              </select>
+              {errors.building && (
+                <p className="text-red-500 text-xs mt-1">{errors.building}</p>
               )}
-            </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Category Name*
+              </label>
+              <input
+                type="text"
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+                className={`w-full px-3 py-2 border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                placeholder="Enter category name"
+              />
+              {errors.name && (
+                <p className="text-red-500 text-xs mt-1">{errors.name}</p>
+              )}
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className={`w-full px-3 py-2 border ${errors.description ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                placeholder="Enter category description"
+                rows="3"
+              />
+              <div className="flex justify-between">
+                {errors.description ? (
+                  <p className="text-red-500 text-xs mt-1">{errors.description}</p>
+                ) : (
+                  <span className="text-xs text-gray-500 mt-1">
+                    {description ? description.length : 0}/500 characters
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className={`px-4 py-2 rounded-md ${loading
+                  ? 'bg-blue-300 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+              >
+                {loading
+                  ? 'Processing...'
+                  : editData
+                  ? 'Update Category'
+                  : 'Add Category'}
+              </button>
+            </div>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category Name
-            </label>
-            <input
-              type="text"
-              value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter category name"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter category description"
-              rows="3"
-            />
-          </div>
-          
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={!categoryName || !selectedBuilding} 
-              className={`px-4 py-2 rounded-md ${(!categoryName || !selectedBuilding) ? 
-                'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            >
-              {editData ? 'Update Category' : 'Add Category'}
-            </button>
-          </div>
-        </div>
+        </form>
       </div>
     </div>
   );
@@ -132,11 +184,17 @@ const CategoryManagement = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   useEffect(() => {
     // Fetch categories and buildings on component mount
     fetchData();
   }, []);
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm]);
 
   const fetchData = async () => {
     try {
@@ -146,8 +204,6 @@ const CategoryManagement = () => {
       if (buildingsResponse.ok && categoriesResponse.ok) {
         const buildingsData = await buildingsResponse.json();
         const categoriesData = await categoriesResponse.json();
-        
-        console.log('Categories data:', categoriesData);
         
         // Transform API response to frontend format
         const normalizedCategories = categoriesData.map(category => ({
@@ -176,7 +232,6 @@ const CategoryManagement = () => {
   };
 
   const openEditModal = (category) => {
-    console.log('Opening edit modal with data:', category);
     setEditingCategory(category);
     setModalOpen(true);
   };
@@ -188,17 +243,12 @@ const CategoryManagement = () => {
 
   const handleSaveCategory = async (categoryData) => {
     try {
-      console.log('About to save:', categoryData); // Debug: log what we're saving
-      
-      // Transform the data to match backend expectations
       const formattedData = {
         categoryId: categoryData.id,
         categoryName: categoryData.name,
         building: categoryData.building, // This should be the building name
         description: categoryData.description
       };
-
-      console.log('Sending to backend:', formattedData); // Debug: log what we're sending
 
       let response;
 
@@ -241,8 +291,6 @@ const CategoryManagement = () => {
         updatedCategory = formattedData;
       }
 
-      console.log('Response from server (parsed):', updatedCategory);
-
       // Create a normalized version that matches our frontend structure
       const normalizedCategory = {
         id: updatedCategory.id || updatedCategory.categoryId,
@@ -250,8 +298,6 @@ const CategoryManagement = () => {
         building: updatedCategory.building, // Ensure building is mapped correctly
         description: updatedCategory.description || updatedCategory.categoryDescription || ''
       };
-
-      console.log('Normalized category to save to state:', normalizedCategory);
 
       // Update the state with the normalized data
       if (editingCategory) {
@@ -274,7 +320,23 @@ const CategoryManagement = () => {
     category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     category.building.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
+
+  const pagedCategories = useMemo(() => {
+    if (rowsPerPage > 0) {
+      return filteredCategories.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+    }
+    return filteredCategories;
+  }, [filteredCategories, page, rowsPerPage]);
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
   const handleDeleteCategory = async (id) => {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
   
@@ -296,95 +358,174 @@ const CategoryManagement = () => {
   };
   
   return (
-  <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
+    <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '120vh'}}>
       <TopBar onSearch={setSearchTerm} />
-    <AdminContentTemplate>
-      <div className="p-6 bg-white rounded-lg shadow">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Category Management</h1>
-        <p className="text-gray-600 mb-6">Add and manage room categories for your buildings</p>
-        
-        {/* Add Category Button */}
-        <div className="mb-6">
-          <button
-            onClick={openAddModal}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-          +   Add New Category
-          </button>
+      <AdminContentTemplate>
+        <div className="p-6 bg-white rounded-lg shadow">
+          {/* Header Section */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4 }}>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <CategoryIcon sx={{ fontSize: 48, color: '#2563eb' }} />
+              <Box>
+                <Typography variant="h1" sx={{ fontSize: 48, fontWeight: 'bold', color: 'gray.800', lineHeight: 1 }}>
+                  Category Management
+                </Typography>
+                <Typography variant="subtitle1" sx={{ color: 'gray.600', fontSize: 18 }}>
+                  manage room categories for your buildings
+                </Typography>
+              </Box>
+            </Stack>
+            {/* Add Button on the right */}
+            <Button
+              onClick={openAddModal}
+              sx={{
+                px: 4,
+                py: 2,
+                bgcolor: '#2563eb',
+                color: '#fff',
+                borderRadius: 2,
+                fontWeight: 'bold',
+                fontSize: 18,
+                '&:hover': { bgcolor: '#1e40af' }
+              }}
+            >
+              + Add New Category
+            </Button>
+          </Box>
+          {/* Categories Table */}
+          <div className="overflow-x-auto">
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, textAlign: 'left' }}>
+              Categories
+            </Typography>
+            {loading ? (
+              <div className="text-center py-4">
+                <p>Loading categories...</p>
+              </div>
+            ) : categories.length === 0 ? (
+              <p>No categories found. Add your first category using the button above.</p>
+            ) : (
+              <TableContainer component={Paper} sx={{ mt: 2 }}>
+                <Table sx={{ minWidth: 900 }} aria-label="categories table">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Category Name</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Building</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {pagedCategories.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center">
+                          No categories found. Add your first category using the button above.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pagedCategories.map((category) => (
+                        <TableRow key={category.id}>
+                          <TableCell>{category.name || 'No Name'}</TableCell>
+                          <TableCell>{category.building || 'No Building Assigned'}</TableCell>
+                          <TableCell>
+                            <Box sx={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {category.description || 'No Description'}
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="contained"
+                              color="primary"
+                              size="small"
+                              sx={{ mr: 1 }}
+                              onClick={() => openEditModal(category)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="contained"
+                              color="error"
+                              size="small"
+                              onClick={() => handleDeleteCategory(category.id)}
+                            >
+                              Delete
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TablePagination
+                        rowsPerPageOptions={[10, 25, 50]}
+                        colSpan={4}
+                        count={filteredCategories.length}
+                        rowsPerPage={rowsPerPage}
+                        page={page}
+                        SelectProps={{
+                          inputProps: { 'aria-label': 'rows per page' },
+                          native: true,
+                        }}
+                        onPageChange={handleChangePage}
+                        onRowsPerPageChange={handleChangeRowsPerPage}
+                        ActionsComponent={TablePaginationActions}
+                      />
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </TableContainer>
+            )}
+          </div>
         </div>
         
-        {/* Categories Table */}
-        <div className="overflow-x-auto">
-          <h2 className="text-lg font-semibold mb-4">Categories</h2>
-          {loading ? (
-            <p>Loading categories...</p>
-          ) : categories.length === 0 ? (
-            <p>No categories found. Add your first category using the button above.</p>
-          ) : (
-<div className="shadow overflow-hidden border border-gray-300 sm:rounded-lg">
-  <table className="min-w-full divide-y divide-gray-300 border-collapse border border-gray-300">
-    <thead className="bg-gray-50">
-      <tr>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-          Category Name
-        </th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-          Building
-        </th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-          Description
-        </th>
-        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-          Actions
-        </th>
-      </tr>
-    </thead>
-    <tbody className="bg-white divide-y divide-gray-300">
-      {filteredCategories.map((category) => (
-        <tr key={category.id}>
-          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border border-gray-300">
-            {category.name || 'No Name'}
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">
-            {category.building || 'No Building Assigned'}
-          </td>
-          <td className="px-6 py-4 text-sm text-gray-900 border border-gray-300">
-            {category.description || 'No Description'}
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300">
-            <button
-              onClick={() => openEditModal(category)}
-              className="text-blue-600 hover:text-blue-900 mr-4"
-            >
-              Edit
-            </button>
-            <button
-              onClick={() => handleDeleteCategory(category.id)}
-              className="text-red-600 hover:text-red-900"
-            >
-              Delete
-            </button>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-          )}
-        </div>
-      </div>
-      
-      {/* Modal for Adding/Editing Categories */}
-      <CategoryModal
-        isOpen={modalOpen}
-        onClose={closeModal}
-        buildings={buildings}
-        onSave={handleSaveCategory}
-        editData={editingCategory}
-      />
-    </AdminContentTemplate>
+        {/* Modal for Adding/Editing Categories */}
+        <CategoryModal
+          isOpen={modalOpen}
+          onClose={closeModal}
+          buildings={buildings}
+          onSave={handleSaveCategory}
+          editData={editingCategory}
+        />
+      </AdminContentTemplate>
     </div>
   );
 };
+
+function TablePaginationActions(props) {
+  const { count, page, rowsPerPage, onPageChange } = props;
+
+  const handleFirstPageButtonClick = (event) => {
+    onPageChange(event, 0);
+  };
+
+  const handleBackButtonClick = (event) => {
+    onPageChange(event, page - 1);
+  };
+
+  const handleNextButtonClick = (event) => {
+    onPageChange(event, page + 1);
+  };
+
+  const handleLastPageButtonClick = (event) => {
+    onPageChange(event, Math.max(0, Math.ceil(count / rowsPerPage) - 1));
+  };
+
+  return (
+    <Box sx={{ flexShrink: 0, ml: 2.5 }}>
+      <Button onClick={handleFirstPageButtonClick} disabled={page === 0} size="small">{'<<'}</Button>
+      <Button onClick={handleBackButtonClick} disabled={page === 0} size="small">{'<'}</Button>
+      <Button
+        onClick={handleNextButtonClick}
+        disabled={page >= Math.ceil(count / rowsPerPage) - 1}
+        size="small"
+      >{'>'}</Button>
+      <Button
+        onClick={handleLastPageButtonClick}
+        disabled={page >= Math.ceil(count / rowsPerPage) - 1}
+        size="small"
+      >{'>>'}</Button>
+    </Box>
+  );
+}
 
 export default CategoryManagement;

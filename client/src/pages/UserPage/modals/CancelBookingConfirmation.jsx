@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const CancelBookingConfirmation = ({ booking, onConfirm, onCancel }) => {
+  const [checked, setChecked] = useState(false);
+
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
@@ -25,16 +27,29 @@ const CancelBookingConfirmation = ({ booking, onConfirm, onCancel }) => {
             Are you sure you want to cancel the booking for <strong>{booking?.title}</strong> on{' '}
             <strong>{booking?.date}</strong>? This action cannot be undone.
           </p>
+          <div className="flex items-center justify-center mb-4">
+            <input
+              id="confirm-cancel"
+              type="checkbox"
+              checked={checked}
+              onChange={() => setChecked(!checked)}
+              className="mr-2"
+            />
+            <label htmlFor="confirm-cancel" className="text-sm text-gray-700">
+              I understand this action cannot be undone.
+            </label>
+          </div>
           <div className="flex justify-center space-x-3">
             <button
               onClick={onCancel}
               className="px-4 py-2 border border-gray-300 rounded shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
             >
-              No, Keep Booking
+              No, Go Back
             </button>
             <button
               onClick={onConfirm}
               className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+              disabled={!checked}
             >
               Yes, Cancel Booking
             </button>

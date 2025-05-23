@@ -4,13 +4,15 @@ import { format } from 'date-fns';
 // Removed: import { utcToZonedTime } from 'date-fns-tz';
 import { Link } from 'react-router-dom';
 import Header from './Header';
-import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, User } from 'lucide-react';
+import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, User, MessageCircle, Trash2 } from 'lucide-react'; // Add Trash2
+
 import AIMLogo from "../../images/AIM_Logo.png";
 // import AIMbg from "../../images/AIM_bldg.jpng";
 import home from "../../images/home.png";
  
 import FacilityModal from '../../components/FacilityModal';
 import { AuthContext } from '../../context/AuthContext';
+import CancelBookingConfirmation from './modals/CancelBookingConfirmation'; // Import your modal
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -453,6 +455,8 @@ const ErrorState = ({ message }) => (
 // Booking Card Component
 const BookingCard = ({ booking }) => {
   const [roomName, setRoomName] = useState('Loading...');
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [status, setStatus] = useState(booking.status || 'pending');
 
   // Fetch room details using roomId
   useEffect(() => {
@@ -481,7 +485,6 @@ const BookingCard = ({ booking }) => {
       if (!dateString) return { day: '', date: '', month: '' };
       const utcDate = new Date(dateString);
       if (isNaN(utcDate)) return { day: '', date: '', month: '' };
-      // Use UTC methods to extract day, date, and month
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       return {
@@ -498,13 +501,10 @@ const BookingCard = ({ booking }) => {
   const formatTime = (timeString) => {
     if (!timeString) return '';
     try {
-      // Parse as UTC and keep as UTC
       const date = new Date(timeString);
       if (isNaN(date)) return '';
-      // Use UTC time for formatting
       const hours = String(date.getUTCHours()).padStart(2, '0');
       const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-      // Format as 12-hour with AM/PM in UTC
       const hour12 = ((date.getUTCHours() + 11) % 12) + 1;
       const ampm = date.getUTCHours() >= 12 ? 'PM' : 'AM';
       return `${hour12}:${minutes} ${ampm} `;
@@ -517,7 +517,51 @@ const BookingCard = ({ booking }) => {
   const { day, date, month } = formatBookingDate(booking.date);
   const startTimeFormatted = formatTime(booking.startTime);
   const endTimeFormatted = formatTime(booking.endTime);
-  const status = booking.status || 'pending';
+
+  // Cancel booking handler (like confirm/decline)
+  const handleCancel = () => setShowCancelModal(true);
+
+  const handleCancelConfirm = async () => {
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/bookings/${booking.bookingId}/cancel`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+          body: JSON.stringify({}),
+        }
+      );
+      if (!response.ok) {
+        throw new Error('Failed to cancel booking');
+      }
+      setStatus('cancelled'); // Update status
+      setShowCancelModal(false); // Close modal after success
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+    }
+  };
+
+  const handleCancelClose = () => setShowCancelModal(false);
+
+  // Status color and label
+  let statusColor = '';
+  let statusLabel = '';
+  if (status === 'confirmed' || status === 'approved') {
+    statusColor = 'bg-green-100 text-green-600';
+    statusLabel = 'Confirmed';
+  } else if (status === 'pending') {
+    statusColor = 'bg-yellow-100 text-yellow-600';
+    statusLabel = 'Pending';
+  } else if (status === 'cancelled') {
+    statusColor = 'bg-gray-200 text-gray-500';
+    statusLabel = 'Cancelled';
+  } else {
+    statusColor = 'bg-red-100 text-red-600';
+    statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+  }
 
   return (
     <div className="border border-gray-200 rounded-lg hover:shadow-md transition-shadow overflow-hidden">
@@ -529,6 +573,8 @@ const BookingCard = ({ booking }) => {
               ? 'bg-green-50'
               : status === 'pending'
               ? 'bg-yellow-50'
+              : status === 'cancelled'
+              ? 'bg-gray-100'
               : 'bg-red-50'
           }`}
         >
@@ -552,28 +598,51 @@ const BookingCard = ({ booking }) => {
                 <MapPin size={14} className="mr-1" />
                 <span className="font-medium">Location:</span> {roomName}
               </div>
-              {booking.changedBy && (
-                <div className="flex items-center text-gray-500 text-sm mt-1">
-                  <User size={14} className="mr-1" />
-                  Changed by {booking.changedBy}
-                </div>
+              <div className="flex flex-col text-gray-500 text-sm mt-1">
+                {booking.changedBy && (
+                  <div className="flex items-center">
+                    <User size={14} className="mr-1" />
+                    Changed by {booking.changedBy}
+                  </div>
+                )}
+                {/* Show message icon and reason if declined */}
+                {status === 'declined' && booking.declineReason && (
+                  <div className="flex items-center mt-1 text-red-600">
+                    <MessageCircle size={16} className="mr-1" />
+                    <span className="font-semibold mr-1">Reason for decline:</span>
+                    <span className="italic">{booking.declineReason}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col items-end">
+              <span
+                className={`px-3 py-1 text-xs font-medium rounded-full ${statusColor}`}
+              >
+                {statusLabel}
+              </span>
+              {/* Show trash icon if pending */}
+              {status === 'pending' && (
+                <button
+                  className="mt-2 text-red-500 hover:text-red-700"
+                  title="Cancel Booking"
+                  onClick={handleCancel}
+                >
+                  <Trash2 size={20} />
+                </button>
               )}
             </div>
-
-            <span
-              className={`px-3 py-1 text-xs font-medium rounded-full ${
-                status === 'confirmed' || status === 'approved'
-                  ? 'bg-green-100 text-green-600'
-                  : status === 'pending'
-                  ? 'bg-yellow-100 text-yellow-600'
-                  : 'bg-red-100 text-red-600'
-              }`}
-            >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </span>
           </div>
         </div>
       </div>
+      {/* Cancel Booking Modal */}
+      {showCancelModal && (
+        <CancelBookingConfirmation
+          booking={booking}
+          onConfirm={handleCancelConfirm}
+          onCancel={handleCancelClose}
+        />
+      )}
     </div>
   );
 };

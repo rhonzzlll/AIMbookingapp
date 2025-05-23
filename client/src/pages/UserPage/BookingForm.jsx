@@ -4,6 +4,7 @@ import axios from 'axios';
 import bg from '../../images/bg.png';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Confirm from "../../components/ui/ConfirmationModal";  
+import { v4 as uuidv4 } from 'uuid';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -12,6 +13,12 @@ const TIME_OPTIONS = [
   '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
   '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
   '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM','10:30 PM', '11:00 PM', '11:30 PM',
+];
+
+const RECURRENCE_OPTIONS = [
+  { value: 'Daily', label: 'Daily' },
+  { value: 'Weekly', label: 'Weekly' },
+  { value: 'Monthly', label: 'Monthly' }
 ];
 
 const convertTo24HourFormat = (time12h) => {
@@ -23,44 +30,17 @@ const convertTo24HourFormat = (time12h) => {
   if (hours === '12') {
     hours = modifier === 'PM' ? '12' : '00';
   } else {
-    hours = modifier === 'PM' ? String(parseInt(hours, 10)  +12) : hours.padStart(2, '0');
+    hours = modifier === 'PM' ? String(parseInt(hours, 10) + 12) : hours.padStart(2, '0');
   }
 
   // Ensure seconds are always included
   return `${hours}:${minutes}:00`;
 };
 
-const toTimeHHMM = (time12h) => {
-  if (!time12h) return '';
-  
-  const [time, modifier] = time12h.split(' ');
-  let [hours, minutes] = time.split(':');
-  hours = parseInt(hours, 10);
-  
-  // Convert hours to 24-hour format
-  if (modifier === 'PM' && hours !== 12) hours += 12;
-  if (modifier === 'AM' && hours === 12) hours = 0;
-  
-  // Format to HH:MM with leading zeros
-  return `${hours.toString().padStart(2, '0')}:${minutes}`;
-};
-
-const toTimeISOString = (time12h) => {
-
-  if (!time12h) return '';
-  const [time, modifier] = time12h.split(' ');
-  let [hours, minutes] = time.split(':');
-  hours = parseInt(hours, 10);
-  if (modifier === 'PM' && hours !== 12) hours += 12;
-  if (modifier === 'AM' && hours === 12) hours = 0;
-  // Always UTC for time-only
-  return new Date(Date.UTC(2025, 0, 1, hours, parseInt(minutes, 10))).toISOString();
-};
- 
 const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
   const location = useLocation();
   const bookingData = location.state?.bookingData;
-  const navigate = useNavigate(); // Initialize the navigate function
+  const navigate = useNavigate();
   
   const handleGoBack = () => {
     navigate(-1); // Navigate to the previous page
@@ -102,18 +82,24 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
   const [unavailableTimeSlots, setUnavailableTimeSlots] = useState([]);
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [availabilityStatus, setAvailabilityStatus] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [roomMap, setRoomMap] = useState({});
   const [blockedTimes, setBlockedTimes] = useState([]);
+  // Always generate a new recurringGroupId for each new recurring booking
+  const [recurringGroupId, setRecurringGroupId] = useState('');
 
   const userId = localStorage.getItem('userId');
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('role');
 
-  // Predefined departments array
-  const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
+  // Generate recurringGroupId when user checks "isRecurring"
+  useEffect(() => {
+    if (formData.isRecurring && !recurringGroupId) {
+      setRecurringGroupId(uuidv4());
+    }
+    if (!formData.isRecurring && recurringGroupId) {
+      setRecurringGroupId('');
+    }
+  }, [formData.isRecurring]);
 
   // Apply booking data from AccRooms if available
   useEffect(() => {
@@ -657,6 +643,15 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
     });
   };
 
+  // --- Recurrence Validation ---
+  const isRecurrenceValid = () => {
+    if (!formData.isRecurring) return true;
+    if (!formData.recurrenceType || !formData.recurrenceEndDate) return false;
+    if (formData.recurrenceEndDate < formData.date) return false;
+    return true;
+  };
+
+  // --- Handle Submit ---
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -665,22 +660,24 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
       return;
     }
 
+    if (formData.isRecurring && (!formData.recurrenceType || !formData.recurrenceEndDate)) {
+      setError('Please select recurrence type and end date for recurring bookings.');
+      return;
+    }
+
+    if (formData.isRecurring && formData.recurrenceEndDate < formData.date) {
+      setError('Recurrence end date must be after the booking start date.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      // Convert times to proper format for SQL (HH:mm:ss)
       const startTimeSQL = convertTo24HourFormat(formData.startTime);
       const endTimeSQL = convertTo24HourFormat(formData.endTime);
 
-      // Log the converted times for debugging
-      console.log('Converted Start Time:', startTimeSQL);
-      console.log('Converted End Time:', endTimeSQL);
-
-      // Format timeSubmitted in a SQL Server-friendly format without timezone
-      const now = new Date();
-      const timeSubmitted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-
+      // Always include recurringGroupId for recurring bookings
       const bookingPayload = {
         userId,
         title: formData.title,
@@ -694,16 +691,19 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
         endTime: endTimeSQL,
         department: formData.department,
         isRecurring: formData.isRecurring,
-        recurrenceEndDate: formData.recurrenceEndDate === '' ? null : formData.recurrenceEndDate,
+        recurrencePattern: formData.isRecurring ? formData.recurrenceType : undefined,
+        recurrenceEndDate: formData.isRecurring ? formData.recurrenceEndDate : undefined,
+        recurringGroupId: formData.isRecurring ? recurringGroupId : undefined,
         notes: formData.notes === '' ? null : formData.notes,
         isMealRoom: formData.isMealRoom,
         isBreakRoom: formData.isBreakRoom,
         bookingCapacity: formData.bookingCapacity,
-        status: formData.status,
-        // Do NOT send timeSubmitted
+        status: formData.status
       };
 
-      console.log('Booking Payload:', bookingPayload); // <-- Only this line
+      Object.keys(bookingPayload).forEach(
+        (key) => bookingPayload[key] === undefined && delete bookingPayload[key]
+      );
 
       const response = await fetch(`${API_BASE_URL}/bookings`, {
         method: 'POST',
@@ -987,9 +987,9 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
                       required={formData.isRecurring}
                     >
                       <option value="">Select Type</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
+                      {RECURRENCE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
                     </select>
                   </div>
                   
@@ -1004,7 +1004,7 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
                       onChange={handleChange}
                       min={formData.date}
                       className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required={formData.isRecurring} // Only required if "isRecurring" is true
+                      required={formData.isRecurring}
                     />
                   </div>
                 </div>
@@ -1053,9 +1053,9 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
               <button
                 type="submit"
                 className={`px-6 py-3 ${
-                  availabilityStatus?.available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'
+                  availabilityStatus?.available && isRecurrenceValid() ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'
                 } text-white rounded-lg`}
-                disabled={loading || isCheckingAvailability || !availabilityStatus?.available}
+                disabled={loading || isCheckingAvailability || !availabilityStatus?.available || !isRecurrenceValid()}
               >
                 {loading ? 'Submitting...' : isCheckingAvailability ? 'Checking Availability...' : 'Submit Booking'}
               </button>

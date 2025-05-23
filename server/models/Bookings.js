@@ -101,14 +101,14 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     status: {
-      type: DataTypes.ENUM('pending', 'confirmed', 'declined'),
-      field: 'status',
-      allowNull: false,
-      defaultValue: 'pending',
-      validate: {
-        isIn: [['pending', 'confirmed', 'declined']]
-      }
-    },
+  type: DataTypes.ENUM('pending', 'confirmed', 'declined', 'cancelled'),
+  field: 'status',
+  allowNull: false,
+  defaultValue: 'pending',
+  validate: {
+    isIn: [['pending', 'confirmed', 'declined', 'cancelled']]
+  }
+},
 
 
 timeSubmitted: {
@@ -129,9 +129,20 @@ timeSubmitted: {
       allowNull: true
       
     },
+    // ...existing code...
+declineReason: {
+  type: DataTypes.STRING, // or DataTypes.TEXT if you want longer reasons
+  allowNull: true,
+},
+// ...existing code...
     recurrencePattern: {
-      type: DataTypes.STRING(20), // or ENUM('Daily', 'Weekly', 'Monthly') if you want to restrict values
+      type: DataTypes.ENUM('Daily', 'Weekly', 'Monthly'),
       field: 'recurrencePattern',
+      allowNull: true
+    },
+    recurringGroupId: {
+      type: DataTypes.STRING(64), // or DataTypes.UUID if you want to use Sequelize's UUID type
+      field: 'recurringGroupId',
       allowNull: true
     }
   }, {

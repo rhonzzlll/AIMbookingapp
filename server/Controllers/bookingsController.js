@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
-const db = require('../models'); // Assuming your Sequelize models are in this directory
+const db = require('../models');
 const Booking = db.Booking;
+const { v4: uuidv4 } = require('uuid'); // For unique recurrenceGroupId
 
 const convertTo24HourFormat = (time) => {
   const [hourMinute, period] = time.split(' ');
@@ -14,6 +15,32 @@ const convertTo24HourFormat = (time) => {
 
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 };
+
+// Helper to generate all dates for recurrence
+function generateRecurrenceDates(startDate, endDate, pattern) {
+  const dates = [];
+  let current = new Date(startDate);
+  endDate = new Date(endDate);
+
+  while (current <= endDate) {
+    dates.push(new Date(current));
+    if (pattern === 'Daily') {
+      current.setDate(current.getDate() + 1);
+    } else if (pattern === 'Weekly') {
+      current.setDate(current.getDate() + 7);
+    } else if (pattern === 'Monthly') {
+      const prevDay = current.getDate();
+      current.setMonth(current.getMonth() + 1);
+      // Handle months with fewer days
+      if (current.getDate() < prevDay) {
+        current.setDate(0); // Last day of previous month
+      }
+    } else {
+      break;
+    }
+  }
+  return dates;
+}
 
 // Get all bookings
 exports.getAllBookings = async (req, res) => {
@@ -47,33 +74,22 @@ exports.getBookingsByUserId = async (req, res) => {
   }
 };
 
-// Create a new booking
+// Create a new booking (single or recurring)
 exports.createBooking = async (req, res) => {
   try {
-    console.log('Request body received:', req.body);
-
-    const { bookingId, startTime, endTime, roomId, buildingId, userId, isRecurring, recurrenceEndDate, recurrencePattern, ...cleanedData } = req.body;
+    const {
+      startTime, endTime, roomId, buildingId, userId,
+      isRecurring, recurrenceEndDate, recurrencePattern,
+      ...cleanedData
+    } = req.body;
 
     if (!startTime || !endTime || !userId || !roomId || !buildingId) {
       return res.status(400).json({
-        message: 'Start time, end time, userId, roomId, and buildingId are required.',
-        missingFields: {
-          startTime: !startTime,
-          endTime: !endTime,
-          userId: !userId,
-          roomId: !roomId,
-          buildingId: !buildingId
-        }
+        message: 'Start time, end time, userId, roomId, and buildingId are required.'
       });
     }
 
     const parsedDate = new Date(req.body.date);
-    const parsedStartTime = new Date(`${req.body.date}T${startTime}`);
-    const parsedEndTime = new Date(`${req.body.date}T${endTime}`);
-
-    if (isNaN(parsedStartTime.getTime()) || isNaN(parsedEndTime.getTime())) {
-      return res.status(400).json({ message: 'Invalid start time or end time format.' });
-    }
 
     // Helper to check for conflicts
     async function hasConflict(date, startTime, endTime) {
@@ -107,65 +123,59 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // Handle recurring bookings as multiple records
-    if (isRecurring && recurrenceEndDate) {
-      const pattern = recurrencePattern || 'Weekly';
-      const bookingsCreated = [];
-      const conflicts = [];
+    // Handle recurring bookings as a single record
+    if (isRecurring && recurrenceEndDate && recurrencePattern) {
+      const pattern = recurrencePattern;
+      const recurrenceDates = generateRecurrenceDates(req.body.date, recurrenceEndDate, pattern);
 
-      let currentDate = new Date(parsedDate);
-      const endDate = new Date(recurrenceEndDate);
+      // Check all occurrences for conflicts
+      for (let dateObj of recurrenceDates) {
+        // Use the same start/end time for each date
+        const occurrenceDate = new Date(dateObj);
+        const occurrenceStart = new Date(`${occurrenceDate.toISOString().split('T')[0]}T${startTime}`);
+        const occurrenceEnd = new Date(`${occurrenceDate.toISOString().split('T')[0]}T${endTime}`);
 
-      while (currentDate <= endDate) {
-        const dateStr = currentDate.toISOString().slice(0, 10);
-        const thisStartTime = new Date(`${dateStr}T${startTime}`);
-        const thisEndTime = new Date(`${dateStr}T${endTime}`);
-
-        const conflict = await hasConflict(currentDate, thisStartTime, thisEndTime);
+        const conflict = await hasConflict(occurrenceDate, occurrenceStart, occurrenceEnd);
         if (conflict) {
-          conflicts.push(dateStr);
-        } else {
-          const booking = await Booking.create({
-            ...cleanedData,
-            userId,
-            roomId,
-            buildingId,
-            date: new Date(currentDate),
-            startTime,
-            endTime,
-            isRecurring: true,
-            recurrencePattern: pattern,
-            recurrenceEndDate,
+          return res.status(400).json({
+            message: `Conflict detected for recurring booking on ${occurrenceDate.toISOString().split('T')[0]}.`,
           });
-          bookingsCreated.push(booking);
-        }
-
-        // Move to next recurrence
-        if (pattern === 'Daily') {
-          currentDate.setDate(currentDate.getDate() + 1);
-        } else if (pattern === 'Weekly') {
-          currentDate.setDate(currentDate.getDate() + 7);
-        } else if (pattern === 'Monthly') {
-          const prevDay = currentDate.getDate();
-          currentDate.setMonth(currentDate.getMonth() + 1);
-          // Handle months with fewer days
-          if (currentDate.getDate() < prevDay) {
-            currentDate.setDate(0); // Last day of previous month
-          }
-        } else {
-          // Default to weekly if unknown
-          currentDate.setDate(currentDate.getDate() + 7);
         }
       }
 
+      // No conflicts, create the recurring booking
+      const parsedEndDate = new Date(recurrenceEndDate);
+      const booking = await Booking.create({
+        ...cleanedData,
+        userId,
+        roomId,
+        buildingId,
+        date: parsedDate,
+        startTime,
+        endTime,
+        isRecurring: true,
+        recurrencePattern: pattern,
+        recurrenceEndDate: parsedEndDate,
+        recurrenceGroupId: uuidv4(),
+        timeSubmitted: new Date()
+      });
+
       return res.status(201).json({
-        message: 'Recurring bookings processed.',
-        bookingsCreated,
-        conflicts: conflicts.length > 0 ? conflicts : undefined,
+        message: 'Recurring booking created as a single series.',
+        booking,
       });
     }
 
     // Save the single booking
+    const thisStartTime = new Date(`${req.body.date}T${startTime}`);
+    const thisEndTime = new Date(`${req.body.date}T${endTime}`);
+    const conflict = await hasConflict(parsedDate, thisStartTime, thisEndTime);
+    if (conflict) {
+      return res.status(400).json({
+        message: 'Conflict detected for this booking.',
+      });
+    }
+
     const newBooking = await Booking.create({
       ...cleanedData,
       userId,
@@ -174,10 +184,9 @@ exports.createBooking = async (req, res) => {
       date: parsedDate,
       startTime,
       endTime,
-      isRecurring: !!isRecurring
+      isRecurring: !!isRecurring,
+      timeSubmitted: new Date()
     });
-
-    console.log('Booking saved:', newBooking);
 
     res.status(201).json({
       message: 'Booking created successfully',
@@ -218,7 +227,7 @@ exports.getBookingById = async (req, res) => {
 // Update a booking
 exports.updateBooking = async (req, res) => {
   try {
-    const { startTime, endTime, roomId, buildingId } = req.body;
+    const { startTime, endTime, roomId, buildingId, status, declineReason } = req.body;
 
     if (startTime && endTime && roomId && buildingId) {
       const parsedDate = new Date(req.body.date);
@@ -275,8 +284,18 @@ exports.updateBooking = async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
+    // Prepare update data
+    const updateData = { ...req.body };
+
+    // If status is declined, set declineReason; otherwise, clear it
+    if (status === 'declined') {
+      updateData.declineReason = declineReason || '';
+    } else if (typeof declineReason !== 'undefined') {
+      updateData.declineReason = null;
+    }
+
     // Update the booking
-    await booking.update(req.body);
+    await booking.update(updateData);
     
     // Return the updated booking
     const updatedBooking = await Booking.findByPk(req.params.id);
@@ -362,5 +381,74 @@ exports.checkAvailability = async (req, res) => {
   } catch (error) {
     console.error('Check Availability Error:', error);
     res.status(500).json({ message: 'Failed to check availability.' });
+  }
+};
+
+// Get all bookings in a recurring group
+exports.getRecurringGroup = async (req, res) => {
+  try {
+    const { recurringGroupId } = req.params;
+    if (!recurringGroupId) {
+      return res.status(400).json({ message: 'recurringGroupId is required.' });
+    }
+
+    const bookings = await Booking.findAll({
+      where: { recurringGroupId }
+    });
+
+    if (!bookings || bookings.length === 0) {
+      return res.status(404).json({ message: 'No bookings found for this recurring group.' });
+    }
+
+    res.status(200).json(bookings);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get a single booking in a recurring group by recurringGroupId and bookingId
+exports.getRecurringGroupBookingById = async (req, res) => {
+  try {
+    const { recurringGroupId, bookingId } = req.params;
+    if (!recurringGroupId || !bookingId) {
+      return res.status(400).json({ message: 'recurringGroupId and bookingId are required.' });
+    }
+
+    const booking = await Booking.findOne({
+      where: { recurringGroupId, bookingId }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found in this recurring group.' });
+    }
+
+    res.status(200).json(booking);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Cancel a booking (PATCH /api/bookings/:bookingId/cancel)
+exports.cancelBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const booking = await Booking.findByPk(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    // Only allow cancelling if status is pending
+    if (booking.status !== 'pending') {
+      return res.status(400).json({ message: 'Only pending bookings can be cancelled.' });
+    }
+
+    booking.status = 'cancelled';
+    await booking.save();
+
+    res.status(200).json({ message: 'Booking cancelled successfully', booking });
+  } catch (error) {
+    console.error('Cancel Booking Error:', error);
+    res.status(500).json({ message: 'Failed to cancel booking' });
   }
 };

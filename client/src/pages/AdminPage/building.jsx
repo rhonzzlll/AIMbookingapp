@@ -1,7 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import AdminContentTemplate from './AdminContentTemplate';
 import imageCompression from 'browser-image-compression';
 import TopBar from '../../components/AdminComponents/TopBar';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TablePagination,
+  TableRow,
+  Paper,
+  Button,
+  Box,
+  TableFooter, // <-- Add this line
+} from '@mui/material';
+import LocationCityIcon from '@mui/icons-material/LocationCity';
+import { Typography, Stack } from '@mui/material';
 
 // Define the API base URL
 const API_BASE_URL = 'http://localhost:5000';
@@ -271,10 +286,28 @@ const BuildingManagement = () => {
   const [expandedBuilding, setExpandedBuilding] = useState(null);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const filteredBuildings = buildings.filter(bldg =>
     bldg.buildingName.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const pagedBuildings = useMemo(() => {
+    if (rowsPerPage > 0) {
+      return filteredBuildings.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+    }
+    return filteredBuildings;
+  }, [filteredBuildings, page, rowsPerPage]);
 
   useEffect(() => {
     // Fetch buildings on component mount
@@ -447,29 +480,41 @@ const BuildingManagement = () => {
       <TopBar onSearch={setSearchTerm} />
       <AdminContentTemplate>
         <div className="p-6 bg-white rounded-lg shadow">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Building Management</h1>
-          <p className="text-gray-600 mb-6">Add and manage buildings in your facility</p>
-          <div className="mb-6">
-            <button
+          {/* Header Section */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4 }}>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <LocationCityIcon sx={{ fontSize: 48, color: '#2563eb' }} />
+              <Box>
+                <Typography variant="h1" sx={{ fontSize: 42, fontWeight: 'bold', color: 'gray.800', lineHeight: 1 }}>
+                  Building Management
+                </Typography>
+                <Typography variant="subtitle1" sx={{ color: 'gray.600', fontSize: 18 }}>
+               manage buildings in your facility
+                </Typography>
+              </Box>
+            </Stack>
+            {/* Add Button on the right */}
+            <Button
               onClick={openAddModal}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              sx={{
+                px: 4,
+                py: 2,
+                bgcolor: '#2563eb',
+                color: '#fff',
+                borderRadius: 2,
+                fontWeight: 'bold',
+                fontSize: 18,
+                '&:hover': { bgcolor: '#1e40af' }
+              }}
             >
-              Add New Building
-            </button>
-          </div>
-          {error && (
-            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-              {error}
-              <button
-                className="ml-2 font-bold"
-                onClick={() => fetchBuildings()}
-              >
-                Retry
-              </button>
-            </div>
-          )}
+              + Add New Building
+            </Button>
+          </Box>
+          {/* Table Section */}
           <div className="overflow-x-auto">
-            <h2 className="text-lg font-semibold mb-4">Buildings</h2>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, textAlign: 'left' }}>
+              Buildings
+            </Typography>
             {loading ? (
               <div className="text-center py-4">
                 <p>Loading buildings...</p>
@@ -477,127 +522,164 @@ const BuildingManagement = () => {
             ) : buildings.length === 0 ? (
               <p>No buildings found. Add your first building using the button above.</p>
             ) : (
-              <div className="shadow overflow-hidden border border-gray-300 sm:rounded-lg">
-                <table className="min-w-full divide-y divide-gray-300 border-collapse border border-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                        Image
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                        Building ID
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                        Building Name
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                        Description
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                        Last Updated
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-300">
-                    {filteredBuildings.map((building) => (
-                      <React.Fragment key={building.buildingId}>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap border border-gray-300">
-                            {building.buildingImage ? (
-                              <div className="flex flex-col items-center">
-                                <img
-                                  src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
-                                  alt={building.buildingName}
-                                  className="h-16 w-24 object-cover rounded"
-                                  onError={handleImageError}
-                                />
-                                <button
-                                  className="mt-1 text-xs text-blue-600 hover:text-blue-800"
-                                  onClick={() => window.open(building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`, '_blank')}
-                                >
-                                  View Full
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="h-16 w-24 bg-gray-200 rounded flex items-center justify-center text-gray-500">
-                                No Image
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">
-                            {building.buildingId}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 border border-gray-300">
-                            {building.buildingName}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900 border border-gray-300">
-                            <div className="max-w-xs truncate">
-                              {building.buildingDescription || 'No description provided'}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900 border border-gray-300">
-                            {building.updatedAt ? new Date(building.updatedAt).toLocaleDateString() : 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium border border-gray-300">
-                            <button
-                              onClick={() => toggleBuildingDetails(building.buildingId)}
-                              className="text-gray-600 hover:text-gray-900 mr-4"
-                            >
-                              {expandedBuilding === building.buildingId ? 'Hide Details' : 'Show Details'}
-                            </button>
-                            <button
-                              onClick={() => openEditModal(building)}
-                              className="text-blue-600 hover:text-blue-900 mr-4"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBuilding(building.buildingId)}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                        {expandedBuilding === building.buildingId && (
-                          <tr>
-                            <td colSpan="6" className="px-6 py-4 bg-gray-50 border border-gray-300">
-                              <div className="ml-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <h4 className="font-medium text-sm mb-2">Building Details</h4>
-                                    <p><strong>Name:</strong> {building.buildingName}</p>
-                                    <p><strong>Description:</strong> {building.buildingDescription || 'No description'}</p>
-                                    <p><strong>Created:</strong> {building.createdAt ? new Date(building.createdAt).toLocaleString() : 'N/A'}</p>
-                                    <p><strong>Updated:</strong> {building.updatedAt ? new Date(building.updatedAt).toLocaleString() : 'N/A'}</p>
-                                  </div>
-                                  <div className="flex justify-center items-center">
-                                    {building.buildingImage ? (
-                                      <img
-                                        src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
-                                        alt={building.buildingName}
-                                        className="max-h-48 max-w-full object-cover rounded shadow-lg"
-                                        onError={handleImageError}
-                                      />
-                                    ) : (
-                                      <div className="h-32 w-48 bg-gray-200 rounded flex items-center justify-center text-gray-500">
-                                        No Image Available
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
+              <TableContainer component={Paper} sx={{ mt: 2 }}>
+                <Table sx={{ minWidth: 900 }} aria-label="buildings table">
+                  <TableHead>
+                    <TableRow>
+                    {[
+                      {
+                        key: 'image',
+                        label: 'Image'
+                      },
+                      {
+                        key: 'buildingId',
+                        label: 'Building ID'
+                      },
+                      {
+                        key: 'buildingName',
+                        label: 'Building Name'
+                      },
+                      {
+                        key: 'buildingDescription',
+                        label: 'Description'
+                      },
+                      {
+                        key: 'updatedAt',
+                        label: 'Last Updated'
+                      }
+                    ].map((col) => (
+                      <TableCell key={col.key} sx={{ fontWeight: 'bold' }}>
+                        {col.label}
+                      </TableCell>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                  </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {pagedBuildings.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center">
+                          No buildings found. Add your first building using the button above.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pagedBuildings.map((building) => (
+                        <React.Fragment key={building.buildingId}>
+                          <TableRow>
+                            <TableCell>
+                              {building.buildingImage ? (
+                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                  <img
+                                    src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
+                                    alt={building.buildingName}
+                                    style={{ height: 64, width: 96, objectFit: 'cover', borderRadius: 4 }}
+                                    onError={handleImageError}
+                                  />
+                                  <Button
+                                    size="small"
+                                    sx={{ mt: 1, fontSize: 11 }}
+                                    onClick={() => window.open(building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`, '_blank')}
+                                  >
+                                    View Full
+                                  </Button>
+                                </Box>
+                              ) : (
+                                <Box sx={{ height: 64, width: 96, background: '#f3f4f6', borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
+                                  No Image
+                                </Box>
+                              )}
+                            </TableCell>
+                            <TableCell>{building.buildingId}</TableCell>
+                            <TableCell>{building.buildingName}</TableCell>
+                            <TableCell>
+                              <Box sx={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {building.buildingDescription || 'No description provided'}
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              {building.updatedAt ? new Date(building.updatedAt).toLocaleDateString() : 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="contained"
+                                color="primary"
+                                size="small"
+                                sx={{ mr: 1 }}
+                                onClick={() => openEditModal(building)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="contained"
+                                color="error"
+                                size="small"
+                                onClick={() => handleDeleteBuilding(building.buildingId)}
+                              >
+                                Delete
+                              </Button>
+                              <Button
+                                size="small"
+                                sx={{ color: '#6b7280', ml: 1 }}
+                                onClick={() => toggleBuildingDetails(building.buildingId)}
+                              >
+                                {expandedBuilding === building.buildingId ? 'Hide Details' : 'Show Details'}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          {expandedBuilding === building.buildingId && (
+                            <TableRow>
+                              <TableCell colSpan={6} sx={{ background: '#f9fafb' }}>
+                                <Box sx={{ ml: 2 }}>
+                                  <Box sx={{ display: 'flex', gap: 4 }}>
+                                    <Box>
+                                      <strong>Name:</strong> {building.buildingName}<br />
+                                      <strong>Description:</strong> {building.buildingDescription || 'No description'}<br />
+                                      <strong>Created:</strong> {building.createdAt ? new Date(building.createdAt).toLocaleString() : 'N/A'}<br />
+                                      <strong>Updated:</strong> {building.updatedAt ? new Date(building.updatedAt).toLocaleString() : 'N/A'}
+                                    </Box>
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                      {building.buildingImage ? (
+                                        <img
+                                          src={building.buildingImageUrl || `${API_BASE_URL}/uploads/${building.buildingImage}`}
+                                          alt={building.buildingName}
+                                          style={{ maxHeight: 160, maxWidth: 240, objectFit: 'cover', borderRadius: 8, boxShadow: '0 2px 8px #0001' }}
+                                          onError={handleImageError}
+                                        />
+                                      ) : (
+                                        <Box sx={{ height: 128, width: 192, background: '#f3f4f6', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
+                                          No Image Available
+                                        </Box>
+                                      )}
+                                    </Box>
+                                  </Box>
+                                </Box>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TablePagination
+                        rowsPerPageOptions={[10, 25, 50]}
+                        colSpan={6}
+                        count={filteredBuildings.length}
+                        rowsPerPage={rowsPerPage}
+                        page={page}
+                        SelectProps={{
+                          inputProps: { 'aria-label': 'rows per page' },
+                          native: true,
+                        }}
+                        onPageChange={handleChangePage}
+                        onRowsPerPageChange={handleChangeRowsPerPage}
+                        ActionsComponent={TablePaginationActions}
+                      />
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </TableContainer>
             )}
           </div>
         </div>
@@ -611,5 +693,42 @@ const BuildingManagement = () => {
     </div>
   );
 };
+
+function TablePaginationActions(props) {
+  const { count, page, rowsPerPage, onPageChange } = props;
+
+  const handleFirstPageButtonClick = (event) => {
+    onPageChange(event, 0);
+  };
+
+  const handleBackButtonClick = (event) => {
+    onPageChange(event, page - 1);
+  };
+
+  const handleNextButtonClick = (event) => {
+    onPageChange(event, page + 1);
+  };
+
+  const handleLastPageButtonClick = (event) => {
+    onPageChange(event, Math.max(0, Math.ceil(count / rowsPerPage) - 1));
+  };
+
+  return (
+    <Box sx={{ flexShrink: 0, ml: 2.5 }}>
+      <Button onClick={handleFirstPageButtonClick} disabled={page === 0} size="small">{'<<'}</Button>
+      <Button onClick={handleBackButtonClick} disabled={page === 0} size="small">{'<'}</Button>
+      <Button
+        onClick={handleNextButtonClick}
+        disabled={page >= Math.ceil(count / rowsPerPage) - 1}
+        size="small"
+      >{'>'}</Button>
+      <Button
+        onClick={handleLastPageButtonClick}
+        disabled={page >= Math.ceil(count / rowsPerPage) - 1}
+        size="small"
+      >{'>>'}</Button>
+    </Box>
+  );
+}
 
 export default BuildingManagement;

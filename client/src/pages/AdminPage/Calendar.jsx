@@ -14,7 +14,6 @@ const departmentColors = {
   'IT': 'bg-sky-200'
 };
 
-
 const BookingCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -65,16 +64,12 @@ const BookingCalendar = () => {
         ? bookingsRes.data
         : bookingsRes.data.bookings || [];
 
+      // In fetchBookings, format time in UTC 12-hour for display
       const formatted = bookings.map(b => {
-        const start = new Date(b.startTime);
-        const formattedTime = start.toLocaleTimeString([], {
-          hour: 'numeric', minute: '2-digit', hour12: true
-        });
-
         return {
           ...b,
-          date: b.date,
-          time: formattedTime,
+          date: new Date(b.date).toISOString().split('T')[0], // Ensure date is in UTC
+          time: formatTimeUTC(b.startTime),
           roomName: roomMap[b.room] || b.room // fallback to ID
         };
       });
@@ -95,63 +90,61 @@ const BookingCalendar = () => {
 
   // Process bookings to account for recurring events
   const processedBookings = useMemo(() => {
+  const expandedBookings = [];
 
-    
-    const expandedBookings = [];
-    
-    bookings.forEach(booking => {
+  bookings.forEach(booking => {
+    if (booking.status === 'pending' || booking.status === 'declined') {
+      return; // Skip pending and declined
+    }
 
-      if (booking.status === 'pending' || booking.status === 'declined') {
-        return; // ✅ Skip pending and declined
-      }
+    // Use isRecurring and recurrencePattern for expansion
+    if (!booking.isRecurring || !booking.recurrencePattern || !booking.recurrenceEndDate) {
+      expandedBookings.push(booking);
+      return;
+    }
 
-      // For non-recurring bookings, add as-is
-      if (booking.recurring === 'No' || !booking.recurring) {
-        expandedBookings.push(booking);
-        return;
+    // Expand recurring bookings for the visible month
+    // In processedBookings, use UTC for all date calculations:
+    const startDate = new Date(booking.date + 'T00:00:00Z');
+    const endDate = new Date(booking.recurrenceEndDate + 'T23:59:59Z');
+
+    // Only expand if the series overlaps the current month
+    if (startDate > new Date(Date.UTC(currentYear, currentMonth + 1, 0)) ||
+        endDate < new Date(Date.UTC(currentYear, currentMonth, 1))) {
+      return;
+    }
+
+    // Start from the later of booking start or month start
+    let currentOccurrence = new Date(Math.max(
+      startDate,
+      new Date(Date.UTC(currentYear, currentMonth, 1))
+    ));
+
+    while (
+      currentOccurrence <= endDate &&
+      currentOccurrence <= new Date(Date.UTC(currentYear, currentMonth + 1, 0))
+    ) {
+      expandedBookings.push({
+        ...booking,
+        date: currentOccurrence.toISOString().split('T')[0],
+        isRecurring: true
+      });
+
+      // Advance to next occurrence
+      if (booking.recurrencePattern === 'Daily') {
+        currentOccurrence.setUTCDate(currentOccurrence.getUTCDate() + 1);
+      } else if (booking.recurrencePattern === 'Weekly') {
+        currentOccurrence.setUTCDate(currentOccurrence.getUTCDate() + 7);
+      } else if (booking.recurrencePattern === 'Monthly') {
+        currentOccurrence.setUTCMonth(currentOccurrence.getUTCMonth() + 1);
+      } else {
+        break;
       }
-      
-      // For recurring bookings, generate all occurrences within the current month
-      const startDate = new Date(booking.date);
-      const endDate = booking.recurrenceEndDate 
-        ? new Date(booking.recurrenceEndDate) 
-        : new Date(currentYear, currentMonth + 1, 0); // End of current month
-      
-      // Skip if start date is after end of month or end date is before start of month
-      if (startDate > new Date(currentYear, currentMonth + 1, 0) || 
-          endDate < new Date(currentYear, currentMonth, 1)) {
-        return;
-      }
-      
-      // Calculate dates based on recurrence pattern
-      let currentOccurrence = new Date(Math.max(
-        startDate,
-        new Date(currentYear, currentMonth, 1) // Start of current month
-      ));
-      
-      while (currentOccurrence <= endDate && 
-             currentOccurrence <= new Date(currentYear, currentMonth + 1, 0)) {
-        // Clone the booking and update the date
-        const occurrenceDate = currentOccurrence.toISOString().split('T')[0];
-        expandedBookings.push({
-          ...booking,
-          date: occurrenceDate,
-          isRecurring: true
-        });
-        
-        // Move to next occurrence based on recurrence type
-        if (booking.recurring === 'Daily') {
-          currentOccurrence.setDate(currentOccurrence.getDate() + 1);
-        } else if (booking.recurring === 'Weekly') {
-          currentOccurrence.setDate(currentOccurrence.getDate() + 7);
-        } else if (booking.recurring === 'Monthly') {
-          currentOccurrence.setMonth(currentOccurrence.getMonth() + 1);
-        }
-      }
-    });
-    
-    return expandedBookings;
-  }, [bookings, currentMonth, currentYear]);
+    }
+  });
+
+  return expandedBookings;
+}, [bookings, currentMonth, currentYear]);
 
   useEffect(() => {
     console.log("✅ Processed bookings:", processedBookings);
@@ -202,6 +195,22 @@ const BookingCalendar = () => {
   const formatTime = (timeString) => {
     return timeString;
   };
+
+  // Helper: Format time as 12-hour UTC with AM/PM
+const formatTimeUTC = (dateString) => {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date)) return '';
+    const hours = date.getUTCHours();
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const hour12 = ((hours + 11) % 12) + 1;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    return `${hour12}:${minutes} ${ampm}`;
+  } catch {
+    return dateString;
+  }
+};
 
   const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
     const dates = [];
@@ -270,7 +279,7 @@ const BookingCalendar = () => {
               <div
                 key={idx}
                 className={`text-xs p-1 rounded ${departmentColors[booking.department] || 'bg-gray-200'} truncate`}
-                title={`${booking.title} (${booking.time}) - ${booking.firstName} ${booking.lastName}`}
+                title={`${booking.title} (${formatTimeUTC(booking.startTime)}) - ${booking.firstName} ${booking.lastName}`}
               >
                 <div className="flex items-center">
                   {booking.status === 'confirmed' && <div className="w-2 h-2 rounded-full bg-green-500 mr-1"></div>}
@@ -384,7 +393,8 @@ const BookingCalendar = () => {
     if (!selectedDate) return null;
   
     const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const formattedDate = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+    const formattedDate = new Date(Date.UTC(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate()))
+      .toISOString().split('T')[0];
     const dayBookings = processedBookings.filter(booking => booking.date === formattedDate);
   
     const generateTimeSlots = () => {
@@ -395,7 +405,7 @@ const BookingCalendar = () => {
           const period = hour >= 12 ? 'PM' : 'AM';
           const formattedMinute = minute.toString().padStart(2, '0');
           const timeString = `${formattedHour}:${formattedMinute} ${period}`;
-          slots.push(timeString);
+          slots.push({ hour, minute, timeString });
         }
       }
       return slots;
@@ -437,28 +447,17 @@ const BookingCalendar = () => {
           )}
 
           <div className="border rounded">
-            {timeSlots.map((timeSlot, index) => {
-              const slotTime = new Date(`${formattedDate} ${timeSlot}`);
-              
-              const isStart = dayBookings.some(
-                b => new Date(b.startTime).getHours() === slotTime.getHours() &&
-                     new Date(b.startTime).getMinutes() === slotTime.getMinutes()
-              );
-              
-              const isEnd = dayBookings.some(
-                b => new Date(b.endTime).getHours() === slotTime.getHours() &&
-                     new Date(b.endTime).getMinutes() === slotTime.getMinutes()
-              );
-              
+            {timeSlots.map(({ hour, minute, timeString }, index) => {
+              // Use UTC for all time comparisons
               const startingBookings = dayBookings.filter(booking => {
                 const start = new Date(booking.startTime);
-                return start.getHours() === slotTime.getHours() && start.getMinutes() === slotTime.getMinutes();
+                return start.getUTCHours() === hour && start.getUTCMinutes() === minute;
               });
-    
+
               if (startingBookings.length === 0) return null;
-    
+
               const isOddSlot = index % 2 === 0;
-    
+
               return (
                 <div
                   key={index}
@@ -473,26 +472,24 @@ const BookingCalendar = () => {
                             const end = new Date(booking.endTime);
                             return (
                               <div key={i}>
-                                {start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                {formatTimeUTC(booking.startTime)} - {formatTimeUTC(booking.endTime)}
                               </div>
                             );
                           })}
                         </div>
                       ) : (
-                        <div className="text-right w-full">{timeSlot}</div>
+                        <div className="text-right w-full">{timeString}</div>
                       )}
                     </div>
                   </div>
                   <div className="flex-grow p-2">
                     {startingBookings.map((booking, idx) => {
                       if (renderedBookings.has(booking._id)) return null;
-    
+
                       const start = new Date(booking.startTime);
                       const end = new Date(booking.endTime);
-                      const durationInMinutes = (end - start) / 60000;
-                      const slotCount = Math.ceil(durationInMinutes / 30);
                       renderedBookings.add(booking._id);
-    
+
                       return (
                         <div
                           key={idx}
@@ -514,7 +511,7 @@ const BookingCalendar = () => {
                           <p className="text-base font-semibold">{booking.firstName} {booking.lastName}</p>
                           <p className="text-sm text-gray-800">Building: {booking.building}</p>
                           <p className="text-sm italic text-gray-700">
-                            ⏰ {start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            ⏰ {formatTimeUTC(booking.startTime)} - {formatTimeUTC(booking.endTime)}
                           </p>
                           {booking.isRecurring && (
                             <p className="text-sm italic text-gray-500">↻ Recurs: {booking.recurring}</p>

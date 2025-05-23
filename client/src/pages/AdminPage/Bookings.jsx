@@ -4,6 +4,23 @@ import TopBar from '../../components/AdminComponents/TopBar';
 import DeleteConfirmation from './modals/DeleteConfirmation';
 import StatusModal from './modals/StatusModal';
 import ExcelEventBulletinExporter from '../../components/AdminComponents/ExportCSV';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableFooter from '@mui/material/TableFooter';
+import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
+import TableRow from '@mui/material/TableRow';
+import Paper from '@mui/material/Paper';
+import IconButton from '@mui/material/IconButton';
+import FirstPageIcon from '@mui/icons-material/FirstPage';
+import KeyboardArrowLeft from '@mui/icons-material/KeyboardArrowLeft';
+import KeyboardArrowRight from '@mui/icons-material/KeyboardArrowRight';
+import LastPageIcon from '@mui/icons-material/LastPage';
+import Box from '@mui/material/Box';
+import { useTheme } from '@mui/material/styles';
+import { v4 as uuidv4 } from 'uuid';
 
 
 
@@ -80,6 +97,66 @@ const TabButton = ({ label, active, onClick }) => (
   </button>
 );
 
+function TablePaginationActions(props) {
+  const theme = useTheme();
+  const { count, page, rowsPerPage, onPageChange } = props;
+
+  const handleFirstPageButtonClick = (event) => {
+    onPageChange(event, 0);
+  };
+
+  const handleBackButtonClick = (event) => {
+    onPageChange(event, page - 1);
+  };
+
+  const handleNextButtonClick = (event) => {
+    onPageChange(event, page + 1);
+  };
+
+  const handleLastPageButtonClick = (event) => {
+    onPageChange(event, Math.max(0, Math.ceil(count / rowsPerPage) - 1));
+  };
+
+  return (
+    <Box sx={{ flexShrink: 0, ml: 2.5 }}>
+      <IconButton onClick={handleFirstPageButtonClick} disabled={page === 0} aria-label="first page">
+        {theme.direction === 'rtl' ? <LastPageIcon /> : <FirstPageIcon />}
+      </IconButton>
+      <IconButton onClick={handleBackButtonClick} disabled={page === 0} aria-label="previous page">
+        {theme.direction === 'rtl' ? <KeyboardArrowRight /> : <KeyboardArrowLeft />}
+      </IconButton>
+      <IconButton
+        onClick={handleNextButtonClick}
+        disabled={page >= Math.ceil(count / rowsPerPage) - 1}
+        aria-label="next page"
+      >
+        {theme.direction === 'rtl' ? <KeyboardArrowLeft /> : <KeyboardArrowRight />}
+      </IconButton>
+      <IconButton
+        onClick={handleLastPageButtonClick}
+        disabled={page >= Math.ceil(count / rowsPerPage) - 1}
+        aria-label="last page"
+      >
+        {theme.direction === 'rtl' ? <FirstPageIcon /> : <LastPageIcon />}
+      </IconButton>
+    </Box>
+  );
+}
+
+// Add this helper function before your Bookings component:
+const groupRecurringBookings = (bookings) => {
+  const seen = new Set();
+  return bookings.filter(booking => {
+    if (booking.isRecurring && booking.recurringGroupId) {
+      if (seen.has(booking.recurringGroupId)) return false;
+      seen.add(booking.recurringGroupId);
+      return true;
+    }
+    // Non-recurring bookings are always included
+    return true;
+  });
+};
+
 const Bookings = () => {
   // State for bookings data and filtering
   const [bookings, setBookings] = useState([]);
@@ -117,6 +194,10 @@ const Bookings = () => {
   const [formData, setFormData] = useState({...initialFormState});
   const [formError, setFormError] = useState({});
   const [submitLoading, setSubmitLoading] = useState(false);
+
+  // Add these states near your other useState hooks
+  const [availabilityStatus, setAvailabilityStatus] = useState({ available: true, message: '' });
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -284,14 +365,18 @@ const Bookings = () => {
 
   // Filter bookings based on active tab
   const filteredBookings = useMemo(() => {
-    if (activeBookingTab === 'all') return bookings;
-
-    return bookings.filter(booking => {
-      if (activeBookingTab === 'pending') return booking.status === 'pending';
-      if (activeBookingTab === 'confirmed') return booking.status === 'confirmed';
-      if (activeBookingTab === 'declined') return booking.status === 'declined';
-      return true;
-    });
+    let filtered = bookings;
+    if (activeBookingTab !== 'all') {
+      filtered = bookings.filter(booking => {
+        if (activeBookingTab === 'pending') return booking.status === 'pending';
+        if (activeBookingTab === 'confirmed') return booking.status === 'confirmed';
+        if (activeBookingTab === 'declined') return booking.status === 'declined';
+        if (activeBookingTab === 'cancelled') return booking.status === 'cancelled';
+        return true;
+      });
+    }
+    // Group recurring bookings so only one row per recurrence series is shown
+    return groupRecurringBookings(filtered);
   }, [bookings, activeBookingTab]);
 
   // Calculate pagination
@@ -388,54 +473,6 @@ const Bookings = () => {
   
   const handleDeleteClick = (booking) => {
     setBookingToDelete(booking);
-    
-    if (name === 'isRecurring' || name === 'isMealRoom' || name === 'isBreakRoom') {
-      setFormData(prev => ({ ...prev, [name]: e.target.checked }));
-      return;
-    }
-  
-    setFormData(prev => ({ ...prev, [name]: value }));
-  
-    if (name === 'building') {
-      setFormData(prev => ({
-        ...prev,
-        building: value,
-        category: '',
-        roomId: null,
-        room: '',
-        roomName: ''
-      }));
-      
-      // Use categories from API for selected building
-      setCategories(buildingCategories[value] || []);
-      setAvailableRooms([]);
-    }
-  
-    else if (name === 'room') {
-      const selectedRoom = availableRooms.find(r => r.roomId.toString() === value);
-      setFormData(prev => ({
-        ...prev,
-        room: value,
-        roomId: selectedRoom?.roomId || null,
-        roomName: selectedRoom?.roomName || ''
-      }));
-    }
-    
-    else if (name === 'category') {
-      setFormData(prev => ({
-        ...prev,
-        category: value,
-        roomId: null,
-        room: '',
-        roomName: ''
-      }));
-      if (formData.building && value) {
-        const filteredRooms = rooms.filter(
-          room => room.building === formData.building && room.category === value
-        );
-        setAvailableRooms(filteredRooms);
-      }
-    }
   };
     
 // Proper building change handler
@@ -642,11 +679,94 @@ const handleNameChange = (e) => {
     }
   };
 
+  // Add this function to your component (outside BookingForm, but inside Bookings)
+  const checkTimeAvailability = async (data) => {
+    if (!data.date || !data.startTime || !data.endTime || !data.roomId || !data.categoryId) {
+      setAvailabilityStatus({
+        available: false,
+        message: 'Please provide a valid date, room, start time, end time, and category.',
+      });
+      return;
+    }
+
+    setIsCheckingAvailability(true);
+
+    try {
+      // Convert times to proper format for API
+      const startTime24 = convertTo24HourFormat(data.startTime);
+      const endTime24 = convertTo24HourFormat(data.endTime);
+
+      // Ensure the time format is correct (HH:MM:SS)
+      const formattedStartTime = startTime24.includes(':') && startTime24.split(':').length === 2
+        ? `${startTime24}:00`
+        : startTime24;
+
+      const formattedEndTime = endTime24.includes(':') && endTime24.split(':').length === 2
+        ? `${endTime24}:00`
+        : endTime24;
+
+      // Call the availability check endpoint using fetch
+      const response = await fetch(`${API_BASE_URL}/bookings/check-availability`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          buildingId: data.buildingId,
+          roomId: data.roomId,
+          categoryId: data.categoryId,
+          date: data.date,
+          startTime: formattedStartTime,
+          endTime: formattedEndTime,
+          bookingId: isEditModalOpen && editBookingId ? editBookingId : undefined // allow editing current booking
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error checking availability: ${response.statusText}`);
+      }
+
+      const responseData = await response.json();
+      setAvailabilityStatus(responseData);
+    } catch (err) {
+      setAvailabilityStatus({
+        available: false,
+        message: err.message || 'Error checking availability. Please try again.',
+      });
+    } finally {
+      setIsCheckingAvailability(false);
+    }
+  };
+
+  // Add this useEffect to trigger the check when relevant fields change
+  useEffect(() => {
+    if (
+      formData.date &&
+      formData.startTime &&
+      formData.endTime &&
+      formData.roomId &&
+      formData.categoryId
+    ) {
+      checkTimeAvailability(formData);
+    } else {
+      setAvailabilityStatus({ available: true, message: '' });
+    }
+    // eslint-disable-next-line
+  }, [formData.date, formData.startTime, formData.endTime, formData.roomId, formData.categoryId]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitLoading(true);
     setError('');
     setFormError({});
+
+    // Prevent submit if slot is unavailable
+    if (!availabilityStatus.available) {
+      setError(availabilityStatus.message || 'Selected time slot is unavailable.');
+      setSubmitLoading(false);
+      return;
+    }
 
     const loggedInUserId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
     if (!loggedInUserId) {
@@ -702,6 +822,11 @@ const handleNameChange = (e) => {
         : null;
 
       // Build payload
+      let recurringGroupId = formData.recurringGroupId;
+      if (formData.isRecurring && !recurringGroupId) {
+        recurringGroupId = uuidv4();
+      }
+
       const payload = {
         userId: loggedInUserId ? Number(loggedInUserId) : (formData.userId ? Number(formData.userId) : 2),
         title: formData.title,
@@ -715,12 +840,14 @@ const handleNameChange = (e) => {
         endTime: endTimeSQL,
         department: formData.department,
         isRecurring: Boolean(formData.isRecurring),
-        recurrenceEndDate: recurrenceEndDate,
+        recurrencePattern: formData.recurring || "Daily", // <-- Fix: send as recurrencePattern
+        recurrenceEndDate: recurrenceEndDate,            // <-- Fix: send as recurrenceEndDate
         notes: formData.notes === '' ? null : formData.notes,
         isMealRoom: Boolean(formData.isMealRoom),
         isBreakRoom: Boolean(formData.isBreakRoom),
         bookingCapacity: Number(formData.bookingCapacity) || 1,
         status: (formData.status || 'pending').toLowerCase(),
+        recurringGroupId: formData.isRecurring ? recurringGroupId : null,
       };
 
       // Only add bookingId for edit
@@ -782,7 +909,7 @@ const handleNameChange = (e) => {
   // Add this missing resetForm function that will properly reset all fields
 
   const resetForm = () => {
-    setFormData({...initialFormState});
+    setFormData({...initialFormState, recurringGroupId: null});
     setFormError({});
     setCategories([]);
     setAvailableRooms([]);
@@ -983,6 +1110,25 @@ const BookingForm = React.memo(({ isEdit }) => (
     {formError.name && (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-2" role="alert">
         <span>{formError.name}</span>
+      </div>
+    )}
+
+    {/* Availability status */}
+    {isCheckingAvailability && (
+      <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-2 rounded mb-2" role="alert">
+        Checking availability...
+      </div>
+    )}
+    {!isCheckingAvailability && availabilityStatus.message && (
+      <div
+        className={`px-4 py-2 rounded mb-2 border ${
+          availabilityStatus.available
+            ? 'bg-green-100 border-green-400 text-green-700'
+            : 'bg-red-100 border-red-400 text-red-700'
+        }`}
+        role="alert"
+      >
+        {availabilityStatus.message}
       </div>
     )}
 
@@ -1295,8 +1441,10 @@ const BookingForm = React.memo(({ isEdit }) => (
       </button>
       <button
         type="submit"
-        className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${submitLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
-        disabled={submitLoading}
+        className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${
+          submitLoading || !availabilityStatus.available ? 'opacity-75 cursor-not-allowed' : ''
+        }`}
+        disabled={submitLoading || !availabilityStatus.available}
       >
         {submitLoading ? 'Processing...' : isEdit ? 'Update Booking' : 'Create Booking'}
       </button>
@@ -1372,7 +1520,7 @@ const BookingForm = React.memo(({ isEdit }) => (
         {/* Filter Buttons */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-4">
-            {['All', 'Pending', 'Confirmed', 'Declined'].map((status) => (
+            {['All', 'Pending', 'Confirmed', 'Declined', 'Cancelled'].map((status) => (
               <TabButton
                 key={status}
                 label={status}
@@ -1391,10 +1539,10 @@ const BookingForm = React.memo(({ isEdit }) => (
         {error && <div className="text-center py-4 text-red-500">{error}</div>}
 
         {/* Bookings Table */}
-        <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
+        <TableContainer component={Paper} sx={{ mt: 2 }}>
+          <Table sx={{ minWidth: 1200 }} aria-label="bookings table">
+            <TableHead>
+              <TableRow>
                 {[
                   { key: 'title', label: 'Booking Title' },
                   { key: 'firstName', label: 'First Name' },
@@ -1410,21 +1558,20 @@ const BookingForm = React.memo(({ isEdit }) => (
                   { key: 'isBreakRoom', label: 'Break Room' },
                   { key: 'status', label: 'Status' },
                   { key: 'recurring', label: 'Recurring' },
-                  { key: 'timeSubmitted', label: 'Time Submitted' }, // <-- Add this line
+                  { key: 'timeSubmitted', label: 'Time Submitted' },
                 ].map(({ key, label }) => (
-                  <th
+                  <TableCell
                     key={key}
                     onClick={() => handleSort(key)}
-                    className="cursor-pointer px-4 py-2 border-b"
+                    sx={{ cursor: 'pointer', fontWeight: 'bold' }}
                   >
                     {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </th>
+                  </TableCell>
                 ))}
-                <th className="px-4 py-2 border-b">Actions</th>
-              </tr>
-            </thead>
-
-            <tbody>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {!loading && currentBookings.length > 0 ? (
                 sortedBookings
                   .filter(booking =>
@@ -1433,15 +1580,15 @@ const BookingForm = React.memo(({ isEdit }) => (
                       .includes(searchTerm.toLowerCase())
                   )
                   .map((booking) => (
-                    <tr key={booking._id || booking.id} className="hover:bg-gray-50 transition">
-                      <td className="px-4 py-2 border-b">{booking.title}</td>
-                      <td className="px-4 py-2 border-b">{booking.firstName}</td>
-                      <td className="px-4 py-2 border-b">{booking.lastName}</td>
-                      <td className="px-4 py-2 border-b">{booking.department}</td>
-                      <td className="px-4 py-2 border-b">{booking.category}</td>
-                      <td className="px-4 py-2 border-b">{booking.roomName}</td>
-                      <td className="px-4 py-2 border-b">{booking.building}</td>
-                      <td className="px-4 py-2 border-b">
+                    <TableRow key={booking._id || booking.id} hover>
+                      <TableCell>{booking.title}</TableCell>
+                      <TableCell>{booking.firstName}</TableCell>
+                      <TableCell>{booking.lastName}</TableCell>
+                      <TableCell>{booking.department}</TableCell>
+                      <TableCell>{booking.category}</TableCell>
+                      <TableCell>{booking.roomName}</TableCell>
+                      <TableCell>{booking.building}</TableCell>
+                      <TableCell>
                         {booking.recurring !== 'No' && booking.recurrenceEndDate ? (
                           <div>
                             {formatDate(booking.date)} - {formatDate(booking.recurrenceEndDate)} ({booking.recurring})
@@ -1449,113 +1596,137 @@ const BookingForm = React.memo(({ isEdit }) => (
                         ) : (
                           <div>{formatDate(booking.date)}</div>
                         )}
-                      </td>
-                      <td className="px-4 py-2 border-b">
+                      </TableCell>
+                      <TableCell>
                         {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
                         {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td className="px-4 py-2 border-b">{booking.bookingCapacity || '1'}</td>
-                      <td className="px-4 py-2 border-b">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          booking.isMealRoom ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
-                        }`}>
+                      </TableCell>
+                      <TableCell>{booking.bookingCapacity || '1'}</TableCell>
+                      <TableCell>
+                        <span style={{
+                          background: booking.isMealRoom ? '#bbf7d0' : '#f3f4f6',
+                          color: booking.isMealRoom ? '#16a34a' : '#374151',
+                          borderRadius: 8,
+                          padding: '2px 8px',
+                          fontSize: 12,
+                          display: 'inline-block'
+                        }}>
                           {booking.isMealRoom ? 'Yes' : 'No'}
                         </span>
-                      </td>
-                      <td className="px-4 py-2 border-b">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          booking.isBreakRoom ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
-                        }`}>
+                      </TableCell>
+                      <TableCell>
+                        <span style={{
+                          background: booking.isBreakRoom ? '#bbf7d0' : '#f3f4f6',
+                          color: booking.isBreakRoom ? '#16a34a' : '#374151',
+                          borderRadius: 8,
+                          padding: '2px 8px',
+                          fontSize: 12,
+                          display: 'inline-block'
+                        }}>
                           {booking.isBreakRoom ? 'Yes' : 'No'}
                         </span>
-                      </td>
-                      <td className="px-4 py-2 border-b">
-                        <div>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs ${
-                              booking.status === 'confirmed'
-                                ? 'bg-green-100 text-green-600'
-                                : booking.status === 'pending'
-                                ? 'bg-yellow-100 text-yellow-600'
-                                : 'bg-red-100 text-red-600'
-                            }`}
-                          >
-                            {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                          </span>
-                          {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
-                            <small className="block text-gray-500 mt-1">
-                              Changed by: {booking.changedBy}
-                            </small>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 border-b">{booking.recurring}</td>
-                      <td className="px-4 py-2 border-b">
-                        {/* Format timeSubmitted as readable date/time */}
+                      </TableCell>
+                      <TableCell>
+                        <span style={{
+                          background: booking.status === 'confirmed'
+                            ? '#bbf7d0'
+                            : booking.status === 'pending'
+                            ? '#fef9c3'
+                            : '#fecaca',
+                          color: booking.status === 'confirmed'
+                            ? '#16a34a'
+                            : booking.status === 'pending'
+                            ? '#ca8a04'
+                            : '#dc2626',
+                          borderRadius: 8,
+                          padding: '2px 8px',
+                          fontSize: 12,
+                          display: 'inline-block'
+                        }}>
+                          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                        </span>
+                        {/* Show decline reason if declined */}
+                        {booking.status === 'declined' && booking.declineReason && (
+                          <small style={{ display: 'block', color: '#dc2626', marginTop: 2 }}>
+                            Reason: {booking.declineReason}
+                          </small>
+                        )}
+                        {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
+                          <small style={{ display: 'block', color: '#6b7280', marginTop: 2 }}>
+                            Changed by: {booking.changedBy}
+                          </small>
+                        )}
+                      </TableCell>
+                      <TableCell>{booking.recurring}</TableCell>
+                      <TableCell>
                         {booking.timeSubmitted
                           ? new Date(booking.timeSubmitted).toLocaleString()
                           : ''}
-                      </td>
-                      <td className="px-4 py-2 border-b">
-                        <div className="flex space-x-2">
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
                           <button
-                            className="text-blue-600 hover:underline"
+                            style={{ color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}
                             onClick={() => handleEditClick(booking)}
                           >
                             View
                           </button>
                           <button
-                            className="text-green-600 hover:underline"
+                            style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer' }}
                             onClick={() => handleStatusChange(booking.bookingId, 'confirmed')}
                           >
                             Confirm
                           </button>
                           <button
-                            className="text-red-600 hover:underline"
+                            style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}
                             onClick={() => handleStatusChange(booking.bookingId, 'declined')}
                           >
                             Decline
                           </button>
-                        </div>
-                      </td>
-                    </tr>
+                          {booking.status !== 'cancelled' && (
+                            <button
+                              style={{ color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}
+                              onClick={() => handleStatusChange(booking.bookingId, 'cancelled')}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </Box>
+                      </TableCell>
+                    </TableRow>
                   ))
               ) : (
                 !loading && (
-                  <tr>
-                    <td colSpan="17" className="px-4 py-4 text-center text-gray-500">
+                  <TableRow>
+                    <TableCell colSpan={17} align="center">
                       No bookings found. Add a new booking to get started.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )
               )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Controls */}
-        {filteredBookings.length > 0 && (
-          <div className="flex justify-between items-center mt-4">
-            <button
-              onClick={handlePreviousPage}  
-              disabled={currentPage === 1}
-            >
-              Previous
-            </button>
-            <span className="text-gray-800">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                currentPage === totalPages || totalPages === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-600 text-white'
-              }`}
-              onClick={handleNextPage}
-              disabled={currentPage === totalPages || totalPages === 0}
-            >
-              Next
-            </button>
-          </div>
-        )}
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TablePagination
+                  rowsPerPageOptions={[10, 25, 50]}
+                  colSpan={17}
+                  count={filteredBookings.length}
+                  rowsPerPage={itemsPerPage}
+                  page={currentPage - 1}
+                  SelectProps={{
+                    inputProps: { 'aria-label': 'rows per page' },
+                    native: true,
+                  }}
+                  onPageChange={(_, newPage) => setCurrentPage(newPage + 1)}
+                  onRowsPerPageChange={e => {
+                    // You may want to add logic to update itemsPerPage state if you want to support changing rows per page
+                  }}
+                  ActionsComponent={TablePaginationActions}
+                />
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </TableContainer>
       </div>
 
       {/* Add Booking Modal */}
@@ -1573,34 +1744,23 @@ const BookingForm = React.memo(({ isEdit }) => (
         isOpen={isStatusModalOpen}
         currentStatus={selectedStatus}
         onClose={() => setIsStatusModalOpen(false)}
-        onConfirm={async () => {
+        onConfirm={async (declineReason) => {
           try {
-            setSubmitLoading(true); // Show loading state
+            setSubmitLoading(true);
 
-            // Validate selectedBookingId
-            if (!selectedBookingId) {
-              console.error("Error: selectedBookingId is undefined.");
-              setError("Failed to update booking. Booking ID is missing.");
-              setSubmitLoading(false);
-              return;
-            }
-
-            // Fetch the full booking object first using fetch
+            // Fetch the full booking object first
             const bookingRes = await fetch(
               `${API_BASE_URL}/bookings/${selectedBookingId}`,
               {
                 headers: { Authorization: `Bearer ${token}` }
               }
             );
-            if (!bookingRes.ok) {
-              throw new Error("Could not fetch booking details");
-            }
+            if (!bookingRes.ok) throw new Error("Could not fetch booking details");
             const booking = await bookingRes.json();
 
-            // Get current user's ID and fetch details
+            // Get current user's name for changedBy
             const userId = localStorage.getItem('userId');
             let changedBy = 'Unknown User';
-
             if (userId) {
               try {
                 const userResponse = await fetch(`${API_BASE_URL}/users/${userId}`, {
@@ -1610,46 +1770,77 @@ const BookingForm = React.memo(({ isEdit }) => (
                   const userData = await userResponse.json();
                   changedBy = `${userData.firstName} ${userData.lastName}`;
                 }
-              } catch (error) {
-                // Continue with default name
+              } catch {}
+            }
+
+            // Find all bookings in the same recurring group
+            let seriesBookings = [];
+            if (booking.isRecurring && booking.recurringGroupId) {
+              const groupRes = await fetch(
+                `${API_BASE_URL}/recurring-bookings/${booking.recurringGroupId}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              if (groupRes.ok) {
+                seriesBookings = await groupRes.json();
+              } else {
+                seriesBookings = bookings.filter(b =>
+                  b.recurringGroupId && b.recurringGroupId === booking.recurringGroupId
+                );
               }
             }
 
-            // Create a simplified update payload - only send necessary fields
+            // Prepare update payload
             const updatePayload = {
               status: selectedStatus.toLowerCase(),
-              changedBy: changedBy,
+              changedBy,
               bookingId: booking.bookingId || booking._id,
+              ...(selectedStatus === 'declined' && declineReason
+                ? { declineReason }
+                : {}),
             };
 
-            // Make the update request using fetch
-            const response = await fetch(
-              `${API_BASE_URL}/bookings/${selectedBookingId}`,
-              {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify(updatePayload),
+            if (!booking.isRecurring) {
+              const response = await fetch(
+                `${API_BASE_URL}/bookings/${selectedBookingId}`,
+                {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                  },
+                  body: JSON.stringify(updatePayload),
+                }
+              );
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to update booking.');
               }
-            );
-
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.message || 'Failed to update booking.');
+            } else {
+              // Recurring: update all bookings in the group
+              await Promise.all(seriesBookings.map(b => {
+                const recurringPayload = {
+                  ...updatePayload,
+                  bookingId: b.bookingId || b._id,
+                };
+                return fetch(
+                  `${API_BASE_URL}/bookings/${b.bookingId || b._id}`,
+                  {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(recurringPayload),
+                  }
+                );
+              }));
             }
 
             // Success - refresh bookings and close modal
             await fetchBookings();
             setIsStatusModalOpen(false);
           } catch (err) {
-            // Better error handling
-            if (err.message) {
-              setError(`Failed to update booking: ${err.message}`);
-            } else {
-              setError('Failed to update booking status. Please try again.');
-            }
+            setError(`Failed to update booking: ${err.message || ''}`);
           } finally {
             setSubmitLoading(false);
           }
