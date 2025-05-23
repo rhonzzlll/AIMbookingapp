@@ -7,6 +7,7 @@ import { Calendar, Clock, MapPin, AlertCircle, Phone, Mail, User } from 'lucide-
 import AIMLogo from "../../images/AIM_Logo.png";
 // import AIMbg from "../../images/AIM_bldg.jpng";
 import home from "../../images/home.png";
+import { Trash, XCircle } from 'lucide-react';
  
 import FacilityModal from '../../components/FacilityModal';
 
@@ -437,6 +438,10 @@ const ErrorState = ({ message }) => (
 // Booking Card Component
 const BookingCard = ({ booking }) => {
   const [roomName, setRoomName] = useState('Loading...');
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+  const [requestSent, setRequestSent] = useState(!!booking.requestToCancel); 
 
   // Fetch room details using roomId
   useEffect(() => {
@@ -479,14 +484,38 @@ const BookingCard = ({ booking }) => {
 
   const formatTime = (timeString) => {
     if (!timeString) return '';
-    try {
+    
+    // If AM/PM already, return as-is
+    if (/am|pm/i.test(timeString)) return timeString;
+
+    // If it's ISO string with T, extract the time part and convert to AM/PM
+    if (timeString.includes('T')) {
+      // Parse as UTC so time doesn't get offset
       const date = new Date(timeString);
-      if (isNaN(date)) return '';
-      return format(date, 'h:mm a');
-    } catch (error) {
-      console.error('Time formatting error:', error);
-      return timeString;
+      if (!isNaN(date)) {
+        let hour = date.getUTCHours();
+        let minute = date.getUTCMinutes();
+        let suffix = 'AM';
+        if (hour === 0) { hour = 12; }
+        else if (hour === 12) { suffix = 'PM'; }
+        else if (hour > 12) { hour -= 12; suffix = 'PM'; }
+        return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
+      }
     }
+
+  // If it's "HH:mm:ss" or "HH:mm"
+  const match = timeString.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      let [h, m] = [parseInt(match[1]), match[2]];
+      let suffix = 'AM';
+      if (h === 0) { h = 12; }
+      else if (h === 12) { suffix = 'PM'; }
+      else if (h > 12) { h -= 12; suffix = 'PM'; }
+      return `${h}:${m} ${suffix}`;
+    }
+
+    // Fallback
+    return timeString;
   };
 
   const { day, date, month } = formatBookingDate(booking.date);
@@ -494,19 +523,37 @@ const BookingCard = ({ booking }) => {
   const endTimeFormatted = formatTime(booking.endTime);
   const status = booking.status || 'pending';
 
+    // Function to request cancel
+  const handleRequestCancel = async () => {
+    setCancelLoading(true);
+    setCancelError('');
+    try {
+      // Make the API call to set requestToCancel = true
+      await axios.patch(
+        `http://localhost:5000/api/bookings/${booking.bookingId}/request-cancel`,
+        { requestToCancel: true },
+        { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }
+      );
+      setRequestSent(true); // update state so button disappears
+      setShowCancelModal(false);
+    } catch (error) {
+      setCancelError('Failed to send request. Please try again.');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   return (
     <div className="border border-gray-200 rounded-lg hover:shadow-md transition-shadow overflow-hidden">
       <div className="flex flex-col md:flex-row">
         {/* Left side - Date */}
-        <div
-          className={`p-4 text-center flex-shrink-0 ${
-            status === 'confirmed' || status === 'approved'
-              ? 'bg-green-50'
-              : status === 'pending'
-              ? 'bg-yellow-50'
-              : 'bg-red-50'
-          }`}
-        >
+        <div className={`p-4 text-center flex-shrink-0 ${
+          status === 'confirmed' || status === 'approved'
+            ? 'bg-green-50'
+            : status === 'pending'
+            ? 'bg-yellow-50'
+            : 'bg-red-50'
+        }`}>
           <div className="md:w-24">
             <p className="text-sm font-medium text-gray-500">{day}</p>
             <p className="text-2xl font-bold">{date}</p>
@@ -519,14 +566,14 @@ const BookingCard = ({ booking }) => {
           <div className="flex justify-between items-start">
             <div>
               <h3 className="font-bold text-lg">{booking.title || 'Untitled Booking'}</h3>
-                <div className="flex items-center text-gray-500 text-sm mt-1">
-                  <Clock size={14} className="mr-1" />
-                  <span className="font-medium">Time:</span>{startTimeFormatted} - {endTimeFormatted}
-                </div>
-                <div className="flex items-center text-gray-500 text-sm mt-1">
-                  <MapPin size={14} className="mr-1" />
-                  <span className="font-medium">Location:</span>{roomName}
-                </div>
+              <div className="flex items-center text-gray-500 text-sm mt-1">
+                <Clock size={14} className="mr-1" />
+                <span className="font-medium">Time:</span>{startTimeFormatted} - {endTimeFormatted}
+              </div>
+              <div className="flex items-center text-gray-500 text-sm mt-1">
+                <MapPin size={14} className="mr-1" />
+                <span className="font-medium">Location:</span>{roomName}
+              </div>
               {booking.changedBy && (
                 <div className="flex items-center text-gray-500 text-sm mt-1">
                   <User size={14} className="mr-1" />
@@ -535,18 +582,88 @@ const BookingCard = ({ booking }) => {
               )}
             </div>
 
-            <span
-              className={`px-3 py-1 text-xs font-medium rounded-full ${
-                status === 'confirmed' || status === 'approved'
-                  ? 'bg-green-100 text-green-600'
-                  : status === 'pending'
-                  ? 'bg-yellow-100 text-yellow-600'
-                  : 'bg-red-100 text-red-600'
-              }`}
-            >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </span>
+            {/* STATUS BADGE + ICON BUTTON COLUMN */}
+            <div className="flex flex-col items-end mt-2 ml-4">
+              {/* Status badge */}
+              <span
+                className={`px-3 py-1 text-xs font-medium rounded-full mb-2 ${
+                  status === 'confirmed' || status === 'approved'
+                    ? 'bg-green-100 text-green-600'
+                    : status === 'pending'
+                    ? 'bg-yellow-100 text-yellow-600'
+                    : 'bg-red-100 text-red-600'
+                }`}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </span>
+              {/* Trash icon for request cancel */}
+              {status === 'pending' && !requestSent && (
+                <button
+                  onClick={() => setShowCancelModal(true)}
+                  className="bg-red-300 hover:bg-red rounded-full p-2 transition-colors"
+                  title="Request to Cancel"
+                >
+                  <Trash size={20} className="text-white" />
+                </button>
+              )}
+              {/* Cancellation requested tag */}
+              {status === 'pending' && requestSent && (
+                <span className="inline-block bg-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full mt-1">
+                  Cancellation Requested
+                </span>
+              )}
+            </div>
           </div>
+
+          {/* Cancel Modal */}
+          {showCancelModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+              <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 relative">
+                
+                {/* === New Header Block (title + close) === */}
+                <div className="flex flex-col items-center mb-3">
+                  <div className="flex w-full justify-between items-start">
+                    <span className="text-lg font-bold text-gray-800">Request to Cancel Booking</span>
+                    <button
+                      onClick={() => setShowCancelModal(false)}
+                      className="ml-2 text-gray-400 hover:text-gray-600"
+                    >
+                      <XCircle size={24} />
+                    </button>
+                  </div>
+                  <div className="mt-2 w-full text-center break-words">
+                    <span className="font-semibold text-base text-gray-700">
+                      {booking.title || 'Untitled Booking'}
+                    </span>
+                  </div>
+                </div>
+                {/* === End of Header Block === */}
+
+                <p className="text-gray-600 mb-4">
+                  Are you sure you want to request cancellation for this booking? The admin will be notified to review your request.
+                </p>
+                {cancelError && (
+                  <div className="mb-2 text-red-600 text-sm">{cancelError}</div>
+                )}
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowCancelModal(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                    disabled={cancelLoading}
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleRequestCancel}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                    disabled={cancelLoading}
+                  >
+                    {cancelLoading ? 'Sending...' : 'Request Cancel'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

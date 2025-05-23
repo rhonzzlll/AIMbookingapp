@@ -65,7 +65,7 @@ const CategoryModal = ({
               {buildings && buildings.length > 0 ? (
                 buildings.map(building => (
                   <option 
-                    key={building._id || building.buildingId || building.id} 
+                    key={building.buildingI || building.buildingId || building.id} 
                     value={building.buildingName || building.name}
                   >
                     {building.buildingName || building.name}

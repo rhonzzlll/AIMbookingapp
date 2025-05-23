@@ -447,7 +447,7 @@ const Dashboard = ({ openModal }) => {
                         : [booking.date];
 
                     return (
-                      <tr key={booking._id} className="hover:bg-gray-50 transition">
+                      <tr key={booking.bookingId} className="hover:bg-gray-50 transition">
                         <td className="px-4 py-2 border-b">{booking.title}</td>
                         <td className="px-4 py-2 border-b">
                           {`${booking.lastName}, ${booking.firstName}`}
@@ -496,32 +496,6 @@ const Dashboard = ({ openModal }) => {
               </tbody>
             </table>
           </div>
-
-          <Modal isOpen={isModalOpen} onClose={closeModal}>
-            {selectedBooking && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">Booking Details</h2>
-                <p><strong>Title:</strong> {selectedBooking.title}</p>
-                <p><strong>First Name:</strong> {selectedBooking.firstName}</p>
-                <p><strong>Last Name:</strong> {selectedBooking.lastName}</p>
-                <p><strong>School:</strong> {selectedBooking.department}</p>
-                <p><strong>Room Type:</strong> {selectedBooking.category}</p>
-                <p><strong>Meeting Room:</strong> {selectedBooking.meetingRoom}</p>
-                <p><strong>Building:</strong> {selectedBooking.building}</p>
-                <p><strong>Date:</strong> {formatDate(selectedBooking.date)}</p>
-                <p><strong>Time:</strong> {
-                  `${new Date(selectedBooking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-                  ${new Date(selectedBooking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                }</p>
-                <p><strong>Notes:</strong> {selectedBooking.notes}</p>
-                <p><strong>Status:</strong> {selectedBooking.status}</p>
-                <p><strong>Recurring:</strong> {selectedBooking.recurring}</p>
-                {selectedBooking.recurring !== 'No' && selectedBooking.recurrenceEndDate && (
-                  <p><strong>Recurrence End Date:</strong> {formatDate(selectedBooking.recurrenceEndDate)}</p>
-                )}
-              </div>
-            )}
-          </Modal>
         </div>
       </div>
     </div>

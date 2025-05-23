@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import TopBar from '../../components/AdminComponents/TopBar';
-import DeleteConfirmation from './modals/DeleteConfirmation';
 import StatusModal from './modals/StatusModal';
 import ExcelEventBulletinExporter from '../../components/AdminComponents/ExportCSV';
 
@@ -35,7 +34,7 @@ const convertTo24HourFormat = (time12h) => {
 const API_BASE_URL = 'http://localhost:5000/api';
 
 // Predefined options for dropdowns
-const DEPARTMENTS = ['Engineering', 'Marketing', 'HR', 'Finance', 'Sales', 'IT', 'ICT'];
+const DEPARTMENTS = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
 
 // Initial form state
 const initialFormState = {
@@ -103,15 +102,12 @@ const Bookings = () => {
   const [buildings, setBuildings] = useState([]);
   const [categories, setCategories] = useState([]);
   const [availableRooms, setAvailableRooms] = useState([]);
-  const [buildingCategories, setBuildingCategories] = useState({});
   
   // Get token from localStorage
   const token = localStorage.getItem('token');
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedBookingId, setSelectedBookingId] = useState(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [bookingToDelete, setBookingToDelete] = useState(null);
 
   // Add these missing state declarations
   const [formData, setFormData] = useState({...initialFormState});
@@ -188,12 +184,12 @@ const Bookings = () => {
               buildingId: room.buildingId || '',
               category: room.Category?.categoryName || room.category || 'Unknown Category',
               categoryId: room.categoryId || '',
-              firstName: userData.firstName || booking.firstName || '',
-              lastName: userData.lastName || booking.lastName || '',
-              department: userData.department || booking.department || '',
+              firstName: booking.firstName || userData.firstName || '',
+              lastName: booking.lastName || userData.lastName || '',
+              department: booking.department || '',
               email: userData.email || '',
-              startTime: booking.startTime ? convertTo24HourFormat(booking.startTime) : '',
-              endTime: booking.endTime ? convertTo24HourFormat(booking.endTime) : '',
+              startTime: booking.startTime, // keep original DB format!
+              endTime: booking.endTime,
               recurring: booking.isRecurring ? 'Yes' : 'No'
             };
           })
@@ -243,17 +239,7 @@ const Bookings = () => {
           const room = roomsData.find(r => r.roomId === booking.roomId) || {};
           
           // Get user info if needed
-          let userData = {};
-          if (booking.userId) {
-            try {
-              const userRes = await axios.get(`${API_BASE_URL}/users/${booking.userId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              userData = userRes.data;
-            } catch (error) {
-              console.error(`Could not fetch user data for ID ${booking.userId}`, error);
-            }
-          }
+          
           
           return {
             ...booking,
@@ -288,7 +274,7 @@ const Bookings = () => {
 
     return bookings.filter(booking => {
       if (activeBookingTab === 'pending') return booking.status === 'pending';
-      if (activeBookingTab === 'approved') return booking.status === 'Approved';
+      if (activeBookingTab === 'confirmed') return booking.status === 'confirmed';
       if (activeBookingTab === 'declined') return booking.status === 'declined';
       return true;
     });
@@ -384,58 +370,6 @@ const Bookings = () => {
     }
     
     setIsEditModalOpen(true);
-  };
-  
-  const handleDeleteClick = (booking) => {
-    setBookingToDelete(booking);
-    
-    if (name === 'isRecurring' || name === 'isMealRoom' || name === 'isBreakRoom') {
-      setFormData(prev => ({ ...prev, [name]: e.target.checked }));
-      return;
-    }
-  
-    setFormData(prev => ({ ...prev, [name]: value }));
-  
-    if (name === 'building') {
-      setFormData(prev => ({
-        ...prev,
-        building: value,
-        category: '',
-        roomId: null,
-        room: '',
-        roomName: ''
-      }));
-      
-      // Use categories from API for selected building
-      setCategories(buildingCategories[value] || []);
-      setAvailableRooms([]);
-    }
-  
-    else if (name === 'room') {
-      const selectedRoom = availableRooms.find(r => r.roomId.toString() === value);
-      setFormData(prev => ({
-        ...prev,
-        room: value,
-        roomId: selectedRoom?.roomId || null,
-        roomName: selectedRoom?.roomName || ''
-      }));
-    }
-    
-    else if (name === 'category') {
-      setFormData(prev => ({
-        ...prev,
-        category: value,
-        roomId: null,
-        room: '',
-        roomName: ''
-      }));
-      if (formData.building && value) {
-        const filteredRooms = rooms.filter(
-          room => room.building === formData.building && room.category === value
-        );
-        setAvailableRooms(filteredRooms);
-      }
-    }
   };
     
 // Proper building change handler
@@ -582,31 +516,6 @@ const handleRoomChange = (e) => {
     }
   };
 
-  // Handle user selection
-  const handleUserSelect = (user) => {
-    // This function now only triggers when a user is selected from a dropdown
-    setFormData(prev => ({
-      ...prev,
-      userId: user.userId,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      department: user.department || ''
-    }));
-  };
-
-  // You might also want to add a function to clear user ID when manually typing names
-const handleNameChange = (e) => {
-  const { name, value } = e.target;
-
-  setFormData((prev) => ({
-    ...prev,
-    [name]: value,       // Update the specific field (firstName or lastName)
-    // Clear userId if user is editing firstName or lastName manually
-    userId: (name === 'firstName' || name === 'lastName') ? null : prev.userId,
-  }));
-};
-
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     
@@ -703,7 +612,7 @@ const handleNameChange = (e) => {
 
       // Build payload
       const payload = {
-        userId: loggedInUserId ? Number(loggedInUserId) : (formData.userId ? Number(formData.userId) : 2),
+        userId: formData.userId ? Number(formData.userId) : (loggedInUserId ? Number(loggedInUserId) : 2),
         title: formData.title,
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -803,174 +712,149 @@ const handleNameChange = (e) => {
     ).slice(0, 5); // Limit to 5 results
   }, [users, userSearchQuery]);
 
-  const getAvailableTimeOptions = (isStart) => {
-    const now = new Date();
-    const selectedDate = new Date(formData.date);
-    const isToday = now.toDateString() === selectedDate.toDateString();
-  
-    const allTimes = TIME_OPTIONS;
-  
-    if (!isToday) return allTimes;
-  
-    // Convert current time to minutes
-    const currentHour = now.getHours();
-    const currentMinutes = now.getMinutes();
-    const currentTotalMinutes = currentHour * 60 + currentMinutes;
-  
-    return allTimes.filter((time) => {
-      const [timePart, modifier] = time.split(' ');
-      let [hours, minutes] = timePart.split(':').map(Number);
-  
-      if (modifier === 'PM' && hours !== 12) hours += 12;
-      if (modifier === 'AM' && hours === 12) hours = 0;
-  
-      const timeInMinutes = hours * 60 + minutes;
-      return timeInMinutes > currentTotalMinutes;
-    });
+const getAvailableIntervals = (bookings, businessHours = { start: "08:00", end: "22:00" }) => {
+  const buffer = 30; // minutes
+  const toMinutesFromISO = iso => {
+    const d = new Date(iso);
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
   };
-  const getTimeInMinutes = (timeStr) => {
-    const [time, modifier] = timeStr.split(' ');
-    let [hours, minutes] = time.split(':').map(Number);
-  
-    if (modifier === 'PM' && hours !== 12) hours += 12;
-    if (modifier === 'AM' && hours === 12) hours = 0;
-  
-    return hours * 60 + minutes;
+  const toMinutes = str => {
+    const [h, m] = str.split(":").map(Number);
+    return h * 60 + m;
+  };
+  if (!bookings || bookings.length === 0) {
+    return [{ start: toMinutes(businessHours.start), end: toMinutes(businessHours.end) }];
+  }
+  const busy = bookings
+    .map(b => ({
+      start: Math.max(toMinutesFromISO(b.startTime) - buffer, toMinutes(businessHours.start)),
+      end: Math.min(toMinutesFromISO(b.endTime) + buffer, toMinutes(businessHours.end)),
+    }))
+    .sort((a, b) => a.start - b.start);
+  const slots = [];
+  let current = toMinutes(businessHours.start);
+  for (const period of busy) {
+    if (period.start > current) {
+      slots.push({ start: current, end: period.start });
+    }
+    current = Math.max(current, period.end);
+  }
+  if (current < toMinutes(businessHours.end)) {
+    slots.push({ start: current, end: toMinutes(businessHours.end) });
+  }
+  return slots.filter(slot => slot.end > slot.start);
+};
+
+  // Converts "HH:MM AM/PM" -> minutes since 00:00
+  const timeToMinutes = (timeString) => {
+    const [time, period] = timeString.split(" ");
+    let [h, m] = time.split(":").map(Number);
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return h * 60 + m;
   };
 
-  const isTimeSlotTaken = (timeStr, type = 'start') => {
-    if (!formData.room || !formData.date) return false;
-  
-    const selectedRoom = rooms.find(r => r._id === formData.room);
-    const selectedBuilding = selectedRoom?.building;
-  
-    if (!selectedBuilding) return false;
-  
-    const [hourStr, minuteStr] = timeStr.split(' ')[0].split(':');
-    let hours = parseInt(hourStr, 10);
-    const minutes = parseInt(minuteStr, 10);
-    const modifier = timeStr.split(' ')[1];
-  
-    if (modifier === 'PM' && hours !== 12) hours += 12;
-    if (modifier === 'AM' && hours === 12) hours = 0;
-  
-    const checkTime = new Date(`${formData.date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
-  
-    // Check for conflicts across all rooms in the same building
-    return bookings.some((booking) => {
-      if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;  // Skip the current booking when editing
-  
-      const bookingDate = new Date(booking.date).toISOString().split('T')[0];
-      const selectedDate = new Date(formData.date).toISOString().split('T')[0];
-  
-      if (
-        booking.building === selectedBuilding && 
-        bookingDate === selectedDate && 
-        booking.status === 'Approved'
-      ) {
-        const bookingStart = new Date(booking.startTime);
-        const bookingEnd = new Date(booking.endTime);
-  
-        if (type === 'start') {
-          const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);  // Buffer time
-          return checkTime >= bookingStart && checkTime < bufferEnd;
-        }
-  
-        if (type === 'end') {
-          const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);  // Buffer time
-          return checkTime >= bufferStart && checkTime < bookingEnd;
-        }
-      }
-  
-      return false;
-    });
-  };  
+  // Converts minutes since 00:00 -> "h:mm AM/PM"
+  const minutesToTime = (minutes) => {
+    let h = Math.floor(minutes / 60);
+    let m = minutes % 60;
+    let suffix = h >= 12 ? "PM" : "AM";
+    if (h === 0) h = 12;
+    else if (h > 12) h -= 12;
+    return `${h}:${m.toString().padStart(2, "0")} ${suffix}`;
+  };
 
-  const processBookingsForTimeSlots = (bookings) => {
-    if (!bookings || !formData.building || !formData.room || !formData.date) return;
-  
-    // Clear previous unavailable time slots
-    setUnavailableTimeSlots([]);
-  
-    const relevantBookings = bookings.filter(booking =>
-      booking.building === formData.building &&
-      new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
-      booking.status?.toLowerCase() === 'Approved'
+  const getAvailableStartTimes = () => {
+    if (!formData.roomId || !formData.date) return [];
+    const confirmed = bookings.filter(
+      b => b.roomId === formData.roomId &&
+      b.date === formData.date &&
+      b.status?.toLowerCase() === 'confirmed'
     );
-  
-    const unavailable = [];
-  
-    relevantBookings.forEach(booking => {
-      const bookingStart = new Date(booking.startTime);
-      const bookingEnd = new Date(booking.endTime);
-      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000); // 30 min buffer time
-  
-      const formatTimeToOption = (date) => {
-        let hours = date.getHours();
-        const minutes = date.getMinutes();
-        const period = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12 || 12;
-        return `${hours}:${minutes.toString().padStart(2, '0')} ${period}`;
-      };
-  
-      TIME_OPTIONS.forEach(timeOption => {
-        const timeOption24 = convertTo24HourFormat(timeOption);
-        const timeOptionDate = new Date(`${formData.date}T${timeOption24}:00`);
-  
-        // Check for overlapping time slots across all rooms in the building
-        if (timeOptionDate >= bookingStart && timeOptionDate < bufferEnd) {
-          unavailable.push({
-            time: timeOption,
-            reason: `Booking: ${formatTimeToOption(bookingStart)} - ${formatTimeToOption(bookingEnd)} (Already booked)`
-          });
-        }
-      });
-    });
-  
-    setUnavailableTimeSlots(unavailable);
-  };
-  
-  
-  const getFilteredStartTimes = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const intervals = getAvailableIntervals(confirmed);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isToday = formData.date === todayStr;
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  
-    return TIME_OPTIONS.filter((time) => {
-      const timeMinutes = getTimeInMinutes(time);
-      const isToday = formData.date === today;
-      return (!isToday || timeMinutes > currentMinutes) && !isTimeSlotTaken(time, 'start');
+    let options = [];
+    intervals.forEach(({ start, end }) => {
+      for (let t = start; t + 30 <= end; t += 30) {
+        if (!isToday || t > currentMinutes) {
+          options.push(minutesToTime(t));
+        }
+      }
     });
+
+      console.log(
+        '---- getAvailableStartTimes ----',
+        '\nSelected Room:', formData.roomId,
+        '\nSelected Date:', formData.date,
+        '\nConfirmed bookings:', confirmed,
+        '\nCalculated intervals:', intervals,
+        '\nIs Today?', isToday,
+        '\nCurrent Minutes:', currentMinutes,
+        '\nOptions:', options
+      );
+    return options;
   };
-  
-  const getFilteredEndTimes = () => {
-    const startTime = formData.startTime;
-    if (!startTime) return TIME_OPTIONS;
-  
-    const startMinutes = getTimeInMinutes(startTime);  // Ensure start time is in minutes
-  
-    // Existing logic to filter based on start time
-    const filteredEndTimes = TIME_OPTIONS.filter((time) => getTimeInMinutes(time) > startMinutes);
-  
-    // If today is selected, ensure that only times after the current time are available
-    const now = new Date();
-    const selectedDate = new Date(formData.date);
-    const isToday = now.toDateString() === selectedDate.toDateString();
-    
-    if (isToday) {
-      const currentHour = now.getHours();
-      const currentMinutes = now.getMinutes();
-      const currentTotalMinutes = currentHour * 60 + currentMinutes;
-      
-      return filteredEndTimes.filter(time => {
-        const timeInMinutes = getTimeInMinutes(time);
-        return timeInMinutes > currentTotalMinutes;  // Ensuring only times after current time
-      });
+
+  const getAvailableEndTimes = () => {
+    if (!formData.startTime || !formData.roomId || !formData.date) return [];
+    // Only show for confirmed bookings, this room, this date:
+    const confirmed = bookings.filter(
+      b => b.roomId === formData.roomId &&
+      b.date === formData.date &&
+      b.status?.toLowerCase() === 'confirmed'
+    );
+    const intervals = getAvailableIntervals(confirmed);
+    const startMinutes = timeToMinutes(formData.startTime);
+
+    const interval = intervals.find(
+      ({ start, end }) => start <= startMinutes && startMinutes < end
+    );
+    if (!interval) return [];
+    let times = [];
+    for (let t = startMinutes + 30; t <= interval.end; t += 30) {
+      times.push(minutesToTime(t));
     }
-  
-    return filteredEndTimes;
+    return times;
   };
-  
+
+  const formatTime = (timeString) => {
+    if (!timeString) return '';
+    
+    // If AM/PM already, return as-is
+    if (/am|pm/i.test(timeString)) return timeString;
+
+    // If it's ISO string with T, extract the time part and convert to AM/PM
+    if (timeString.includes('T')) {
+      // Parse as UTC so time doesn't get offset
+      const date = new Date(timeString);
+      if (!isNaN(date)) {
+        let hour = date.getUTCHours();
+        let minute = date.getUTCMinutes();
+        let suffix = 'AM';
+        if (hour === 0) { hour = 12; }
+        else if (hour === 12) { suffix = 'PM'; }
+        else if (hour > 12) { hour -= 12; suffix = 'PM'; }
+        return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
+      }
+    }
+
+    // If it's "HH:mm:ss" or "HH:mm"
+    const match = timeString.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      let [h, m] = [parseInt(match[1]), match[2]];
+      let suffix = 'AM';
+      if (h === 0) { h = 12; }
+      else if (h === 12) { suffix = 'PM'; }
+      else if (h > 12) { h -= 12; suffix = 'PM'; }
+      return `${h}:${m} ${suffix}`;
+    }
+
+    // Fallback
+    return timeString;
+  };
    
 const BookingForm = React.memo(({ isEdit }) => (
   <form onSubmit={handleSubmit} className="space-y-6">
@@ -1005,8 +889,11 @@ const BookingForm = React.memo(({ isEdit }) => (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
             <input
+              type="text"
               required
               placeholder="Enter first name"
+              defaultValue={formData.firstName} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
               autoComplete="off"
               className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
             />
@@ -1051,7 +938,7 @@ const BookingForm = React.memo(({ isEdit }) => (
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="pending">Pending</option>
-              <option value="Approved">Approved</option>
+              <option value="confirmed">Confirmed</option>
               <option value="declined">Declined</option>
             </select>
           </div>
@@ -1150,24 +1037,23 @@ const BookingForm = React.memo(({ isEdit }) => (
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
             >
               <option value="">Select Start Time</option>
-              {TIME_OPTIONS.map((time) => (
+              {getAvailableStartTimes().map((time) => (
                 <option key={time} value={time}>
                   {time}
                 </option>
               ))}
             </select>
-            {formError.time && <p className="text-red-500 text-xs mt-1">{formError.time}</p>}
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
             <select
               value={formData.endTime || ''}
               onChange={(e) => handleTimeChange('endTime', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
+              disabled={!formData.startTime}
             >
               <option value="">Select End Time</option>
-              {getFilteredEndTimes().map((time) => (
+              {getAvailableEndTimes().map((time) => (
                 <option key={time} value={time}>
                   {time}
                 </option>
@@ -1406,7 +1292,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
         {/* Filter Buttons */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-4">
-            {['All', 'Pending', 'Approved', 'Declined'].map((status) => (
+            {['All', 'Pending', 'Confirmed', 'Declined'].map((status) => (
               <TabButton
                 key={status}
                 label={status}
@@ -1433,18 +1319,15 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                   { key: 'title', label: 'Booking Title' },
                   { key: 'firstName', label: 'First Name' },
                   { key: 'lastName', label: 'Last Name' },
-                  { key: 'department', label: 'School' },
+                  { key: 'building', label: 'Building' },
                   { key: 'category', label: 'Category' },
                   { key: 'roomName', label: 'Room' },
-                  { key: 'roomName', label: 'Room' },
-                  { key: 'building', label: 'Building' },
                   { key: 'date', label: 'Date' },
                   { key: 'startTime', label: 'Time' },
                   { key: 'bookingCapacity', label: 'Capacity' },
                   { key: 'isMealRoom', label: 'Meal Room' },
                   { key: 'isBreakRoom', label: 'Break Room' },
                   { key: 'status', label: 'Status' },
-                  { key: 'recurring', label: 'Recurring' },
                   { key: 'timeSubmitted', label: 'Time Submitted' }, // <-- Add this line
                 ].map(({ key, label }) => (
                   <th
@@ -1468,14 +1351,13 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                     .includes(searchTerm.toLowerCase())
                 )
                 .map((booking) => (
-                  <tr key={booking._id || booking.id} className="hover:bg-gray-50 transition">
+                  <tr key={booking.bookingId || booking.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-2 border-b">{booking.title}</td>
                     <td className="px-4 py-2 border-b">{booking.firstName}</td>
                     <td className="px-4 py-2 border-b">{booking.lastName}</td>
-                    <td className="px-4 py-2 border-b">{booking.department}</td>
+                    <td className="px-4 py-2 border-b">{booking.building}</td>
                     <td className="px-4 py-2 border-b">{booking.category}</td>
                     <td className="px-4 py-2 border-b">{booking.roomName}</td>
-                    <td className="px-4 py-2 border-b">{booking.building}</td>
                     <td className="px-4 py-2 border-b">
                       {booking.recurring !== 'No' && booking.recurrenceEndDate ? (
                         <div>
@@ -1486,8 +1368,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                       )}
                     </td>
                     <td className="px-4 py-2 border-b">
-                       {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-                      {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
                     </td>
                     <td className="px-4 py-2 border-b">{booking.bookingCapacity || '1'}</td>
                     <td className="px-4 py-2 border-b">
@@ -1525,7 +1406,12 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2 border-b">{booking.recurring}</td>
+                      <td className="px-4 py-2 border-b">
+                        {/* Format timeSubmitted as readable date/time */}
+                        {booking.timeSubmitted
+                          ? new Date(booking.timeSubmitted).toLocaleString()
+                          : ''}
+                      </td>
                     <td className="px-4 py-2 border-b">
                       <div className="flex space-x-2">
                         <button
@@ -1649,7 +1535,7 @@ const Modal = React.memo(({ isOpen, title, children, onClose }) => {
             const updatePayload = {
               status: selectedStatus.toLowerCase(),
               changedBy: changedBy,
-              bookingId: booking.bookingId || booking._id,
+              bookingId: booking.bookingId,
             };
 
             // Make the update request using fetch

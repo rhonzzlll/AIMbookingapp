@@ -116,17 +116,23 @@ const BuildingDetails = () => {
   };
 
     // Filter rooms by comparing room.categoryId (number) to selected categoryId
-    const filterRooms = (categoryId, search) => {
-    let filtered = rooms;
+const filterRooms = (categoryName, search) => {
+  let filtered = rooms;
 
-    if (categoryId) {
-        filtered = filtered.filter(room => room.categoryId === categoryId);  // CORRECT: comparing IDs
-    }
+  if (categoryName) {
+    filtered = filtered.filter(room => room.category === categoryName);
+  }
 
-    // other filters...
+  // Optional: Filter by search term too
+  if (search) {
+    filtered = filtered.filter(room =>
+      room.roomName.toLowerCase().includes(search.toLowerCase()) ||
+      (room.roomDescription && room.roomDescription.toLowerCase().includes(search.toLowerCase()))
+    );
+  }
 
-    setFilteredRooms(filtered);
-    };
+  setFilteredRooms(filtered);
+};
 
   const handleDateTimeChange = (e) => {
     const { name, value, type, checked } = e.target;

@@ -57,7 +57,7 @@ const AccRooms = () => {
       // Attach bookings to rooms manually
       const roomsWithBookings = roomsData.map(room => ({
         ...room,
-        bookings: bookingsData.filter(booking => booking.room === room._id),
+        bookings: bookingsData.filter(booking => booking.room === room.roomId),
       }));
   
       const accBuildingRooms = roomsWithBookings.filter(
@@ -409,7 +409,7 @@ const AccRooms = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-10 w-full px-4">
                     {filteredRooms.map((room) => (
                       <div
-                        key={room._id}
+                        key={room.roomId}
                         className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden border border-gray-200 flex flex-col h-full w-full"
                       >
                         {/* Room Image */}

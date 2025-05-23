@@ -41,7 +41,7 @@ const Header = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('user'); // Clear user data
-    localStorage.removeItem('_id'); // Clear user ID
+    localStorage.removeItem('userId'); // Clear user ID
     localStorage.removeItem('token'); // Clear token
     navigate('/login'); // Redirect to login page
   };

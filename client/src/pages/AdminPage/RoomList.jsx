@@ -104,7 +104,7 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                 room.categoryId;
               
               return (
-                <React.Fragment key={room.roomId || room._id}>
+                <React.Fragment key={room.roomId || room.roomId}>
                   <tr className="hover:bg-gray-50">
                     <td className="py-3 px-4 font-semibold">{room.roomName}</td>
                     <td className="py-3 px-4">{buildingName}</td>
@@ -153,7 +153,7 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                         : null);
                     
                     return (
-                      <tr key={`${room.roomId || room._id}-sub-${subRoom.subRoomId || index}`} 
+                      <tr key={`${room.roomId || room.roomId}-sub-${subRoom.subRoomId || index}`} 
                           className="hover:bg-gray-50 bg-gray-50">
                         <td className="py-3 px-4 pl-8 text-gray-600 flex items-center">
                           <span className="mr-2">↳</span> {subRoom.subRoomName || subRoom.roomName}

@@ -57,7 +57,8 @@ const toTimeISOString = (time12h) => {
   return new Date(Date.UTC(2025, 0, 1, hours, parseInt(minutes, 10))).toISOString();
 };
  
-const BookingForm = ({ onBookingSubmit }) => {
+const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, selectedRoomId, availableIntervals = []}) => {
+  // ...
   const location = useLocation();
   const bookingData = location.state?.bookingData;
   const navigate = useNavigate(); // Initialize the navigate function
@@ -113,7 +114,7 @@ const BookingForm = ({ onBookingSubmit }) => {
   const userRole = localStorage.getItem('role');
 
   // Predefined departments array
-  const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
+  const departments = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
 
   // Apply booking data from AccRooms if available
   useEffect(() => {
@@ -384,7 +385,8 @@ const BookingForm = ({ onBookingSubmit }) => {
     if (formData.buildingId && formData.categoryId) {
       const filtered = rooms.filter(
         (room) =>
-          room.buildingId === formData.buildingId && room.categoryId === formData.categoryId
+          room.buildingId.toString() === formData.buildingId.toString() &&
+          room.categoryId.toString() === formData.categoryId.toString()
       );
       
       // Sort rooms by name
@@ -442,6 +444,9 @@ const BookingForm = ({ onBookingSubmit }) => {
         roomName: selectedRoom.roomName || '', // Set the roomName from the selected room
       });
       setAvailabilityStatus(null);
+
+        if (setSelectedRoomId) setSelectedRoomId(value);
+        if (setSelectedRoomName) setSelectedRoomName(selectedRoom.roomName || '');
   
       // Check availability after a short delay
       if (formData.buildingId && value && formData.date && formData.startTime && formData.endTime) {
@@ -551,46 +556,41 @@ const BookingForm = ({ onBookingSubmit }) => {
     return unavailableSlot ? unavailableSlot.reason : '';
   };
 
-  const getAvailableStartTimes = () => {
-    const now = new Date();
-    const selectedDate = new Date(formData.date);
-  
-    return TIME_OPTIONS.filter((time) => {
-      if (isTimeBlocked(time)) return false;
-  
-      // Prevent selecting past times for today
-      if (selectedDate.toDateString() === now.toDateString()) {
-        const time24 = convertTo24HourFormat(time);
-        const [hours, minutes] = time24.split(':').map(Number);
-        const optionDate = new Date(formData.date);
-        optionDate.setHours(hours);
-        optionDate.setMinutes(minutes);
-  
-        if (optionDate.getTime() < now.getTime()) {
-          return false;
-        }
-      }
-  
-      // Prevent selecting a start time that overlaps with an existing booking
-      const time24 = convertTo24HourFormat(time);
-      const [hours, minutes] = time24.split(':').map(Number);
-      const optionStartDate = new Date(formData.date);
-      optionStartDate.setHours(hours);
-      optionStartDate.setMinutes(minutes);
-  
-      for (const booking of blockedTimes) {
-        const bookingStart = new Date(`${booking.date}T${convertTo24HourFormat(booking.startTime)}:00`);
-        const bookingEnd = new Date(`${booking.date}T${convertTo24HourFormat(booking.endTime)}:00`);
-  
-        // If the selected start time falls within a blocked range, reject it
-        if (optionStartDate >= bookingStart && optionStartDate < bookingEnd) {
-          return false;
-        }
-      }
-  
-      return true;
-    });
+  // Helper to convert minutes to time string (e.g. 8:00 AM)
+  const minutesToTime = (minutes) => {
+    let h = Math.floor(minutes / 60);
+    let m = minutes % 60;
+    let suffix = h >= 12 ? "PM" : "AM";
+    if (h === 0) h = 12;
+    else if (h > 12) h -= 12;
+    return `${h}:${m.toString().padStart(2, "0")} ${suffix}`;
   };
+
+  const getCurrentMinutes = () => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  };
+
+  // Only show interval starts as start times
+  const getAvailableStartTimes = () => {
+    if (!availableIntervals || availableIntervals.length === 0) return [];
+
+    // Calculate if the booking is for today
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const isToday = formData.date === todayStr;
+    const currentMinutes = getCurrentMinutes();
+
+    const times = [];
+    availableIntervals.forEach(({ start, end }) => {
+      for (let t = start; t + 30 <= end; t += 30) {
+        // If it's today, only show times in the future
+        if (!isToday || t > currentMinutes) {
+          times.push(minutesToTime(t));
+        }
+      }
+    });
+    return times;
+};
   
   const isTimeBlocked = (time) => {
     if (!unavailableTimeSlots.length) return false;
@@ -605,52 +605,31 @@ const BookingForm = ({ onBookingSubmit }) => {
     });
   };
   
-  const getFilteredEndTimes = () => {
-    // If no start time is selected, allow all end times to be available
-    if (!formData.startTime) {
-      return TIME_OPTIONS; // Return all end time options if no start time
-    }
-  
-    const startIndex = TIME_OPTIONS.findIndex(
-      (time) => time === formData.startTime
-    );
-  
-    if (startIndex === -1) {
-      return TIME_OPTIONS; // Fallback if start time not found
-    }
-  
-    const startTime24 = convertTo24HourFormat(formData.startTime);
-    const startTimeDate = new Date(`${formData.date}T${startTime24}:00`);
-  
-    // Find the earliest upcoming blocked time AFTER the start time
-    const upcomingBlockedTime = TIME_OPTIONS.slice(startIndex + 1).find((time) => {
-      if (!isTimeBlocked(time)) return false;
-  
-      const blockedTime24 = convertTo24HourFormat(time);
-      const blockedTimeDate = new Date(`${formData.date}T${blockedTime24}:00`);
-  
-      return blockedTimeDate > startTimeDate;
-    });
-  
-    return TIME_OPTIONS.slice(startIndex + 1).filter((time) => {
-      if (isTimeBlocked(time)) return false;
-  
-      const endTime24 = convertTo24HourFormat(time);
-      const endTimeDate = new Date(`${formData.date}T${endTime24}:00`);
-  
-      if (endTimeDate <= startTimeDate) return false;
-  
-      // Cut off options if we found a blocked time after the start time
-      if (upcomingBlockedTime) {
-        const blockedTime24 = convertTo24HourFormat(upcomingBlockedTime);
-        const blockedTimeDate = new Date(`${formData.date}T${blockedTime24}:00`);
-  
-        return endTimeDate < blockedTimeDate;
-      }
-  
-      return true;
-    });
+const getFilteredEndTimes = () => {
+  if (!formData.startTime) return [];
+  // Find the interval that contains the selected start time
+  const toMinutes = (timeString) => {
+    const [time, period] = timeString.split(" ");
+    let [h, m] = time.split(":").map(Number);
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return h * 60 + m;
   };
+  const startMinutes = toMinutes(formData.startTime);
+
+  const interval = availableIntervals.find(
+    ({ start, end }) => start <= startMinutes && startMinutes < end
+  );
+  if (!interval) return [];
+
+  // Show 30-min increments from start+30 up to interval end
+  const times = [];
+  for (let t = startMinutes + 30; t <= interval.end; t += 30) {
+    times.push(minutesToTime(t));
+  }
+  return times;
+};
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -742,8 +721,11 @@ const BookingForm = ({ onBookingSubmit }) => {
         </div>
 
         <div className="relative bg-white rounded-lg shadow-md p-8 max-w-xl mx-auto">  
-            <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
-          
+            <h2 className="text-2xl font-bold mb-1 text-gray-800">Create New Booking</h2>
+            <p className="text-xs text-gray-500 italic text-center mb-6">
+              Fields marked with <span className="text-red-500">*</span> are required.
+            </p>
+         
           {error && (
             <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
               {error}
@@ -754,7 +736,7 @@ const BookingForm = ({ onBookingSubmit }) => {
             {/* Booking Title */}
             <div className="mb-6">
               <label className="block text-gray-700 font-medium mb-2">
-                Booking Title <span className="text-red-500">*</span>
+                Event Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -832,47 +814,27 @@ const BookingForm = ({ onBookingSubmit }) => {
               </select>
             </div>
 
-            {/* Additional Room Options */}
-
-            <div className="text-center">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Other Request</label>
-            </div>
-
-            {/* Additional Room Options */}
-            <div className="mb-6 flex flex-wrap gap-6">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="needsMealRoom"
-                  name="needsMealRoom"
-                  checked={formData.needsMealRoom}
-                  onChange={handleChange}
-                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="needsMealRoom" className="ml-2 text-gray-700 font-medium">
-                  Need Meal Room
-                </label>
-              </div>
-              
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="needsBreakoutRoom"
-                  name="needsBreakoutRoom"
-                  checked={formData.needsBreakoutRoom}
-                  onChange={handleChange}
-                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="needsBreakoutRoom" className="ml-2 text-gray-700 font-medium">
-                  Need Breakout Room
-                </label>
-              </div>
+            {/* Number of Pax */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                Number of Pax <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                name="bookingCapacity"
+                value={formData.bookingCapacity}
+                onChange={handleChange}
+                placeholder="Enter number of participants"
+                min={1}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
             </div>
 
              {/* Date*/}
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
-                  Date <span className="text-red-500">*</span>
+                  Date of Booking <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
@@ -887,7 +849,7 @@ const BookingForm = ({ onBookingSubmit }) => {
               </div>
 
             {/* Time */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-6">
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
                   Start Time <span className="text-red-500">*</span>
@@ -901,13 +863,8 @@ const BookingForm = ({ onBookingSubmit }) => {
                 >
                   <option value="">Select Start Time</option>
                   {getAvailableStartTimes().map((time) => (
-                  <option
-                    key={time}
-                    value={time}
-                  >
-                    {time}
-                  </option>
-                ))}
+                    <option key={time} value={time}>{time}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -924,17 +881,118 @@ const BookingForm = ({ onBookingSubmit }) => {
                 >
                   <option value="">Select End Time</option>
                   {getFilteredEndTimes().map((time) => (
-                    <option key={time} value={time}>
-                      {time}
-                    </option>
+                    <option key={time} value={time}>{time}</option>
                   ))}
                 </select>
               </div>
             </div>
 
+             {/* Additional Room Options */}
+            <div className="text-center">
+              <label className="text-xl block text-gray-700 font-medium mb-6">
+                Other Request <span className="text-red-500"></span>
+              </label>
+            </div>
+
+            {/* Additional Room Options */}
+            <div className="mb-6 flex flex-wrap gap-6 justify-center">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="needsMealRoom"
+                  name="needsMealRoom"
+                  checked={formData.needsMealRoom}
+                  onChange={handleChange}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="needsMealRoom" className="ml-2 text-gray-700 font-medium">
+                  Request a Meal Room
+                </label>
+              </div>
+              
+                <div className="flex items-center justify-center mb-2">
+                  <input
+                    type="checkbox"
+                    id="needsBreakoutRoom"
+                    name="needsBreakoutRoom"
+                    checked={formData.needsBreakoutRoom}
+                    onChange={handleChange}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="needsBreakoutRoom" className="ml-2 text-gray-700 font-medium">
+                    Request a Breakout Room
+                  </label>
+              </div>
+            </div>
+
+            {formData.needsBreakoutRoom && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-4">
+                {/* Number of Pax for Breakout Room */}
+                <div className="md:col-span-2">
+                  <label className="block text-gray-700 font-medium mb-2">
+                    Number of Pax (Breakout Room) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="numberOfPaxBreakRoom"
+                    value={formData.numberOfPaxBreakRoom || ''}
+                    onChange={handleChange}
+                    min={1}
+                    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter number of participants for breakout room"
+                    required={formData.needsBreakoutRoom}
+                  />
+                </div>
+                {/* Start Time for Breakout Room */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">
+                    Breakout Room Start Time <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="startTimeBreakRoom"
+                    value={formData.startTimeBreakRoom || ''}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required={formData.needsBreakoutRoom}
+                  >
+                    <option value="">Select Start Time</option>
+                    {TIME_OPTIONS.map((time) => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* End Time for Breakout Room */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">
+                    Breakout Room End Time <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="endTimeBreakRoom"
+                    value={formData.endTimeBreakRoom || ''}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required={formData.needsBreakoutRoom}
+                    disabled={!formData.startTimeBreakRoom}
+                  >
+                    <option value="">Select End Time</option>
+                    {/* You can use a filter here if you want to only allow times after start time */}
+                    {TIME_OPTIONS
+                      .filter(
+                        (time) =>
+                          !formData.startTimeBreakRoom ||
+                          TIME_OPTIONS.indexOf(time) > TIME_OPTIONS.indexOf(formData.startTimeBreakRoom)
+                      )
+                      .map((time) => (
+                        <option key={time} value={time}>{time}</option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             {/* Recurring Booking Options */}
             <div className="mb-6">
-              <div className="flex items-center mb-2">
+              <div className="flex items-center justify-center mb-2">
                 <input
                   type="checkbox"
                   id="isRecurring"
