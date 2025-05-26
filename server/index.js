@@ -58,7 +58,7 @@ app.locals.upload = upload;
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:5173', // CORRECT: matches your frontend
+  origin: 'http://localhost:5173',  
   credentials: true,
 }));
 

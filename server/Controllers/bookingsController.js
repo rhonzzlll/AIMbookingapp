@@ -2,6 +2,8 @@ const { Op } = require('sequelize');
 const db = require('../models');
 const Booking = db.Booking;
 const { v4: uuidv4 } = require('uuid'); // For unique recurrenceGroupId
+const transporter = require('../mailer');
+const User = db.User; // Assuming you have a User model
 
 const convertTo24HourFormat = (time) => {
   const [hourMinute, period] = time.split(' ');
@@ -15,6 +17,148 @@ const convertTo24HourFormat = (time) => {
 
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 };
+
+// Helper to format time as HH:mm
+function formatTimeToHHMM(timeVal) {
+  if (!timeVal) return '';
+  if (typeof timeVal === 'string') {
+    // Already a string, just take the first 5 chars
+    return timeVal.slice(0, 5);
+  }
+  if (timeVal instanceof Date) {
+    // It's a Date object, get hours and minutes
+    const hours = timeVal.getUTCHours().toString().padStart(2, '0');
+    const minutes = timeVal.getUTCMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+  return '';
+}
+
+// Helper to format date
+function formatDate(dateVal) {
+  if (!dateVal) return '';
+  
+  let date;
+  if (dateVal instanceof Date) {
+    date = dateVal;
+  } else if (typeof dateVal === 'string') {
+    date = new Date(dateVal);
+  } else {
+    return '';
+  }
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    return '';
+  }
+  
+  // Use UTC methods to avoid timezone issues
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const day = date.getUTCDate();
+  
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  
+  return `${months[month]} ${day}, ${year}`;
+}
+
+// Helper to send email notifications
+async function sendBookingEmail(booking, status, declineReason = null) {
+  try {
+    const user = await User.findByPk(booking.userId);
+    if (!user || !user.email) {
+      console.log('User not found or no email address');
+      return;
+    }
+
+    const bookingDate = formatDate(booking.date);
+    const startTime = formatTimeToHHMM(booking.startTime);
+    const endTime = formatTimeToHHMM(booking.endTime);
+    const userName = user.firstName || user.name || 'User';
+
+    let subject, message;
+
+    switch (status) {
+      case 'confirmed':
+        subject = 'Booking Confirmed - Your Reservation is Set!';
+        message = `Hello ${userName},
+
+Great news! Your booking has been confirmed.
+
+Booking Details:
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🏢 Room ID: ${booking.roomId}
+🏗️ Building ID: ${booking.buildingId}
+
+Please arrive on time and follow all facility guidelines. If you need to make any changes, please contact us as soon as possible.
+
+Thank you for using our booking system!
+
+Best regards,
+Booking Management Team`;
+        break;
+
+      case 'declined':
+        subject = 'Booking Declined - Alternative Options Available';
+        message = `Hello ${userName},
+
+We regret to inform you that your booking request has been declined.
+
+Booking Details:
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🏢 Room ID: ${booking.roomId}
+🏗️ Building ID: ${booking.buildingId}
+
+${declineReason ? `Reason: ${declineReason}` : ''}
+
+We apologize for any inconvenience. Please feel free to submit a new booking request for alternative dates or times, or contact us for assistance in finding suitable alternatives.
+
+Best regards,
+Booking Management Team`;
+        break;
+
+      case 'cancelled':
+        subject = 'Booking Cancelled - Confirmation';
+        message = `Hello ${userName},
+
+Your booking has been successfully cancelled.
+
+Cancelled Booking Details:
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🏢 Room ID: ${booking.roomId}
+🏗️ Building ID: ${booking.buildingId}
+
+If you cancelled this booking by mistake or need to make a new reservation, please feel free to submit a new booking request.
+
+Thank you for using our booking system!
+
+Best regards,
+Booking Management Team`;
+        break;
+
+      default:
+        console.log('Unknown booking status for email:', status);
+        return;
+    }
+
+    await transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: user.email,
+      subject: subject,
+      text: message
+    });
+
+    console.log(`Email sent successfully to ${user.email} for booking ${booking.bookingId} - Status: ${status}`);
+  } catch (error) {
+    console.error('Email send error:', error);
+  }
+}
 
 // Helper to generate all dates for recurrence
 function generateRecurrenceDates(startDate, endDate, pattern) {
@@ -160,6 +304,14 @@ exports.createBooking = async (req, res) => {
         timeSubmitted: new Date()
       });
 
+      // Send email notification based on status
+      if (booking.status && ['confirmed', 'declined', 'cancelled'].includes(booking.status)) {
+        // Send email in background without blocking response
+        setImmediate(() => {
+          sendBookingEmail(booking, booking.status, booking.declineReason);
+        });
+      }
+
       return res.status(201).json({
         message: 'Recurring booking created as a single series.',
         booking,
@@ -187,6 +339,14 @@ exports.createBooking = async (req, res) => {
       isRecurring: !!isRecurring,
       timeSubmitted: new Date()
     });
+
+    // Send email notification based on status
+    if (newBooking.status && ['confirmed', 'declined', 'cancelled'].includes(newBooking.status)) {
+      // Send email in background without blocking response
+      setImmediate(() => {
+        sendBookingEmail(newBooking, newBooking.status, newBooking.declineReason);
+      });
+    }
 
     res.status(201).json({
       message: 'Booking created successfully',
@@ -241,7 +401,7 @@ exports.updateBooking = async (req, res) => {
       const bufferStartTime = new Date(parsedStartTime.getTime() - 30 * 60 * 1000);
       const bufferEndTime = new Date(parsedEndTime.getTime() + 30 * 60 * 1000);
 
-      // FIXED: Only check for confirmed status bookings
+      // Only check for confirmed status bookings
       const overlappingBooking = await Booking.findOne({
         where: {
           bookingId: { [Op.ne]: req.params.id },  // Not equal to current booking ID
@@ -284,23 +444,36 @@ exports.updateBooking = async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
+    // Store the original status to check if it changed
+    const originalStatus = booking.status;
+
     // Prepare update data
     const updateData = { ...req.body };
 
     // If status is declined, set declineReason; otherwise, clear it
     if (status === 'declined') {
       updateData.declineReason = declineReason || '';
-    } else if (typeof declineReason !== 'undefined') {
+    } else if (status && status !== 'declined') {
       updateData.declineReason = null;
     }
 
     // Update the booking
     await booking.update(updateData);
     
-    // Return the updated booking
+    // Get the updated booking
     const updatedBooking = await Booking.findByPk(req.params.id);
+
+    // Send email notification if status changed and is one of the relevant statuses
+    if (status && status !== originalStatus && ['confirmed', 'declined', 'cancelled'].includes(status)) {
+      // Send email in background without blocking response
+      setImmediate(() => {
+        sendBookingEmail(updatedBooking, status, status === 'declined' ? declineReason : null);
+      });
+    }
+
     res.status(200).json(updatedBooking);
   } catch (error) {
+    console.error('Update Booking Error:', error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -438,13 +611,22 @@ exports.cancelBooking = async (req, res) => {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    // Only allow cancelling if status is pending
-    if (booking.status !== 'pending') {
-      return res.status(400).json({ message: 'Only pending bookings can be cancelled.' });
+    // Only allow cancelling if status is pending or confirmed
+    if (!['pending', 'confirmed'].includes(booking.status)) {
+      return res.status(400).json({ message: 'Only pending or confirmed bookings can be cancelled.' });
     }
 
+    const originalStatus = booking.status;
     booking.status = 'cancelled';
     await booking.save();
+
+    // Send cancellation email if status changed
+    if (originalStatus !== 'cancelled') {
+      // Send email in background without blocking response
+      setImmediate(() => {
+        sendBookingEmail(booking, 'cancelled');
+      });
+    }
 
     res.status(200).json({ message: 'Booking cancelled successfully', booking });
   } catch (error) {
