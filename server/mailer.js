@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+gitconst nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.office365.com',
@@ -8,8 +8,9 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
-  // Remove or adjust the tls option:
-  // tls: { rejectUnauthorized: false } // Uncomment only for testing if needed
+
 });
 
 module.exports = transporter;
+
+
