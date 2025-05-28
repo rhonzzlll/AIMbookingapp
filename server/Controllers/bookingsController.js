@@ -1,9 +1,11 @@
 const { Op } = require('sequelize');
 const db = require('../models');
 const Booking = db.Booking;
-const { v4: uuidv4 } = require('uuid'); // For unique recurrenceGroupId
+const { v4: uuidv4 } = require('uuid');  
 const transporter = require('../mailer');
-const User = db.User; // Assuming you have a User model
+const User = db.User;  
+const Room = db.Room;
+const Building = db.Building;
 
 const convertTo24HourFormat = (time) => {
   const [hourMinute, period] = time.split(' ');
@@ -18,15 +20,15 @@ const convertTo24HourFormat = (time) => {
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 };
 
-// Helper to format time as HH:mm
+ 
 function formatTimeToHHMM(timeVal) {
   if (!timeVal) return '';
   if (typeof timeVal === 'string') {
-    // Already a string, just take the first 5 chars
+  
     return timeVal.slice(0, 5);
   }
   if (timeVal instanceof Date) {
-    // It's a Date object, get hours and minutes
+     
     const hours = timeVal.getUTCHours().toString().padStart(2, '0');
     const minutes = timeVal.getUTCMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
@@ -34,10 +36,10 @@ function formatTimeToHHMM(timeVal) {
   return '';
 }
 
-// Helper to format date
+ 
 function formatDate(dateVal) {
   if (!dateVal) return '';
-  
+
   let date;
   if (dateVal instanceof Date) {
     date = dateVal;
@@ -46,26 +48,26 @@ function formatDate(dateVal) {
   } else {
     return '';
   }
-  
-  // Check if date is valid
+
+   
   if (isNaN(date.getTime())) {
     return '';
   }
-  
-  // Use UTC methods to avoid timezone issues
+
+ 
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth();
   const day = date.getUTCDate();
-  
+
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  
+
   return `${months[month]} ${day}, ${year}`;
 }
 
-// Helper to send email notifications
+ 
 async function sendBookingEmail(booking, status, declineReason = null) {
   try {
     const user = await User.findByPk(booking.userId);
@@ -73,6 +75,12 @@ async function sendBookingEmail(booking, status, declineReason = null) {
       console.log('User not found or no email address');
       return;
     }
+
+ 
+    const room = await Room.findByPk(booking.roomId);
+    const building = await Building.findByPk(booking.buildingId);
+    const roomDisplay = room ? room.roomName : booking.roomId;
+    const buildingDisplay = building ? building.buildingName : booking.buildingId;
 
     const bookingDate = formatDate(booking.date);
     const startTime = formatTimeToHHMM(booking.startTime);
@@ -83,43 +91,42 @@ async function sendBookingEmail(booking, status, declineReason = null) {
 
     switch (status) {
       case 'confirmed':
-        subject = 'Booking Confirmed - Your Reservation is Set!';
-        message = `Hello ${userName},
+        subject = 'Your Reservation is Confirmed';
+        message = `Dear ${userName},
 
-Great news! Your booking has been confirmed.
+We’re pleased to inform you that your reservation has been APPROVED.
+
+Should you have any special requests or require further assistance, please don’t hesitate to reach out.
 
 Booking Details:
-📅 Date: ${bookingDate}
-⏰ Time: ${startTime} - ${endTime}
-🏢 Room ID: ${booking.roomId}
-🏗️ Building ID: ${booking.buildingId}
+Date: ${bookingDate}
+ Time: ${startTime} - ${endTime}
+ Room: ${roomDisplay}
+ Building: ${buildingDisplay}
 
-Please arrive on time and follow all facility guidelines. If you need to make any changes, please contact us as soon as possible.
+Sincerely,
 
-Thank you for using our booking system!
-
-Best regards,
-Booking Management Team`;
+ACC Reservations`;
         break;
 
       case 'declined':
-        subject = 'Booking Declined - Alternative Options Available';
-        message = `Hello ${userName},
+        subject = 'Reservation Request Unsuccessful';
+        message = `Dear ${userName},
 
-We regret to inform you that your booking request has been declined.
+Thank you for your reservation request. Unfortunately, we are unable to accommodate your booking at this time due to unavailability or a scheduling conflict.
+
+We encourage you to check the booking calendar for alternative dates, and please feel free to contact us—we’d be glad to assist you in finding a suitable arrangement.
 
 Booking Details:
-📅 Date: ${bookingDate}
-⏰ Time: ${startTime} - ${endTime}
-🏢 Room ID: ${booking.roomId}
-🏗️ Building ID: ${booking.buildingId}
+Date: ${bookingDate}
+ Time: ${startTime} - ${endTime}
+ Room: ${roomDisplay}
+ Building: ${buildingDisplay}
+${declineReason ? `\n Reason: ${declineReason}` : ''}
 
-${declineReason ? `Reason: ${declineReason}` : ''}
+Sincerely,
 
-We apologize for any inconvenience. Please feel free to submit a new booking request for alternative dates or times, or contact us for assistance in finding suitable alternatives.
-
-Best regards,
-Booking Management Team`;
+ACC Reservations`;
         break;
 
       case 'cancelled':
@@ -129,10 +136,10 @@ Booking Management Team`;
 Your booking has been successfully cancelled.
 
 Cancelled Booking Details:
-📅 Date: ${bookingDate}
-⏰ Time: ${startTime} - ${endTime}
-🏢 Room ID: ${booking.roomId}
-🏗️ Building ID: ${booking.buildingId}
+ Date: ${bookingDate}
+ Time: ${startTime} - ${endTime}
+ Room: ${roomDisplay}
+ Building: ${buildingDisplay} 
 
 If you cancelled this booking by mistake or need to make a new reservation, please feel free to submit a new booking request.
 
@@ -140,6 +147,26 @@ Thank you for using our booking system!
 
 Best regards,
 Booking Management Team`;
+        break;
+
+      case 'pending':
+        subject = 'Your Reservation Request is Currently Pending';
+        message = `Dear ${userName},
+
+Thank you for submitting your reservation request. Your reservation is currently PENDING.
+
+Our team is reviewing the details and will notify you once a decision is made.
+Should you have any questions or updates, please don’t hesitate to reach out.
+
+Booking Details:
+Date: ${bookingDate}
+Time: ${startTime} - ${endTime}
+Room: ${roomDisplay}
+Building: ${buildingDisplay}
+
+Sincerely,
+
+ACC Reservations`;
         break;
 
       default:
@@ -157,6 +184,129 @@ Booking Management Team`;
     console.log(`Email sent successfully to ${user.email} for booking ${booking.bookingId} - Status: ${status}`);
   } catch (error) {
     console.error('Email send error:', error);
+  }
+}
+
+// Helper to send pending booking notification to all admins
+async function sendPendingBookingToAdmins(booking) {
+  try {
+    // Find all admins
+    const admins = await User.findAll({
+      where: db.Sequelize.where(
+        db.Sequelize.fn('LOWER', db.Sequelize.col('role')),
+        'admin'
+      )
+    });
+    if (!admins || admins.length === 0) {
+      console.log('No admin users found');
+      return;
+    }
+
+    // Find the user who made the booking
+    const user = await User.findByPk(booking.userId);
+    const userName = user ? (user.firstName || user.name || `User ID: ${booking.userId}`) : `User ID: ${booking.userId}`;
+
+    // Fetch room and building names
+    const room = await Room.findByPk(booking.roomId);
+    const building = await Building.findByPk(booking.buildingId);
+    const roomDisplay = room ? room.roomName : booking.roomId;
+    const buildingDisplay = building ? building.buildingName : booking.buildingId;
+
+    const bookingDate = formatDate(booking.date);
+    const startTime = formatTimeToHHMM(booking.startTime);
+    const endTime = formatTimeToHHMM(booking.endTime);
+
+    let subject = 'Your Reservation Request is Currently Pending';
+    let message = `Dear ${userName},
+
+Thank you for submitting your reservation request. Your reservation is currently PENDING.
+
+Our team is reviewing the details and will notify you once a decision is made.
+Should you have any questions or updates, please don’t hesitate to reach out.
+
+
+Booking Details:
+Date: ${bookingDate}
+Time: ${startTime} - ${endTime}
+Room: ${roomDisplay}
+Building: ${buildingDisplay}
+Requested by: ${userName} (${user && user.email ? user.email : ''})
+
+ 
+Sincerely,
+
+ACC Reservations`;
+
+    // Send to all admins
+    for (const admin of admins) {
+      if (admin.email) {
+        await transporter.sendMail({
+          from: process.env.SMTP_USER,
+          to: admin.email,
+          subject: subject,
+          text: message
+        });
+      }
+    }
+    console.log(`Pending booking email sent to all admins for booking ${booking.bookingId}`);
+  } catch (error) {
+    console.error('Admin pending booking email error:', error);
+  }
+}
+
+// Helper to send cancelled booking notification to all admins
+async function sendCancelledBookingToAdmins(booking) {
+  try {
+    const admins = await User.findAll({
+      where: db.Sequelize.where(
+        db.Sequelize.fn('LOWER', db.Sequelize.col('role')),
+        'admin'
+      )
+    });
+    if (!admins || admins.length === 0) {
+      console.log('No admin users found');
+      return;
+    }
+    const user = await User.findByPk(booking.userId);
+    const userName = user ? (user.firstName || user.name || `User ID: ${booking.userId}`) : `User ID: ${booking.userId}`;
+    const room = await Room.findByPk(booking.roomId);
+    const building = await Building.findByPk(booking.buildingId);
+    const roomDisplay = room ? room.roomName : booking.roomId;
+    const buildingDisplay = building ? building.buildingName : booking.buildingId;
+    const bookingDate = formatDate(booking.date);
+    const startTime = formatTimeToHHMM(booking.startTime);
+    const endTime = formatTimeToHHMM(booking.endTime);
+
+    let subject = 'Booking Cancelled - Notification';
+    let message = `Hello Admin,
+
+A booking has been cancelled.
+
+Cancelled Booking Details:
+ Date: ${bookingDate}
+ Time: ${startTime} - ${endTime}
+ Room: ${roomDisplay}
+ Building: ${buildingDisplay}
+ Cancelled by: ${userName} (${user && user.email ? user.email : ''})
+
+Please update your records if necessary.
+
+Best regards,
+Booking Management System`;
+
+    for (const admin of admins) {
+      if (admin.email) {
+        await transporter.sendMail({
+          from: process.env.SMTP_USER,
+          to: admin.email,
+          subject: subject,
+          text: message
+        });
+      }
+    }
+    console.log(`Cancelled booking email sent to all admins for booking ${booking.bookingId}`);
+  } catch (error) {
+    console.error('Admin cancelled booking email error:', error);
   }
 }
 
@@ -306,9 +456,15 @@ exports.createBooking = async (req, res) => {
 
       // Send email notification based on status
       if (booking.status && ['confirmed', 'declined', 'cancelled'].includes(booking.status)) {
-        // Send email in background without blocking response
         setImmediate(() => {
           sendBookingEmail(booking, booking.status, booking.declineReason);
+        });
+      }
+      // Send pending notification to all admins
+      if (booking.status === 'pending') {
+        setImmediate(() => {
+          sendBookingEmail(booking, 'pending'); // Send pending email to the user
+          sendPendingBookingToAdmins(booking); // Notify admins
         });
       }
 
@@ -345,6 +501,13 @@ exports.createBooking = async (req, res) => {
       // Send email in background without blocking response
       setImmediate(() => {
         sendBookingEmail(newBooking, newBooking.status, newBooking.declineReason);
+      });
+    }
+
+    // Send pending booking notification to admins
+    if (newBooking.status === 'pending') {
+      setImmediate(() => {
+        sendPendingBookingNotifications(newBooking); // Notify admins and user
       });
     }
 
@@ -439,7 +602,7 @@ exports.updateBooking = async (req, res) => {
 
     // Find the booking first
     const booking = await Booking.findByPk(req.params.id);
-    
+
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
@@ -459,7 +622,7 @@ exports.updateBooking = async (req, res) => {
 
     // Update the booking
     await booking.update(updateData);
-    
+
     // Get the updated booking
     const updatedBooking = await Booking.findByPk(req.params.id);
 
@@ -485,7 +648,7 @@ exports.deleteBooking = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
-    
+
     await booking.destroy();
     res.status(204).send();
   } catch (error) {
@@ -622,9 +785,9 @@ exports.cancelBooking = async (req, res) => {
 
     // Send cancellation email if status changed
     if (originalStatus !== 'cancelled') {
-      // Send email in background without blocking response
       setImmediate(() => {
-        sendBookingEmail(booking, 'cancelled');
+        sendBookingEmail(booking, 'cancelled');           // To user
+        sendCancelledBookingToAdmins(booking);            // To all admins
       });
     }
 
@@ -634,3 +797,112 @@ exports.cancelBooking = async (req, res) => {
     res.status(500).json({ message: 'Failed to cancel booking' });
   }
 };
+
+// Helper to send pending booking notification to all admins and the user
+async function sendPendingBookingNotifications(booking) {
+  try {
+    // Find all admins
+    const admins = await User.findAll({
+      where: db.Sequelize.where(
+        db.Sequelize.fn('LOWER', db.Sequelize.col('role')),
+        'admin'
+      )
+    });
+
+    if (!admins || admins.length === 0) {
+      console.log('No admin users found');
+    }
+
+    // Find the user who made the booking
+    const user = await User.findByPk(booking.userId);
+    if (!user || !user.email) {
+      console.log('User not found or no email address');
+      return;
+    }
+
+    const userName = user.firstName || user.name || `User ID: ${booking.userId}`;
+    const room = await Room.findByPk(booking.roomId);
+    const building = await Building.findByPk(booking.buildingId);
+    const roomDisplay = room ? room.roomName : booking.roomId;
+    const buildingDisplay = building ? building.buildingName : booking.buildingId;
+
+    const bookingDate = formatDate(booking.date);
+    const startTime = formatTimeToHHMM(booking.startTime);
+    const endTime = formatTimeToHHMM(booking.endTime);
+
+    // Email to Admins
+    const adminSubject = 'New Pending Booking Request';
+    const adminMessage = `Hello Admin,
+
+A new booking request is pending approval.
+
+Booking Details:
+ Date: ${bookingDate}
+Time: ${startTime} - ${endTime}
+ Room: ${roomDisplay}
+ Building: ${buildingDisplay}
+ Requested by: ${userName} (${user.email})
+
+Please review and take action in the booking system.`;
+
+    // Get admin emails
+    const adminEmails = admins
+      .filter(admin => admin.email)
+      .map(admin => admin.email);
+    
+    if (adminEmails.length > 0) {
+      try {
+        // Send a single email to all admins using BCC
+        await transporter.sendMail({
+          from: process.env.SMTP_USER,
+          bcc: adminEmails, // Use BCC so admins don't see each other's emails
+          subject: adminSubject,
+          text: adminMessage
+        });
+        console.log(`Pending booking email sent to ${adminEmails.length} admins`);
+      } catch (adminEmailError) {
+        console.error('Failed to send email to admins:', adminEmailError);
+      }
+    }
+
+    // Brief delay before sending user email
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Email to the User
+    const userSubject = 'Your Reservation Request is Currently Pending';
+    const userMessage = `Dear ${userName},
+
+Thank you for submitting your reservation request. Your reservation is currently PENDING.
+
+Our team is reviewing the details and will notify you once a decision is made.
+Should you have any questions or updates, please don’t hesitate to reach out.
+
+Booking Details:
+Date: ${bookingDate}
+Time: ${startTime} - ${endTime}
+Room: ${roomDisplay}
+Building: ${buildingDisplay}
+Requested by: ${userName} (${user.email})
+
+Sincerely,
+
+ACC Reservations`;
+
+    try {
+      await transporter.sendMail({
+        from: process.env.SMTP_USER,
+        to: user.email,
+        subject: userSubject,
+        text: userMessage
+      });
+      console.log(`Pending booking email sent to user ${user.email}`);
+    } catch (userEmailError) {
+      console.error(`Failed to send email to user ${user.email}:`, userEmailError);
+    }
+    
+  } catch (error) {
+    console.error('Error sending pending booking notifications:', error);
+  }
+}
+
+
