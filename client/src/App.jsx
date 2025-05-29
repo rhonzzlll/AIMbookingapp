@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 
 // Admin Pages
@@ -28,19 +28,18 @@ import './style.css';
 
 const AppContent = () => {
     const location = useLocation();
-
-    // Check if the current route is for admin pages
     const isAdminRoute = location.pathname.startsWith('/admin');
 
     return (
         <div>
             <div style={{ display: 'flex' }}>
-                {/* Conditionally render AdminSidebar for admin routes */}
                 {isAdminRoute && <AdminSidebar />}
 
-                {/* Main Content */}
                 <div style={{ flex: 1, padding: '20px' }}>
                     <Routes>
+                        {/* Root path redirect to login */}
+                        <Route path="/" element={<Navigate to="/login" replace />} />
+                        
                         {/* Admin Routes */}
                         <Route path="/admin/dashboard" element={<Dashboard />} />
                         <Route path="/admin/bookings" element={<Bookings />} />

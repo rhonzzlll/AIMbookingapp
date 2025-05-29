@@ -9,8 +9,49 @@ import { X, AlertCircle } from 'lucide-react';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import PrivacyModal from '../../components/ui/PrivacyModal';
 import CancelBookingConfirmation from './modals/CancelBookingConfirmation';
+import { useLocation } from 'react-router-dom';
  
 const API_BASE_URL = 'http://localhost:5000/api';
+
+const getAvailableIntervals = (bookings, businessHours) => {
+  const buffer = 30; // minutes
+  // Helper: convert to minutes
+  const toMinutesFromISO = iso => {
+    const d = new Date(iso);
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  };
+  const toMinutes = str => {
+    const [h, m] = str.split(":").map(Number);
+    return h * 60 + m;
+  };
+  // If no bookings, whole day available
+  if (!bookings || bookings.length === 0) {
+    return [{
+      start: toMinutes(businessHours.start),
+      end: toMinutes(businessHours.end),
+    }];
+  }
+  // Build array of occupied slots with buffer
+  const busy = bookings
+    .map(b => ({
+      start: Math.max(toMinutesFromISO(b.startTime) - buffer, toMinutes(businessHours.start)),
+      end: Math.min(toMinutesFromISO(b.endTime) + buffer, toMinutes(businessHours.end)),
+    }))
+    .sort((a, b) => a.start - b.start);
+  // Calculate available slots
+  const slots = [];
+  let current = toMinutes(businessHours.start);
+  for (const period of busy) {
+    if (period.start > current) {
+      slots.push({ start: current, end: period.start });
+    }
+    current = Math.max(current, period.end);
+  }
+  if (current < toMinutes(businessHours.end)) {
+    slots.push({ start: current, end: toMinutes(businessHours.end) });
+  }
+  return slots.filter(slot => slot.end > slot.start);
+};
 
 const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -91,126 +132,124 @@ const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
   );
 };
 
-const AvailableTime = ({ selectedDate, bookings, businessHours = { start: "08:00", end: "22:00" }, roomName }) => {
-  // ...rest of your code
-  const availableTimeSlots = useMemo(() => {
-    // Filter bookings for the selected date that are confirmed
-    const dateBookings = bookings
-      .filter(booking => 
-        booking.date === selectedDate && 
-        booking.status?.toLowerCase() === 'confirmed'
-      )
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
-    
-    if (dateBookings.length === 0) {
-      // If no bookings, return the full business hours
-      const slots = [];
-      const isCurrentDay = isToday(parseISO(selectedDate));
-      
-      // For current day, only show times from now onwards
-      let startTime;
-      if (isCurrentDay) {
-        const now = new Date();
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-        
-        // Round up to the nearest 30 minutes
-        const roundedMinute = currentMinute < 30 ? 30 : 0;
-        const roundedHour = currentMinute < 30 ? currentHour : currentHour + 1;
-        
-        startTime = `${roundedHour.toString().padStart(2, '0')}:${roundedMinute.toString().padStart(2, '0')}`;
-        
-        // If current time is after business hours, return empty array
-        if (startTime > businessHours.end) {
-          return [];
-        }
-      } else {
-        startTime = businessHours.start;
-      }
-      
-      slots.push({
-        start: startTime,
-        end: businessHours.end
-      });
-      
-      return slots;
-    }
-    
-    // Create available time slots between bookings
-    const slots = [];
-    let currentTime = businessHours.start;
-    
-    // Check if today and adjust start time if needed
-    if (isToday(parseISO(selectedDate))) {
-      const now = new Date();
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
-      
-      // Round up to the nearest 30 minutes
-      const roundedMinute = currentMinute < 30 ? 30 : 0;
-      const roundedHour = currentMinute < 30 ? currentHour : currentHour + 1;
-      
-      const nowTime = `${roundedHour.toString().padStart(2, '0')}:${roundedMinute.toString().padStart(2, '0')}`;
-      
-      if (nowTime > currentTime) {
-        currentTime = nowTime;
-      }
-    }
-    
-    // Add slots between bookings
-    for (const booking of dateBookings) {
-      const bookingStart = booking.startTime.includes('T') 
-        ? format(parseISO(booking.startTime), 'HH:mm')
-        : booking.startTime;
-        
-      // If there's time before this booking, add it as available
-      if (currentTime < bookingStart) {
-        slots.push({
-          start: currentTime,
-          end: bookingStart
-        });
-      }
-      
-      // Update current time to after this booking
-      const bookingEnd = booking.endTime.includes('T')
-        ? format(parseISO(booking.endTime), 'HH:mm')
-        : booking.endTime;
-        
-      currentTime = bookingEnd;
-    }
-    
-    // Add time after the last booking until end of business hours
-    if (currentTime < businessHours.end) {
-      slots.push({
-        start: currentTime,
-        end: businessHours.end
-      });
-    }
-    
-    return slots;
-  }, [selectedDate, bookings, businessHours]);
-
-  // Format time from 24h to 12h format
-  const formatTimeDisplay = (time) => {
-    try {
-      const [hours, minutes] = time.split(':').map(Number);
-      const date = new Date();
-      date.setHours(hours, minutes);
-      return format(date, 'h:mm a');
-    } catch (error) {
-      console.error('Time formatting error:', error);
-      return time;
-    }
+const AvailableTime = ({
+  selectedDate,
+  bookings,
+  businessHours = { start: "08:00", end: "22:00" },
+  roomName,
+}) => {
+  // Helper: convert ISO string (e.g., "1970-01-01T11:30:00.000Z") to minutes (from 00:00, using UTC!)
+  const toMinutesFromISO = (isoString) => {
+    const date = new Date(isoString);
+    return date.getUTCHours() * 60 + date.getUTCMinutes();
   };
 
-  const formattedDate = selectedDate ? 
-    format(parseISO(selectedDate), 'MMMM dd, yyyy') : 'Select a date';
+  // Helper: convert "08:00" string to minutes
+  const toMinutes = (timeString) => {
+    const [h, m] = timeString.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  // Helper: format minutes (from midnight) as "h:mm AM/PM"
+  const formatMinutesToAMPM = (minutes) => {
+    let hour = Math.floor(minutes / 60);
+    let minute = minutes % 60;
+    let suffix = "AM";
+    if (hour === 0) hour = 12;
+    else if (hour === 12) suffix = "PM";
+    else if (hour > 12) {
+      hour -= 12;
+      suffix = "PM";
+    }
+    return `${hour}:${minute.toString().padStart(2, "0")} ${suffix}`;
+  };
+
+  const availableTimeSlots = useMemo(() => {
+    const buffer = 30; // minutes
+
+    const toMinutesFromISO = (isoString) => {
+      const date = new Date(isoString);
+      return date.getUTCHours() * 60 + date.getUTCMinutes();
+    };
+
+    const toMinutes = (timeString) => {
+      const [h, m] = timeString.split(":").map(Number);
+      return h * 60 + m;
+    };
+
+    // No bookings? Full business hours available
+    if (!bookings || bookings.length === 0) {
+      return [
+        {
+          start: toMinutes(businessHours.start),
+          end: toMinutes(businessHours.end),
+        },
+      ];
+    }
+    
+  const busy = bookings
+    .map((b) => ({
+      start: Math.max(toMinutesFromISO(b.startTime) - buffer, toMinutes(businessHours.start)),
+      end: Math.min(toMinutesFromISO(b.endTime) + buffer, toMinutes(businessHours.end)),
+    }))
+    .sort((a, b) => a.start - b.start);
+
+  // Calculate available slots as gaps between busy slots
+  const slots = [];
+  let current = toMinutes(businessHours.start);
+
+  for (const period of busy) {
+    if (period.start > current) {
+      slots.push({ start: current, end: period.start });
+    }
+    current = Math.max(current, period.end);
+  }
+  if (current < toMinutes(businessHours.end)) {
+    slots.push({ start: current, end: toMinutes(businessHours.end) });
+  }
+
+  // Only show slots longer than 0 minutes and not in the past for today
+return slots
+  .map(slot => {
+    if (!selectedDate) return slot;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const isTodaySelected = (format(parseISO(selectedDate), 'yyyy-MM-dd') === todayStr);
+    if (!isTodaySelected) return slot;
+
+    // Current time in minutes, and the next future half hour
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const nextHalfHour = currentMinutes % 30 === 0
+      ? currentMinutes
+      : currentMinutes + (30 - (currentMinutes % 30));
+
+    // If the slot is entirely in the past, skip
+    if (slot.end <= nextHalfHour) return null;
+
+    // If the slot starts before nextHalfHour but ends after, truncate
+    if (slot.start < nextHalfHour && slot.end > nextHalfHour) {
+      return { start: nextHalfHour, end: slot.end };
+    }
+
+    // If the slot starts after nextHalfHour, keep as is
+    if (slot.start >= nextHalfHour) return slot;
+
+    // Otherwise, skip
+    return null;
+  })
+  .filter(slot => slot && slot.end > slot.start);
+}, [bookings, businessHours, selectedDate]);
+
+  // Render:
+  const formattedDate = selectedDate
+    ? format(parseISO(selectedDate), "MMMM dd, yyyy")
+    : "Select a date";
 
   return (
     <div className="relative bg-white rounded-lg shadow-md p-4 mt-4">
-    <h2 className="text-xl font-bold mb-4">
-      Available time for {roomName ? `"${roomName}"` : "room"} on {formattedDate}
-    </h2>
+      <h2 className="text-xl font-bold mb-4">
+        Available time for {roomName ? `"${roomName}"` : "room"} on {formattedDate}
+      </h2>
       <div className="overflow-y-auto max-h-96">
         {availableTimeSlots.length > 0 ? (
           availableTimeSlots.map((slot, index) => (
@@ -219,7 +258,7 @@ const AvailableTime = ({ selectedDate, bookings, businessHours = { start: "08:00
               className="bg-green-100 text-gray-800 rounded-md p-4 mb-4 shadow"
             >
               <div className="font-semibold text-lg">
-                {formatTimeDisplay(slot.start)} - {formatTimeDisplay(slot.end)}
+                {formatMinutesToAMPM(slot.start)} - {formatMinutesToAMPM(slot.end)}
               </div>
             </div>
           ))
@@ -252,31 +291,42 @@ const DaySchedule = ({ selectedDate, bookings }) => {
     });
   };
   
-  const formatTime = (timeString) => {
-    if (!timeString) return '';
-    
-    try {
-      // Handle ISO date strings
-      if (timeString.includes('T') || timeString.includes('Z')) {
-        const date = new Date(timeString);
-        if (isNaN(date)) return '';
-        return format(date, 'h:mm a');
-      }
+const formatTime = (timeString) => {
+  if (!timeString) return '';
+  
+  // If AM/PM already, return as-is
+  if (/am|pm/i.test(timeString)) return timeString;
 
-      // Handle 24-hour format (HH:MM)
-      if (timeString.includes(':')) {
-        const [hours, minutes] = timeString.split(':').map(Number);
-        const date = new Date();
-        date.setHours(hours, minutes);
-        return format(date, 'h:mm a');
-      }
-      
-      return timeString; // Return as is if format is unknown
-    } catch (error) {
-      console.error('Time formatting error:', error);
-      return timeString;
+  // If it's ISO string with T, extract the time part and convert to AM/PM
+  if (timeString.includes('T')) {
+    // Parse as UTC so time doesn't get offset
+    const date = new Date(timeString);
+    if (!isNaN(date)) {
+      let hour = date.getUTCHours();
+      let minute = date.getUTCMinutes();
+      let suffix = 'AM';
+      if (hour === 0) { hour = 12; }
+      else if (hour === 12) { suffix = 'PM'; }
+      else if (hour > 12) { hour -= 12; suffix = 'PM'; }
+      return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
     }
-  };
+  }
+
+  // If it's "HH:mm:ss" or "HH:mm"
+  const match = timeString.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (match) {
+    let [h, m] = [parseInt(match[1]), match[2]];
+    let suffix = 'AM';
+    if (h === 0) { h = 12; }
+    else if (h === 12) { suffix = 'PM'; }
+    else if (h > 12) { h -= 12; suffix = 'PM'; }
+    return `${h}:${m} ${suffix}`;
+  }
+
+  // Fallback
+  return timeString;
+};
+
 
   useEffect(() => {
     const fetchRooms = async () => {
@@ -335,6 +385,9 @@ const DaySchedule = ({ selectedDate, bookings }) => {
               >
                 <div className="font-semibold text-lg">
                   {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+                  {booking.recurringGroupId && (
+                    <span title="Recurring booking" className="ml-2 text-xs text-gray-500">↻</span>
+                  )}
                 </div>
                 <div className="text-sm mt-1">
                   Name: {booking.firstName} {booking.lastName}
@@ -365,6 +418,19 @@ const BookingApp = () => {
   const [bookingToCancel, setBookingToCancel] = useState(null);
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [selectedRoomName, setSelectedRoomName] = useState('');
+  const location = useLocation();
+
+    useEffect(() => {
+      if (
+        location.state &&
+        location.state.bookingData &&
+        location.state.bookingData.room
+      ) {
+        const { room } = location.state.bookingData;
+        setSelectedRoomId(room._id || room.roomId);
+        setSelectedRoomName(room.roomName);
+      }
+    }, [location.state]);
 
   const fetchBookings = async () => {
     try {
@@ -495,19 +561,46 @@ const handlePrivacyConfirm = async () => {
     return bookings.filter(b => b.status?.toLowerCase() === 'confirmed');
   }, [bookings]);
   
-const bookingsForSelectedDate = useMemo(() => {
+  const bookingsForSelectedDate = useMemo(() => {
+    const formattedSelectedDate = format(
+      typeof selectedDate === 'string' ? parseISO(selectedDate) : selectedDate,
+      'yyyy-MM-dd'
+    );
+
+    return bookings.filter(
+      (booking) =>
+        format(parseISO(booking.date), 'yyyy-MM-dd') === formattedSelectedDate &&
+        booking.status?.toLowerCase() === 'confirmed'
+    );
+  }, [bookings, selectedDate]);
+
   const formattedSelectedDate = format(
     typeof selectedDate === 'string' ? parseISO(selectedDate) : selectedDate,
     'yyyy-MM-dd'
   );
 
-  return bookings.filter(
-    (booking) =>
-      format(parseISO(booking.date), 'yyyy-MM-dd') === formattedSelectedDate &&
-      booking.status?.toLowerCase() === 'confirmed' &&
-      (!selectedRoomId || booking.roomId === selectedRoomId) // Filter by selectedRoomId if set
+  const availableIntervals = useMemo(
+    () =>
+      getAvailableIntervals(
+        bookings.filter(
+          (booking) =>
+            booking.roomId === selectedRoomId &&
+            format(parseISO(booking.date), 'yyyy-MM-dd') === formattedSelectedDate &&
+            booking.status?.toLowerCase() === 'confirmed'
+        ),
+        { start: "08:00", end: "22:00" }
+      ),
+    [bookings, selectedRoomId, formattedSelectedDate]
   );
-}, [bookings, selectedDate, selectedRoomId]);
+
+  const bookingsForSelectedRoomAndDate = useMemo(() => {
+    return bookings.filter(
+      (booking) =>
+        booking.roomId === selectedRoomId &&
+        format(parseISO(booking.date), 'yyyy-MM-dd') === formattedSelectedDate &&
+        booking.status?.toLowerCase() === 'confirmed'
+    );
+  }, [bookings, selectedRoomId, selectedDate, formattedSelectedDate]);
 
 
   return (
@@ -531,21 +624,26 @@ const bookingsForSelectedDate = useMemo(() => {
         )}
         
         <div className="relative flex flex-col lg:flex-row gap-6">
-          <div className="w-full lg:w-1/2">
+          <div className="w-full lg:w-[500px] xl:w-[600px] 2xl:w-[700px]">
             <BookingForm
               onBookingSubmit={handleBookingSubmit}
               setSelectedRoomId={setSelectedRoomId}
               setSelectedRoomName={setSelectedRoomName}
               selectedRoomId={selectedRoomId}
+              availableIntervals={availableIntervals}
             />
           </div>
           
-          <div className="w-full lg:w-1/2">
-            <Calendar
-              selectedDate={selectedDate}
-              onDateSelect={handleDateSelect}
-              bookings={confirmedBookings}
-            />
+            <div className="w-full lg:w-[500px] xl:w-[600px] 2xl:w-[700px]">
+              <Calendar
+                selectedDate={selectedDate}
+                onDateSelect={handleDateSelect}
+                bookings={
+                  selectedRoomId
+                    ? confirmedBookings.filter(b => b.roomId === selectedRoomId)
+                    : []
+                }
+              />
             <AvailableTime
               selectedDate={selectedDate}
               bookings={
@@ -562,7 +660,7 @@ const bookingsForSelectedDate = useMemo(() => {
             />
           <DaySchedule
             selectedDate={selectedDate}
-            bookings={bookingsForSelectedDate}
+            bookings={bookingsForSelectedRoomAndDate}
             roomName={selectedRoomName}
           />
           </div>

@@ -6,7 +6,14 @@ import home from "../../images/home.png";
 import imageCompression from 'browser-image-compression';
 
 const Profile = () => {
-  const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
+  const departments = [
+  'ASITE',
+  'WSGSB',
+  'SZGSDM',
+  'SEELL',
+  'Other Units',
+  'External'
+];
   const userId = localStorage.getItem("userId");
   const token = localStorage.getItem("token");
   const userRole = localStorage.getItem("role");

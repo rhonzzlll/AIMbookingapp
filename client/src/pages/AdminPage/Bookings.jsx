@@ -48,11 +48,21 @@ const convertTo24HourFormat = (time12h) => {
   return `${hours}:${minutes}:00`;
 };
 
+// Convert from 24-hour format (e.g. "14:00") to 12-hour format (e.g. "2:00 PM")
+function convertTo12HourFormat(time24) {
+  if (!time24) return '';
+  let [h, m] = time24.split(':');
+  h = parseInt(h, 10);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${suffix}`;
+}
+
 // Base API URL
 const API_BASE_URL = 'http://localhost:5000/api';
 
 // Predefined options for dropdowns
-const DEPARTMENTS = ['Engineering', 'Marketing', 'HR', 'Finance', 'Sales', 'IT', 'ICT'];
+const DEPARTMENTS = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
 
 // Initial form state
 const initialFormState = {
@@ -126,7 +136,7 @@ function TablePaginationActions(props) {
         {theme.direction === 'rtl' ? <KeyboardArrowRight /> : <KeyboardArrowLeft />}
       </IconButton>
       <IconButton
-        onClick={handleNextButtonClick}
+        onClick={handleNextButtonClick} // Corrected function name
         disabled={page >= Math.ceil(count / rowsPerPage) - 1}
         aria-label="next page"
       >
@@ -275,7 +285,7 @@ const Bookings = () => {
               email: userData.email || '',
               startTime: booking.startTime ? convertTo24HourFormat(booking.startTime) : '',
               endTime: booking.endTime ? convertTo24HourFormat(booking.endTime) : '',
-              recurring: booking.isRecurring ? 'Yes' : 'No'
+              recurring: booking.isRecurring ? (booking.recurrencePattern || 'Yes') : 'No'
             };
           })
         );
@@ -349,7 +359,7 @@ const Bookings = () => {
             email: userData.email || '',
               startTime: booking.startTime ? convertTo24HourFormat(booking.startTime) : '',
               endTime: booking.endTime ? convertTo24HourFormat(booking.endTime) : '',
-            recurring: booking.isRecurring ? 'Yes' : 'No'
+            recurring: booking.isRecurring ? (booking.recurrencePattern || 'Yes') : 'No'
           };
         })
       );
@@ -403,73 +413,75 @@ const Bookings = () => {
     resetForm();
     setIsAddModalOpen(true);
   };
-  
-  const handleEditClick = (booking) => {
-    console.log('Editing booking:', booking);
-    
-    // First set basic booking form data
-    setFormData({
-      ...booking,
-      date: parseISODate(booking.date),
-      startTime: booking.startTime || convertTo24HourFormat(booking.startTime),
-      endTime: booking.endTime || convertTo24HourFormat(booking.endTime),
-      isRecurring: booking.isRecurring || booking.recurring === 'Yes',
-      recurring: booking.isRecurring ? 'Yes' : 'No',
-      recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
-      isMealRoom: booking.isMealRoom || false,
-      isBreakRoom: booking.isBreakRoom || false,
-    });
-    
-    setEditBookingId(booking.bookingId);
-    
-    // Get the building ID from the booking
-    const buildingId = booking.buildingId || '';
-    
-    if (buildingId && rooms.length > 0) {
-      // Find rooms in this building
-      const roomsInBuilding = rooms.filter(room => 
-        room.buildingId && room.buildingId.toString() === buildingId.toString()
-      );
-      
-      // Extract unique categories
-      const categoriesMap = {};
-      roomsInBuilding.forEach(room => {
-        if (room.categoryId) {
-          const categoryId = room.categoryId.toString();
-          const categoryName = room.Category?.categoryName || room.category || `Category ${categoryId}`;
-          
-          if (!categoriesMap[categoryId]) {
-            categoriesMap[categoryId] = {
-              id: categoryId,
-              name: categoryName
-            };
-          }
-        }
-      });
-      
-      const categoriesList = Object.values(categoriesMap);
-      console.log("Setting categories for building:", categoriesList);
-      setCategories(categoriesList);
-      
-      // Get category ID from the booking
-      const categoryId = booking.categoryId || '';
-      
-      if (categoryId) {
-        // Find rooms in this building AND category
-        const filteredRooms = rooms.filter(room => 
-          room.buildingId && 
-          room.buildingId.toString() === buildingId.toString() &&
-          room.categoryId && 
-          room.categoryId.toString() === categoryId.toString()
-        );
-        
-        console.log("Setting available rooms:", filteredRooms);
-        setAvailableRooms(filteredRooms);
-      }
-    }
-    
-    setIsEditModalOpen(true);
+    const handleEditClick = (booking) => {
+  console.log('Editing booking:', booking);
+
+  // Extract time portion (HH:mm) from startTime and endTime
+  const extractTime = (dateTime) => {
+    if (!dateTime) return '';
+    const timePart = new Date(dateTime).toISOString().split('T')[1]; // Extract time portion
+    return timePart ? timePart.slice(0, 5) : ''; // Get HH:mm
   };
+
+  setFormData({
+    ...booking,
+    date: parseISODate(booking.date),
+    startTime: booking.startTime ? convertTo12HourFormat(extractTime(booking.startTime)) : '', // Convert to 12-hour format
+    endTime: booking.endTime ? convertTo12HourFormat(extractTime(booking.endTime)) : '',       // Convert to 12-hour format
+    isRecurring: booking.isRecurring || booking.recurring === 'Yes',
+    recurring: booking.isRecurring ? (booking.recurrencePattern || 'Daily') : 'No',
+    recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
+    isMealRoom: booking.isMealRoom || false,
+    isBreakRoom: booking.isBreakRoom || false,
+  });
+
+  setEditBookingId(booking.bookingId);
+
+  // Get the building ID from the booking
+  const buildingId = booking.buildingId || '';
+
+  if (buildingId && rooms.length > 0) {
+    // Find rooms in this building
+    const roomsInBuilding = rooms.filter(room =>
+      room.buildingId && room.buildingId.toString() === buildingId.toString()
+    );
+
+    // Extract unique categories
+    const categoriesMap = {};
+    roomsInBuilding.forEach(room => {
+      if (room.categoryId) {
+        const categoryId = room.categoryId.toString();
+        const categoryName = room.Category?.categoryName || room.category || `Category ${categoryId}`;
+
+        if (!categoriesMap[categoryId]) {
+          categoriesMap[categoryId] = {
+            id: categoryId,
+            name: categoryName
+          };
+        }
+      }
+    });
+
+    const categoriesList = Object.values(categoriesMap);
+    setCategories(categoriesList);
+
+    // Get category ID from the booking
+    const categoryId = booking.categoryId || '';
+
+    if (categoryId) {
+      // Find rooms in this building AND category
+      const filteredRooms = rooms.filter(room =>
+        room.buildingId &&
+        room.buildingId.toString() === buildingId.toString() &&
+        room.categoryId &&
+        room.categoryId.toString() === categoryId.toString()
+      );
+      setAvailableRooms(filteredRooms);
+    }
+  }
+
+  setIsEditModalOpen(true);
+};
   
   const handleDeleteClick = (booking) => {
     setBookingToDelete(booking);
@@ -1133,190 +1145,323 @@ const BookingForm = React.memo(({ isEdit }) => (
     )}
 
     {/* Form fields in two columns */}
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Booking Title</label>
-        <input
-          type="text"
-          name="title"
-          value={formData.title || ''}
-          onChange={handleInputChange}
-          required
-          placeholder="Enter booking title"
-          autoComplete="off"
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">First Name</label>
-        <input
-          type="text"
-          name="firstName"
-          value={formData.firstName || ''}
-          onChange={handleInputChange}
-          required
-          placeholder="Enter first name"
-          autoComplete="off"
-          className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-2 focus:ring-blue-400`}
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Last Name</label>
-        <input
-          type="text"
-          name="lastName"
-          value={formData.lastName || ''}
-          onChange={handleInputChange}
-          required
-          placeholder="Enter last name"
-          autoComplete="off"
-          className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-2 focus:ring-blue-400`}
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Department</label>
-        <select
-          name="department"
-          value={formData.department}
-          onChange={handleInputChange}
-          required
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
-        >
-          <option value="">Select Department</option>
-          {DEPARTMENTS.map(dept => (
-            <option key={dept} value={dept}>{dept}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
-        <select
-          name="status"
-          value={formData.status || 'pending'}
-          onChange={handleInputChange}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
-        >
-          <option value="pending">Pending</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="declined">Declined</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Building</label>
-        <select
-          name="buildingId"
-          value={formData.buildingId || ''}
-          onChange={handleBuildingChange}
-          required
-          className={`w-full p-2 border ${formError.building ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-2 focus:ring-blue-400`}
-        >
-          <option value="">Select Building</option>
-          {buildings.map(building => (
-            <option key={building.id} value={building.id}>
-              {building.name}
-            </option>
-          ))}
-        </select>
-        {formError.building && <p className="text-red-500 text-xs mt-1">{formError.building}</p>}
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Category</label>
-        <select
-          name="categoryId"
-          value={formData.categoryId || ''}
-          onChange={handleCategoryChange}
-          required
-          disabled={!formData.buildingId}
-          className={`w-full p-2 border ${formError.category ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-2 focus:ring-blue-400 ${!formData.buildingId ? 'bg-gray-100' : 'bg-white'}`}
-        >
-          <option value="">Select Category</option>
-          {categories.map(category => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-        {formError.category && <p className="text-red-500 text-xs mt-1">{formError.category}</p>}
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Room</label>
-        <select
-          name="roomId"
-          value={formData.roomId || ''}
-          onChange={handleRoomChange}
-          required
-          disabled={!formData.categoryId}
-          className={`w-full p-2 border ${formError.room ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-2 focus:ring-blue-400 ${!formData.categoryId ? 'bg-gray-100' : 'bg-white'}`}
-        >
-          <option value="">Select Room</option>
-          {availableRooms.map(room => (
-            <option key={room.roomId} value={room.roomId}>
-              {room.roomName} {room.capacity ? `(Capacity: ${room.capacity})` : ''}
-            </option>
-          ))}
-        </select>
-        {formError.room && <p className="text-red-500 text-xs mt-1">{formError.room}</p>}
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Pax</label>
-        <input
-          type="number"
-          name="bookingCapacity"
-          value={formData.bookingCapacity || 1}
-          onChange={handleInputChange}
-          min="1"
-          required
-          className={`w-full p-2 border ${formError.bookingCapacity ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-2 focus:ring-blue-400`}
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Date</label>
-        <input
-          type="date"
-          name="date"
-          value={formData.date}
-          onChange={handleInputChange}
-          required
-          min={new Date().toISOString().split('T')[0]}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Start Time</label>
-        <select
-          value={formData.startTime || ''}
-          onChange={(e) => handleTimeChange('startTime', e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400 bg-white"
-        >
-          <option value="">Select Start Time</option>
-          {TIME_OPTIONS.map((time) => (
-            <option key={time} value={time}>
-              {time}
-            </option>
-          ))}
-        </select>
-        {formError.time && <p className="text-red-500 text-xs mt-1">{formError.time}</p>}
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">End Time</label>
-        <select
-          value={formData.endTime || ''}
-          onChange={(e) => handleTimeChange('endTime', e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400 bg-white"
-        >
-          <option value="">Select End Time</option>
-          {getFilteredEndTimes().map((time) => (
-            <option key={time} value={time}>
-              {time}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Booking Title</label>
+            <input
+              type="text"
+              name="title"
+              defaultValue={formData.title} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))} // Update state on blur
+              onFocus={(e) => e.target.select()} // Retain focus
+              required
+              placeholder="Enter booking title"
+              autoComplete="off"
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+            <input
+              type="text"
+              required
+              placeholder="Enter first name"
+              defaultValue={formData.firstName} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
+              autoComplete="off"
+              className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+            <input
+              type="text"
+              name="lastName"
+              defaultValue={formData.lastName} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))} // Update state on blur
+              required
+              placeholder="Enter last name"
+              autoComplete="off"
+              className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">School</label>
+            <select
+              name="department"
+              value={formData.department}
+              onChange={handleInputChange}
+              required
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Select School</option>
+              {DEPARTMENTS.map(dept => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              name="status"
+              value={formData.status || 'pending'}
+              onChange={handleInputChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="declined">Declined</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Building</label>
+            <select
+              name="buildingId"
+              value={formData.buildingId || ''}
+              onChange={handleBuildingChange}
+              required
+              className={`w-full p-2 border ${formError.building ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+            >
+              <option value="">Select Building</option>
+              {buildings.map(building => (
+                <option key={building.id} value={building.id}>
+                  {building.name}
+                </option>
+              ))}
+            </select>
+            {formError.building && <p className="text-red-500 text-xs mt-1">{formError.building}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              name="categoryId"
+              value={formData.categoryId || ''}
+              onChange={handleCategoryChange}
+              required
+              disabled={!formData.buildingId}
+              className={`w-full p-2 border ${formError.category ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500 ${!formData.buildingId ? 'bg-gray-100' : 'bg-white'}`}
+            >
+              <option value="">Select Category</option>
+              {categories.map(category => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            {formError.category && <p className="text-red-500 text-xs mt-1">{formError.category}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+            <select
+              name="roomId"
+              value={formData.roomId || ''}
+              onChange={handleRoomChange}
+              required
+              disabled={!formData.categoryId}
+              className={`w-full p-2 border ${formError.room ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500 ${!formData.categoryId ? 'bg-gray-100' : 'bg-white'}`}
+            >
+              <option value="">Select Room</option>
+              {availableRooms.map(room => (
+                <option key={room.roomId} value={room.roomId}>
+                  {room.roomName} {room.capacity ? `(Capacity: ${room.capacity})` : ''}
+                </option>
+              ))}
+            </select>
+            {formError.room && <p className="text-red-500 text-xs mt-1">{formError.room}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pax</label>
+            <input
+              type="number"
+              name="bookingCapacity"
+              value={formData.bookingCapacity || 1}
+              onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
+              min="1"
+              required
+              className={`w-full p-2 border ${formError.bookingCapacity ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+            />
+            {formError.bookingCapacity && <p className="text-red-500 text-xs mt-1">{formError.bookingCapacity}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input
+              type="date"
+              name="date"
+              value={formData.date}
+              onChange={handleInputChange}
+              required
+              min={new Date().toISOString().split('T')[0]} // disables past dates
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+            <select
+              value={formData.startTime || ''}
+              onChange={(e) => handleTimeChange('startTime', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="">Select Start Time</option>
+              {getFilteredStartTimes().map((time) => (
+                <option key={time} value={time}>
+                  {time}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+            <select
+              value={formData.endTime || ''}
+              onChange={(e) => handleTimeChange('endTime', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
+              disabled={!formData.startTime}
+            >
+              <option value="">Select End Time</option>
+              {getFilteredEndTimes().map((time) => (
+                <option key={time} value={time}>
+                  {time}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
     {/* Divider */}
-    <div className="border-t pt-4 mt-2">
-      <div className="flex flex-wrap gap-6">
+      <div className="border-t pt-4 mt-2 flex flex-col items-center">
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-700">Other Request</label>
+        </div>
+        <div className="flex flex-row flex-wrap justify-center gap-12">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="isMealRoom"
+              name="isMealRoom"
+              checked={formData.isMealRoom}
+              onChange={(e) => setFormData((prev) => ({ ...prev, isMealRoom: e.target.checked }))}
+              className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="isMealRoom" className="ml-2 text-sm text-gray-700">
+              Meal Venue Required 
+            </label>
+          </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="isBreakRoom"
+              name="isBreakRoom"
+              checked={formData.isBreakRoom}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  isBreakRoom: e.target.checked,
+                  // Reset break room details when unchecked
+                  ...(e.target.checked
+                    ? {}
+                    : {
+                        numberOfPaxBreakRoom: '',
+                        startTimeBreakRoom: '',
+                        endTimeBreakRoom: '',
+                      }),
+                }))
+              }
+              className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="isBreakRoom" className="ml-2 text-sm text-gray-700">
+              Breakout Room Required
+            </label>
+          </div>
+        </div>
+      </div>
+
+
+      {formData.isBreakRoom && (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-4 w-full">
+        {/* Number of Pax for Break Room */}
+        <div className="md:col-span-2">
+          <label className="block text-gray-700 font-medium mb-2">
+            Number of Pax (Break Room) <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="number"
+            name="numberOfPaxBreakRoom"
+            value={formData.numberOfPaxBreakRoom || ''}
+            onChange={e => setFormData(prev => ({
+              ...prev,
+              numberOfPaxBreakRoom: e.target.value,
+            }))}
+            min={1}
+            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter number of participants for break room"
+            required={formData.isBreakRoom}
+          />
+        </div>
+        {/* Start Time for Break Room */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">
+            Break Room Start Time <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="startTimeBreakRoom"
+            value={formData.startTimeBreakRoom || ''}
+            onChange={e => setFormData(prev => ({
+              ...prev,
+              startTimeBreakRoom: e.target.value,
+              // Reset end time if start changes
+              endTimeBreakRoom: '',
+            }))}
+            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required={formData.isBreakRoom}
+          >
+            <option value="">Select Start Time</option>
+            {TIME_OPTIONS.map((time) => (
+              <option key={time} value={time}>{time}</option>
+            ))}
+          </select>
+        </div>
+        {/* End Time for Break Room */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">
+            Break Room End Time <span className="text-red-500">*</span>
+          </label>
+          <select
+            name="endTimeBreakRoom"
+            value={formData.endTimeBreakRoom || ''}
+            onChange={e => setFormData(prev => ({
+              ...prev,
+              endTimeBreakRoom: e.target.value,
+            }))}
+            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required={formData.isBreakRoom}
+            disabled={!formData.startTimeBreakRoom}
+          >
+            <option value="">Select End Time</option>
+            {TIME_OPTIONS
+              .filter(
+                (time) =>
+                  !formData.startTimeBreakRoom ||
+                  TIME_OPTIONS.indexOf(time) > TIME_OPTIONS.indexOf(formData.startTimeBreakRoom)
+              )
+              .map((time) => (
+                <option key={time} value={time}>{time}</option>
+              ))}
+          </select>
+        </div>
+      </div>
+    )}
+
+      <div className="pt-4 mt-2 flex flex-col items-center">
         <div className="flex items-center">
           <input
             type="checkbox"
@@ -1336,34 +1481,9 @@ const BookingForm = React.memo(({ isEdit }) => (
           <label htmlFor="isRecurring" className="ml-2 text-sm text-gray-700">
             Recurring Booking
           </label>
-        </div>
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            id="isMealRoom"
-            name="isMealRoom"
-            checked={formData.isMealRoom}
-            onChange={(e) => setFormData((prev) => ({ ...prev, isMealRoom: e.target.checked }))}
-            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-          <label htmlFor="isMealRoom" className="ml-2 text-sm text-gray-700">
-            Meal Room
-          </label>
-        </div>
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            id="isBreakRoom"
-            name="isBreakRoom"
-            checked={formData.isBreakRoom}
-            onChange={(e) => setFormData((prev) => ({ ...prev, isBreakRoom: e.target.checked }))}
-            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-          <label htmlFor="isBreakRoom" className="ml-2 text-sm text-gray-700">
-            Break Room
-          </label>
-        </div>
+        </div>  
       </div>
+
       {/* Recurring fields */}
       {formData.isRecurring && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -1397,7 +1517,6 @@ const BookingForm = React.memo(({ isEdit }) => (
           </div>
         </div>
       )}
-    </div>
 
     {/* Notes and Remarks */}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1441,10 +1560,8 @@ const BookingForm = React.memo(({ isEdit }) => (
       </button>
       <button
         type="submit"
-        className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${
-          submitLoading || !availabilityStatus.available ? 'opacity-75 cursor-not-allowed' : ''
-        }`}
-        disabled={submitLoading || !availabilityStatus.available}
+        className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${submitLoading ? 'opacity-75 cursor-not-allowed' : ''}`}
+        disabled={submitLoading}
       >
         {submitLoading ? 'Processing...' : isEdit ? 'Update Booking' : 'Create Booking'}
       </button>
@@ -1589,9 +1706,9 @@ const BookingForm = React.memo(({ isEdit }) => (
                       <TableCell>{booking.roomName}</TableCell>
                       <TableCell>{booking.building}</TableCell>
                       <TableCell>
-                        {booking.recurring !== 'No' && booking.recurrenceEndDate ? (
+                        {booking.recurring !== 'No' && booking.recurringEndDate ? (
                           <div>
-                            {formatDate(booking.date)} - {formatDate(booking.recurrenceEndDate)} ({booking.recurring})
+                            {formatDate(booking.date)} - {formatDate(booking.recurringEndDate)} ({booking.recurring})
                           </div>
                         ) : (
                           <div>{formatDate(booking.date)}</div>
@@ -1657,7 +1774,9 @@ const BookingForm = React.memo(({ isEdit }) => (
                           </small>
                         )}
                       </TableCell>
-                      <TableCell>{booking.recurring}</TableCell>
+                      <TableCell>
+                        {booking.recurring}
+                      </TableCell>
                       <TableCell>
                         {booking.timeSubmitted
                           ? new Date(booking.timeSubmitted).toLocaleString()
@@ -1760,18 +1879,24 @@ const BookingForm = React.memo(({ isEdit }) => (
 
             // Get current user's name for changedBy
             const userId = localStorage.getItem('userId');
-            let changedBy = 'Unknown User';
-            if (userId) {
-              try {
-                const userResponse = await fetch(`${API_BASE_URL}/users/${userId}`, {
-                  headers: { Authorization: `Bearer ${token}` }
-                });
-                if (userResponse.ok) {
-                  const userData = await userResponse.json();
-                  changedBy = `${userData.firstName} ${userData.lastName}`;
-                }
-              } catch {}
-            }
+           let changedBy = 'Unknown User';
+
+if (userId) {
+  try {
+    const userResponse = await fetch(`${API_BASE_URL}/users/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (userResponse.ok) {
+      const userData = await userResponse.json();
+      changedBy = `${userData.firstName} ${userData.lastName}`;
+    } else {
+      console.error(`Failed to fetch user details. Status: ${userResponse.status}`);
+    }
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+  }
+}   
 
             // Find all bookings in the same recurring group
             let seriesBookings = [];
@@ -1836,7 +1961,7 @@ const BookingForm = React.memo(({ isEdit }) => (
               }));
             }
 
-            // Success - refresh bookings and close modal
+              // Success - refresh bookings and close modal
             await fetchBookings();
             setIsStatusModalOpen(false);
           } catch (err) {

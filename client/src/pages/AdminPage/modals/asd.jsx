@@ -37,8 +37,14 @@ const convertTo24HourFormat = (time12h) => {
 const API_BASE_URL = 'http://localhost:5000/api';
 
 // Predefined options for dropdowns
-const DEPARTMENTS = ['Engineering', 'Marketing', 'HR', 'Finance', 'Sales', 'IT', 'ICT'];
-
+const DEPARTMENTS = [
+  'ASITE',
+  'WSGSB',
+  'SZGSDM',
+  'SEELL',
+  'Other Units',
+  'External'
+];
 // Initial form state
 const initialFormState = {
   title: '',

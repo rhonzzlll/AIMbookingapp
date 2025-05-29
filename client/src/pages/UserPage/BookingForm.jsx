@@ -4,7 +4,7 @@ import axios from 'axios';
 import bg from '../../images/bg.png';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Confirm from "../../components/ui/ConfirmationModal";  
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid'; // <-- Add this at the top
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -12,13 +12,7 @@ const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
   '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
   '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM','10:30 PM', '11:00 PM', '11:30 PM',
-];
-
-const RECURRENCE_OPTIONS = [
-  { value: 'Daily', label: 'Daily' },
-  { value: 'Weekly', label: 'Weekly' },
-  { value: 'Monthly', label: 'Monthly' }
+  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
 
 const convertTo24HourFormat = (time12h) => {
@@ -30,17 +24,45 @@ const convertTo24HourFormat = (time12h) => {
   if (hours === '12') {
     hours = modifier === 'PM' ? '12' : '00';
   } else {
-    hours = modifier === 'PM' ? String(parseInt(hours, 10) + 12) : hours.padStart(2, '0');
+    hours = modifier === 'PM' ? String(parseInt(hours, 10)  +12) : hours.padStart(2, '0');
   }
 
   // Ensure seconds are always included
   return `${hours}:${minutes}:00`;
 };
 
-const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
+const toTimeHHMM = (time12h) => {
+  if (!time12h) return '';
+  
+  const [time, modifier] = time12h.split(' ');
+  let [hours, minutes] = time.split(':');
+  hours = parseInt(hours, 10);
+  
+  // Convert hours to 24-hour format
+  if (modifier === 'PM' && hours !== 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  
+  // Format to HH:MM with leading zeros
+  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+};
+
+const toTimeISOString = (time12h) => {
+
+  if (!time12h) return '';
+  const [time, modifier] = time12h.split(' ');
+  let [hours, minutes] = time.split(':');
+  hours = parseInt(hours, 10);
+  if (modifier === 'PM' && hours !== 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  // Always UTC for time-only
+  return new Date(Date.UTC(2025, 0, 1, hours, parseInt(minutes, 10))).toISOString();
+};
+ 
+const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, selectedRoomId, availableIntervals = []}) => {
+  // ...
   const location = useLocation();
   const bookingData = location.state?.bookingData;
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // Initialize the navigate function
   
   const handleGoBack = () => {
     navigate(-1); // Navigate to the previous page
@@ -82,24 +104,27 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
   const [unavailableTimeSlots, setUnavailableTimeSlots] = useState([]);
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [availabilityStatus, setAvailabilityStatus] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [roomMap, setRoomMap] = useState({});
   const [blockedTimes, setBlockedTimes] = useState([]);
-  // Always generate a new recurringGroupId for each new recurring booking
+  // Add this state to manage recurring group ID
   const [recurringGroupId, setRecurringGroupId] = useState('');
 
   const userId = localStorage.getItem('userId');
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('role');
 
-  // Generate recurringGroupId when user checks "isRecurring"
-  useEffect(() => {
-    if (formData.isRecurring && !recurringGroupId) {
-      setRecurringGroupId(uuidv4());
-    }
-    if (!formData.isRecurring && recurringGroupId) {
-      setRecurringGroupId('');
-    }
-  }, [formData.isRecurring]);
+  // Predefined departments array
+  const departments = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
+
+  // Recurrence options
+  const RECURRENCE_OPTIONS = [
+    { value: 'Daily', label: 'Daily' },
+    { value: 'Weekly', label: 'Weekly' },
+    { value: 'Monthly', label: 'Monthly' }
+  ];
 
   // Apply booking data from AccRooms if available
   useEffect(() => {
@@ -370,7 +395,8 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
     if (formData.buildingId && formData.categoryId) {
       const filtered = rooms.filter(
         (room) =>
-          room.buildingId === formData.buildingId && room.categoryId === formData.categoryId
+          room.buildingId.toString() === formData.buildingId.toString() &&
+          room.categoryId.toString() === formData.categoryId.toString()
       );
       
       // Sort rooms by name
@@ -424,16 +450,14 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
       const selectedRoom = roomMap[value] || {};
       setFormData({
         ...formData,
-        [name]: value,
-        roomName: selectedRoom.roomName || '',
+        [name]: value, // Set the roomId correctly
+        roomName: selectedRoom.roomName || '', // Set the roomName from the selected room
       });
       setAvailabilityStatus(null);
 
-      // Notify parent of room selection
-      if (onRoomSelect) {
-        onRoomSelect(value);
-      }
-
+        if (setSelectedRoomId) setSelectedRoomId(value);
+        if (setSelectedRoomName) setSelectedRoomName(selectedRoom.roomName || '');
+  
       // Check availability after a short delay
       if (formData.buildingId && value && formData.date && formData.startTime && formData.endTime) {
         checkTimeAvailability({
@@ -463,6 +487,16 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
       });
     }
   };
+
+  // Generate recurringGroupId when user checks "isRecurring"
+  useEffect(() => {
+    if (formData.isRecurring && !recurringGroupId) {
+      setRecurringGroupId(uuidv4());
+    }
+    if (!formData.isRecurring && recurringGroupId) {
+      setRecurringGroupId('');
+    }
+  }, [formData.isRecurring]);
 
   const checkTimeAvailability = async (data) => {
     if (!data.date || !data.startTime || !data.endTime || !data.roomId || !data.categoryId) {
@@ -542,46 +576,41 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
     return unavailableSlot ? unavailableSlot.reason : '';
   };
 
-  const getAvailableStartTimes = () => {
-    const now = new Date();
-    const selectedDate = new Date(formData.date);
-  
-    return TIME_OPTIONS.filter((time) => {
-      if (isTimeBlocked(time)) return false;
-  
-      // Prevent selecting past times for today
-      if (selectedDate.toDateString() === now.toDateString()) {
-        const time24 = convertTo24HourFormat(time);
-        const [hours, minutes] = time24.split(':').map(Number);
-        const optionDate = new Date(formData.date);
-        optionDate.setHours(hours);
-        optionDate.setMinutes(minutes);
-  
-        if (optionDate.getTime() < now.getTime()) {
-          return false;
-        }
-      }
-  
-      // Prevent selecting a start time that overlaps with an existing booking
-      const time24 = convertTo24HourFormat(time);
-      const [hours, minutes] = time24.split(':').map(Number);
-      const optionStartDate = new Date(formData.date);
-      optionStartDate.setHours(hours);
-      optionStartDate.setMinutes(minutes);
-  
-      for (const booking of blockedTimes) {
-        const bookingStart = new Date(`${booking.date}T${convertTo24HourFormat(booking.startTime)}:00`);
-        const bookingEnd = new Date(`${booking.date}T${convertTo24HourFormat(booking.endTime)}:00`);
-  
-        // If the selected start time falls within a blocked range, reject it
-        if (optionStartDate >= bookingStart && optionStartDate < bookingEnd) {
-          return false;
-        }
-      }
-  
-      return true;
-    });
+  // Helper to convert minutes to time string (e.g. 8:00 AM)
+  const minutesToTime = (minutes) => {
+    let h = Math.floor(minutes / 60);
+    let m = minutes % 60;
+    let suffix = h >= 12 ? "PM" : "AM";
+    if (h === 0) h = 12;
+    else if (h > 12) h -= 12;
+    return `${h}:${m.toString().padStart(2, "0")} ${suffix}`;
   };
+
+  const getCurrentMinutes = () => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  };
+
+  // Only show interval starts as start times
+  const getAvailableStartTimes = () => {
+    if (!availableIntervals || availableIntervals.length === 0) return [];
+
+    // Calculate if the booking is for today
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const isToday = formData.date === todayStr;
+    const currentMinutes = getCurrentMinutes();
+
+    const times = [];
+    availableIntervals.forEach(({ start, end }) => {
+      for (let t = start; t + 30 <= end; t += 30) {
+        // If it's today, only show times in the future
+        if (!isToday || t > currentMinutes) {
+          times.push(minutesToTime(t));
+        }
+      }
+    });
+    return times;
+};
   
   const isTimeBlocked = (time) => {
     if (!unavailableTimeSlots.length) return false;
@@ -596,62 +625,32 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
     });
   };
   
-  const getFilteredEndTimes = () => {
-    // If no start time is selected, allow all end times to be available
-    if (!formData.startTime) {
-      return TIME_OPTIONS; // Return all end time options if no start time
-    }
-  
-    const startIndex = TIME_OPTIONS.findIndex(
-      (time) => time === formData.startTime
-    );
-  
-    if (startIndex === -1) {
-      return TIME_OPTIONS; // Fallback if start time not found
-    }
-  
-    const startTime24 = convertTo24HourFormat(formData.startTime);
-    const startTimeDate = new Date(`${formData.date}T${startTime24}:00`);
-  
-    // Find the earliest upcoming blocked time AFTER the start time
-    const upcomingBlockedTime = TIME_OPTIONS.slice(startIndex + 1).find((time) => {
-      if (!isTimeBlocked(time)) return false;
-  
-      const blockedTime24 = convertTo24HourFormat(time);
-      const blockedTimeDate = new Date(`${formData.date}T${blockedTime24}:00`);
-  
-      return blockedTimeDate > startTimeDate;
-    });
-  
-    return TIME_OPTIONS.slice(startIndex + 1).filter((time) => {
-      if (isTimeBlocked(time)) return false;
-  
-      const endTime24 = convertTo24HourFormat(time);
-      const endTimeDate = new Date(`${formData.date}T${endTime24}:00`);
-  
-      if (endTimeDate <= startTimeDate) return false;
-  
-      // Cut off options if we found a blocked time after the start time
-      if (upcomingBlockedTime) {
-        const blockedTime24 = convertTo24HourFormat(upcomingBlockedTime);
-        const blockedTimeDate = new Date(`${formData.date}T${blockedTime24}:00`);
-  
-        return endTimeDate < blockedTimeDate;
-      }
-  
-      return true;
-    });
+const getFilteredEndTimes = () => {
+  if (!formData.startTime) return [];
+  // Find the interval that contains the selected start time
+  const toMinutes = (timeString) => {
+    const [time, period] = timeString.split(" ");
+    let [h, m] = time.split(":").map(Number);
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return h * 60 + m;
   };
+  const startMinutes = toMinutes(formData.startTime);
 
-  // --- Recurrence Validation ---
-  const isRecurrenceValid = () => {
-    if (!formData.isRecurring) return true;
-    if (!formData.recurrenceType || !formData.recurrenceEndDate) return false;
-    if (formData.recurrenceEndDate < formData.date) return false;
-    return true;
-  };
+  const interval = availableIntervals.find(
+    ({ start, end }) => start <= startMinutes && startMinutes < end
+  );
+  if (!interval) return [];
 
-  // --- Handle Submit ---
+  // Show 30-min increments from start+30 up to interval end
+  const times = [];
+  for (let t = startMinutes + 30; t <= interval.end; t += 30) {
+    times.push(minutesToTime(t));
+  }
+  return times;
+};
+
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -701,6 +700,7 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
         status: formData.status
       };
 
+      // Remove undefined fields
       Object.keys(bookingPayload).forEach(
         (key) => bookingPayload[key] === undefined && delete bookingPayload[key]
       );
@@ -746,9 +746,12 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
           <div className="absolute inset-0 bg-black bg-opacity-10" />
         </div>
 
-        <div className="relative bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-2xl font-bold mb-6 text-gray-800">Create New Booking</h2>
-          
+        <div className="relative bg-white rounded-lg shadow-md p-8 max-w-xl mx-auto">  
+            <h2 className="text-2xl font-bold mb-1 text-gray-800">Create New Booking</h2>
+            <p className="text-xs text-gray-500 italic text-center mb-6">
+              Fields marked with <span className="text-red-500">*</span> are required.
+            </p>
+         
           {error && (
             <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
               {error}
@@ -759,7 +762,7 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
             {/* Booking Title */}
             <div className="mb-6">
               <label className="block text-gray-700 font-medium mb-2">
-                Booking Title <span className="text-red-500">*</span>
+                Event Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -791,11 +794,6 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
                   </option>
                 ))}
               </select>
-              {formData.buildingId && (
-                <p className="mt-1 text-sm text-gray-600">
-                  Selected: {formData.buildingName || buildings.find(b => b.id === formData.buildingId)?.name || formData.buildingId}
-                </p>
-              )}
             </div>
 
             {/* Category Selection */}
@@ -818,11 +816,6 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
                   </option>
                 ))}
               </select>
-              {formData.categoryId && (
-                <p className="mt-1 text-sm text-gray-600">
-                  Selected: {formData.categoryName || categories.find(c => c.id === formData.categoryId)?.name || formData.categoryId}
-                </p>
-              )}
             </div>
 
             {/* Room Selection */}
@@ -845,63 +838,29 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
                   </option>
                 ))}
               </select>
-              {formData.roomId && roomMap[formData.roomId] && (
-                <p className="mt-1 text-sm text-gray-600">Selected: {roomMap[formData.roomId].roomName}</p>
-              )}
             </div>
 
-            {/* Additional Room Options */}
-            <div className="mb-6 flex flex-wrap gap-6">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="isMealRoom"
-                  name="isMealRoom"
-                  checked={formData.isMealRoom}
-                  onChange={handleChange}
-                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="isMealRoom" className="ml-2 text-gray-700 font-medium">
-                  Need Meal Room
-                </label>
-              </div>
-              
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="isBreakRoom"
-                  name="isBreakRoom"
-                  checked={formData.isBreakRoom}
-                  onChange={handleChange}
-                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="isBreakRoom" className="ml-2 text-gray-700 font-medium">
-                  Need Breakout Room
-                </label>
-              </div>
-              
-              <div className="flex items-center ml-6">
-                <label htmlFor="bookingCapacity" className="mr-2 text-gray-700 font-medium">
-                  Capacity:
-                </label>
-                <input
-                  type="number"
-                  id="bookingCapacity"
-                  name="bookingCapacity"
-                  min="1"
-                  max="100"
-                  value={formData.bookingCapacity}
-                  onChange={handleChange}
-                  className="w-20 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+            {/* Number of Pax */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                Number of Pax <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                name="bookingCapacity"
+                value={formData.bookingCapacity}
+                onChange={handleChange}
+                placeholder="Enter number of participants"
+                min={1}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
             </div>
 
-            {/* Date and Time */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+             {/* Date*/}
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
-                  Date <span className="text-red-500">*</span>
+                  Date of Booking <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
@@ -909,10 +868,14 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
                   value={formData.date}
                   min={format(new Date(), 'yyyy-MM-dd')}
                   onChange={handleChange}
+                    style={{ textAlign: 'center', width: '100%', padding: '1rem', border: '1px solid #ccc', borderRadius: '0.5rem', outline: 'none' }}
                   className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
+
+            {/* Time */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-6">
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
                   Start Time <span className="text-red-500">*</span>
@@ -926,13 +889,8 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
                 >
                   <option value="">Select Start Time</option>
                   {getAvailableStartTimes().map((time) => (
-                  <option
-                    key={time}
-                    value={time}
-                  >
-                    {time}
-                  </option>
-                ))}
+                    <option key={time} value={time}>{time}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -949,13 +907,114 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
                 >
                   <option value="">Select End Time</option>
                   {getFilteredEndTimes().map((time) => (
-                    <option key={time} value={time}>
-                      {time}
-                    </option>
+                    <option key={time} value={time}>{time}</option>
                   ))}
                 </select>
               </div>
             </div>
+
+             {/* Additional Room Options */}
+            <div className="text-center">
+              <label className="text-xl block text-gray-700 font-medium mb-6">
+                Other Request <span className="text-red-500"></span>
+              </label>
+            </div>
+
+            {/* Additional Room Options */}
+            <div className="mb-6 flex flex-wrap gap-6 justify-center">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isMealRoom"
+                  name="isMealRoom"
+                  checked={formData.isMealRoom}
+                  onChange={handleChange}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="isMealRoom" className="ml-2 text-gray-700 font-medium">
+                   Meal Venue Required 
+                </label>
+              </div>
+              
+                <div className="flex items-center justify-center mb-2">
+                  <input
+                    type="checkbox"
+                    id="isBreakRoom"
+                    name="isBreakRoom"
+                    checked={formData.isBreakRoom}
+                    onChange={handleChange}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="isBreakRoom" className="ml-2 text-gray-700 font-medium">
+                  Breakout Room Required 
+                  </label>
+              </div>
+            </div>
+
+            {formData.isBreakRoom && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-4">
+                {/* Number of Pax for Breakout Room */}
+                <div className="md:col-span-2">
+                  <label className="block text-gray-700 font-medium mb-2">
+                    Number of Pax (Breakout Room) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="numberOfPaxBreakRoom"
+                    value={formData.numberOfPaxBreakRoom || ''}
+                    onChange={handleChange}
+                    min={1}
+                    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter number of participants for breakout room"
+                    required={formData.isBreakRoom}
+                  />
+                </div>
+                {/* Start Time for Breakout Room */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">
+                    Breakout Room Start Time <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="startTimeBreakRoom"
+                    value={formData.startTimeBreakRoom || ''}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required={formData.isBreakRoom}
+                  >
+                    <option value="">Select Start Time</option>
+                    {TIME_OPTIONS.map((time) => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* End Time for Breakout Room */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">
+                    Breakout Room End Time <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="endTimeBreakRoom"
+                    value={formData.endTimeBreakRoom || ''}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required={formData.isBreakRoom}
+                    disabled={!formData.startTimeBreakRoom}
+                  >
+                    <option value="">Select End Time</option>
+                    {/* You can use a filter here if you want to only allow times after start time */}
+                    {TIME_OPTIONS
+                      .filter(
+                        (time) =>
+                          !formData.startTimeBreakRoom ||
+                          TIME_OPTIONS.indexOf(time) > TIME_OPTIONS.indexOf(formData.startTimeBreakRoom)
+                      )
+                      .map((time) => (
+                        <option key={time} value={time}>{time}</option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Recurring Booking Options */}
             <div className="mb-6">
@@ -1053,9 +1112,9 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
               <button
                 type="submit"
                 className={`px-6 py-3 ${
-                  availabilityStatus?.available && isRecurrenceValid() ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'
+                  availabilityStatus?.available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'
                 } text-white rounded-lg`}
-                disabled={loading || isCheckingAvailability || !availabilityStatus?.available || !isRecurrenceValid()}
+                disabled={loading || isCheckingAvailability || !availabilityStatus?.available}
               >
                 {loading ? 'Submitting...' : isCheckingAvailability ? 'Checking Availability...' : 'Submit Booking'}
               </button>
@@ -1067,4 +1126,4 @@ const BookingForm = ({ onBookingSubmit, onRoomSelect }) => {
   );
 };
 
-export default BookingForm;
+export default BookingForm; 
