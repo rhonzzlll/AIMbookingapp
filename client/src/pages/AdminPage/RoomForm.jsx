@@ -406,16 +406,16 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
         
         formDataToSubmit.append('roomData', JSON.stringify(roomData));
         
-        // Image handling is separate from roomData because files cannot be JSON serialized
+        // Append room image if present
         if (imageFile) {
           formDataToSubmit.append('roomImage', imageFile);
         }
-        
-        // Only add subroom images if this is a quadrant room
-        if (formData.isQuadrant) {
-          formData.subRooms.forEach((subroom) => {
+
+        // Append subroom images if present
+        if (formData.isQuadrant && Array.isArray(formData.subRooms)) {
+          formData.subRooms.forEach(subroom => {
             if (subroom.image) {
-              formDataToSubmit.append(`subroomImage_${subroom.subroomId}`, subroom.image);
+              formDataToSubmit.append(`subroomImage_${subroom.subroomId || subroom.subRoomId}`, subroom.image);
             }
           });
         }

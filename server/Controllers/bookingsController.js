@@ -2,7 +2,7 @@ const { Op } = require('sequelize');
 const db = require('../models');
 const Booking = db.Booking;
 const { v4: uuidv4 } = require('uuid');  
-const transporter = require('../mailer');
+const { transporter, sendMailWithRetry } = require('../mailer');
 const User = db.User;  
 const Room = db.Room;
 const Building = db.Building;
@@ -76,7 +76,6 @@ async function sendBookingEmail(booking, status, declineReason = null) {
       return;
     }
 
- 
     const room = await Room.findByPk(booking.roomId);
     const building = await Building.findByPk(booking.buildingId);
     const roomDisplay = room ? room.roomName : booking.roomId;
@@ -91,7 +90,7 @@ async function sendBookingEmail(booking, status, declineReason = null) {
 
     switch (status) {
       case 'confirmed':
-        subject = 'Your Reservation is Confirmed';
+        subject = `[Booking ID: ${booking.bookingId}] Your Reservation is Confirmed`;
         message = `Dear ${userName},
 
 We’re pleased to inform you that your reservation has been APPROVED.
@@ -110,7 +109,7 @@ ACC Reservations`;
         break;
 
       case 'declined':
-        subject = 'Reservation Request Unsuccessful';
+        subject = `[Booking ID: ${booking.bookingId}] Reservation Request Unsuccessful`;
         message = `Dear ${userName},
 
 Thank you for your reservation request. Unfortunately, we are unable to accommodate your booking at this time due to unavailability or a scheduling conflict.
@@ -130,7 +129,7 @@ ACC Reservations`;
         break;
 
       case 'cancelled':
-        subject = 'Booking Cancelled - Confirmation';
+        subject = `[Booking ID: ${booking.bookingId}] Booking Cancelled - Notification`;
         message = `Hello ${userName},
 
 Your booking has been successfully cancelled.
@@ -150,7 +149,7 @@ Booking Management Team`;
         break;
 
       case 'pending':
-        subject = 'Your Reservation Request is Currently Pending';
+        subject = `[Booking ID: ${booking.bookingId}] Your Reservation Request is Currently Pending`;
         message = `Dear ${userName},
 
 Thank you for submitting your reservation request. Your reservation is currently PENDING.
@@ -174,7 +173,7 @@ ACC Reservations`;
         return;
     }
 
-    await transporter.sendMail({
+    await sendMailWithRetry({
       from: process.env.SMTP_USER,
       to: user.email,
       subject: subject,
@@ -216,7 +215,7 @@ async function sendPendingBookingToAdmins(booking) {
     const startTime = formatTimeToHHMM(booking.startTime);
     const endTime = formatTimeToHHMM(booking.endTime);
 
-    let subject = 'Your Reservation Request is Currently Pending';
+    let subject = `[Booking ID: ${booking.bookingId}] Your Reservation Request is Currently Pending`;
     let message = `Dear ${userName},
 
 Thank you for submitting your reservation request. Your reservation is currently PENDING.
@@ -240,7 +239,7 @@ ACC Reservations`;
     // Send to all admins
     for (const admin of admins) {
       if (admin.email) {
-        await transporter.sendMail({
+        await sendMailWithRetry({
           from: process.env.SMTP_USER,
           to: admin.email,
           subject: subject,
@@ -277,7 +276,7 @@ async function sendCancelledBookingToAdmins(booking) {
     const startTime = formatTimeToHHMM(booking.startTime);
     const endTime = formatTimeToHHMM(booking.endTime);
 
-    let subject = 'Booking Cancelled - Notification';
+    let subject = `[Booking ID: ${booking.bookingId}] Booking Cancelled - Notification`;
     let message = `Hello Admin,
 
 A booking has been cancelled.
@@ -296,12 +295,12 @@ Booking Management System`;
 
     for (const admin of admins) {
       if (admin.email) {
-        await transporter.sendMail({
-          from: process.env.SMTP_USER,
-          to: admin.email,
-          subject: subject,
-          text: message
-        });
+        await sendMailWithRetry({
+  from: process.env.SMTP_USER,
+  to: admin.email,
+  subject: subject,
+  text: message
+});
       }
     }
     console.log(`Cancelled booking email sent to all admins for booking ${booking.bookingId}`);
@@ -414,6 +413,24 @@ exports.createBooking = async (req, res) => {
             }
           ]
         }
+      });
+    }
+
+    // Check for duplicate pending booking for the same user, room, date, and time
+    const duplicatePending = await Booking.findOne({
+      where: {
+        userId,
+        roomId,
+        buildingId,
+        date: parsedDate,
+        startTime,
+        endTime,
+        status: 'pending'
+      }
+    });
+    if (duplicatePending) {
+      return res.status(400).json({
+        message: 'You already have a pending booking for this room, date, and time.'
       });
     }
 
@@ -797,7 +814,6 @@ exports.cancelBooking = async (req, res) => {
     res.status(500).json({ message: 'Failed to cancel booking' });
   }
 };
-
 // Helper to send pending booking notification to all admins and the user
 async function sendPendingBookingNotifications(booking) {
   try {
@@ -831,7 +847,7 @@ async function sendPendingBookingNotifications(booking) {
     const endTime = formatTimeToHHMM(booking.endTime);
 
     // Email to Admins
-    const adminSubject = 'New Pending Booking Request';
+    const adminSubject = `[Booking ID: ${booking.bookingId}] New Pending Booking Request`;
     const adminMessage = `Hello Admin,
 
 A new booking request is pending approval.
@@ -853,9 +869,9 @@ Please review and take action in the booking system.`;
     if (adminEmails.length > 0) {
       try {
         // Send a single email to all admins using BCC
-        await transporter.sendMail({
+        await sendMailWithRetry({
           from: process.env.SMTP_USER,
-          bcc: adminEmails, // Use BCC so admins don't see each other's emails
+          bcc: adminEmails,
           subject: adminSubject,
           text: adminMessage
         });
@@ -869,7 +885,7 @@ Please review and take action in the booking system.`;
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Email to the User
-    const userSubject = 'Your Reservation Request is Currently Pending';
+    const userSubject = `[Booking ID: ${booking.bookingId}] Your Reservation Request is Currently Pending`;
     const userMessage = `Dear ${userName},
 
 Thank you for submitting your reservation request. Your reservation is currently PENDING.
@@ -889,7 +905,7 @@ Sincerely,
 ACC Reservations`;
 
     try {
-      await transporter.sendMail({
+      await sendMailWithRetry({
         from: process.env.SMTP_USER,
         to: user.email,
         subject: userSubject,
@@ -904,5 +920,3 @@ ACC Reservations`;
     console.error('Error sending pending booking notifications:', error);
   }
 }
-
-

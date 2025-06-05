@@ -65,6 +65,29 @@ const formatDate = (dateString) => {
   }
 };
 
+const departmentColors = {
+  'ASITE': 'bg-purple-100 border-purple-400 text-purple-900',
+  'WSGSB': 'bg-green-100 border-green-400 text-green-900',
+  'SZGSDM': 'bg-yellow-100 border-yellow-400 text-yellow-900',
+  'SEELL': 'bg-blue-100 border-blue-400 text-blue-900',
+  'Other Units': 'bg-orange-100 border-orange-400 text-orange-900',
+  'External': 'bg-pink-100 border-pink-400 text-pink-900',
+  'SRF': 'bg-cyan-100 border-cyan-400 text-cyan-900',
+  'IMCG': 'bg-teal-100 border-teal-400 text-teal-900',
+  'Marketing': 'bg-lime-100 border-lime-400 text-lime-900',
+  'ICT': 'bg-indigo-100 border-indigo-400 text-indigo-900',
+  'HR': 'bg-red-100 border-red-400 text-red-900',
+  'Finance': 'bg-amber-100 border-amber-400 text-amber-900',
+  'Registrars': 'bg-fuchsia-100 border-fuchsia-400 text-fuchsia-900',
+  'Others': 'bg-gray-100 border-gray-400 text-gray-900'
+};
+
+const getDepartmentColorDot = (department) => {
+  const colorClass = departmentColors[department];
+  if (!colorClass) return 'bg-gray-400';
+  return colorClass.split(' ')[0];
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeBookingTab, setActiveBookingTab] = useState('all');
@@ -237,6 +260,41 @@ const Dashboard = () => {
   const weeklyCalendarDays = generateWeeklyCalendarDays();
   const bookingsByDate = groupBookingsByDate(recentBookings);
 
+  // Helper: Expand confirmed bookings with recurrence, just like BookingCalendar
+  const getProcessedBookingsByDate = () => {
+    const processed = {};
+    // Only include confirmed bookings
+    recentBookings
+      .filter(b => b.status === 'confirmed')
+      .forEach(booking => {
+        // Use recurrencePattern and isRecurring for compatibility with BookingCalendar
+        const isRecurring = booking.isRecurring || (booking.recurring && booking.recurring !== 'No');
+        const recurrencePattern = booking.recurrencePattern || booking.recurring;
+        const recurrenceEndDate = booking.recurrenceEndDate;
+
+        if (isRecurring && recurrencePattern && recurrencePattern !== 'No' && recurrenceEndDate) {
+          const dates = calculateRecurringDates(booking.date, recurrencePattern, recurrenceEndDate);
+          dates.forEach(date => {
+            if (!processed[date]) processed[date] = [];
+            processed[date].push({
+              ...booking,
+              date,
+              isRecurringInstance: true,
+              originalDate: booking.date,
+              recurrencePattern,
+            });
+          });
+        } else {
+          // Non-recurring
+          if (!processed[booking.date]) processed[booking.date] = [];
+          processed[booking.date].push(booking);
+        }
+      });
+    return processed;
+  };
+
+  const processedBookingsByDate = getProcessedBookingsByDate();
+
   const getFilteredBookings = () => {
     if (activeBookingTab === 'all') return recentBookings;
     if (activeBookingTab === 'pending') return recentBookings.filter(b => b.status === 'pending');
@@ -272,13 +330,30 @@ const Dashboard = () => {
   });
 
   const formatTime = (timeString) => {
-    try {
-      if (!timeString) return 'N/A';
-      return new Date(timeString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (error) {
-      console.error('Time formatting error:', error);
-      return timeString;
+    if (!timeString) return '';
+    if (/am|pm/i.test(timeString)) return timeString;
+    if (timeString.includes('T')) {
+      const date = new Date(timeString);
+      if (!isNaN(date)) {
+        let hour = date.getUTCHours();
+        let minute = date.getUTCMinutes();
+        let suffix = 'AM';
+        if (hour === 0) { hour = 12; }
+        else if (hour === 12) { suffix = 'PM'; }
+        else if (hour > 12) { hour -= 12; suffix = 'PM'; }
+        return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
+      }
     }
+    const match = timeString.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      let [h, m] = [parseInt(match[1]), match[2]];
+      let suffix = 'AM';
+      if (h === 0) { h = 12; }
+      else if (h === 12) { suffix = 'PM'; }
+      else if (h > 12) { h -= 12; suffix = 'PM'; }
+      return `${h}:${m} ${suffix}`;
+    }
+    return timeString;
   };
 
   if (loading) {
@@ -351,41 +426,44 @@ const Dashboard = () => {
               <h2 className="font-bold text-gray-800">This Week</h2>
             </div>
             <div className="grid grid-cols-7">
-              {weeklyCalendarDays.map((day, index) => (
-                <div key={index} className="p-4 text-center border-r last:border-r-0 hover:bg-gray-50 transition relative">
-                  <div className="text-sm text-gray-500">{day.day}</div>
-                  <div className={`text-lg ${day.isToday ? 'bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto' : 'text-gray-800'}`}>
-                    {day.date}
-                  </div>
-                  {(() => {
-                    const confirmedBookings = bookingsByDate[day.fullDate]?.filter((booking) => booking.status === 'confirmed') || [];
-                    if (confirmedBookings.length === 0) {
-                      return <div className="text-xs text-gray-400 mt-2 italic">No bookings</div>;
-                    }
-                    const visibleBookings = confirmedBookings.slice(0, 3);
-                    const remainingCount = confirmedBookings.length - visibleBookings.length;
-                    return (
-                      <>
-                        {visibleBookings.map((booking, i) => (
+              {weeklyCalendarDays.map((day, index) => {
+                const confirmedBookings = processedBookingsByDate[day.fullDate] || [];
+                return (
+                  <div key={index} className="p-2 text-center border-r last:border-r-0 hover:bg-gray-50 transition relative">
+                    <div className="text-sm text-gray-500">{day.day}</div>
+                    <div className={`text-lg ${day.isToday ? 'bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto' : 'text-gray-800'}`}>
+                      {day.date}
+                    </div>
+                    <div className="flex flex-col gap-1 mt-2">
+                      {confirmedBookings.length === 0 ? (
+                        <div className="text-xs text-gray-400 italic">No bookings</div>
+                      ) : (
+                        confirmedBookings.slice(0, 5).map((booking, idx) => (
                           <div
-                            key={i}
-                            className="text-xs bg-blue-100 text-blue-600 rounded px-1 mt-1 truncate cursor-pointer"
-                            title={`${booking.title} (${formatTime(booking.startTime)} - ${formatTime(booking.endTime)})`}
+                            key={idx}
+                            className={`text-xs p-1.5 rounded-md flex flex-col gap-0.5 border-l-4 ${departmentColors[booking.department] || 'bg-gray-100 border-gray-400 text-gray-900'}`}
+                            title={`${booking.title} (${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}) - ${booking.firstName} ${booking.lastName} - ${booking.department || 'No Department'}${booking.isRecurringInstance ? ' (Recurring)' : ''}`}
                             onClick={() => handleEditClick(booking)}
+                            style={{ cursor: 'pointer' }}
                           >
-                            {booking.title}
+                            <div className="flex items-center gap-1">
+                              <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${getDepartmentColorDot(booking.department)}`}></span>
+                              <span className="font-medium truncate flex-1">{booking.title}</span>
+                              {booking.isRecurringInstance && (
+                                <span className="text-[9px] text-gray-600 flex-shrink-0">↻</span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-gray-700">
+                              <span className="font-medium">{booking.department || 'No Dept'}</span>
+                              <span className="text-[9px]">{formatTime(booking.startTime)}</span>
+                            </div>
                           </div>
-                        ))}
-                        {remainingCount > 0 && (
-                          <div className="text-xs text-blue-500 mt-1 cursor-pointer hover:underline">
-                            +{remainingCount} more
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              ))}
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -419,8 +497,10 @@ const Dashboard = () => {
                 <tr className="bg-gray-100">
                   {[
                     { label: 'Booking Title', key: 'title' },
-                    { label: 'Name', key: 'lastName' },
-                    { label: 'School', key: 'department' },
+              { label: 'Name', key: 'lastName' },
+           
+{ label: 'Department', key: 'department' },
+
                     { label: 'Room Type', key: 'category' },
                     { label: 'Meeting Room', key: 'meetingRoom' },
                     { label: 'Building', key: 'buildingName' },
@@ -447,7 +527,6 @@ const Dashboard = () => {
                         .toLowerCase()
                         .includes(searchTerm.toLowerCase())
                     )
-                    .slice(0, 5) // LIMIT TO 5 BOOKINGS
                     .map((booking) => {
                       const recurringDates =
                         booking.recurrenceEndDate && booking.recurring !== 'No'

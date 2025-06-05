@@ -4,16 +4,15 @@ import { toast } from 'react-toastify';
 import Header from './Header';
 import home from "../../images/home.png";
 import imageCompression from 'browser-image-compression';
+import { FaEye, FaEyeSlash } from "react-icons/fa"; // Add this import at the top
 
 const Profile = () => {
-  const departments = [
-  'ASITE',
-  'WSGSB',
-  'SZGSDM',
-  'SEELL',
-  'Other Units',
-  'External'
-];
+  // Grouped options for toggleable select
+  const departmentGroups = [
+    { label: "Schools", options: ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'] },
+    { label: "Departments", options: ["SRF", "IMCG", "Marketing", "ICT", "HR", "Finance", "Registrars", "Others"] }
+  ];
+
   const userId = localStorage.getItem("userId");
   const token = localStorage.getItem("token");
   const userRole = localStorage.getItem("role");
@@ -42,6 +41,12 @@ const Profile = () => {
 
   const [loading, setLoading] = useState(false);
   const [useLocalData, setUseLocalData] = useState(false);
+  const [showPassword, setShowPassword] = useState({
+    old: false,
+    new: false,
+    confirm: false,
+  });
+  // const [deptType, setDeptType] = useState('Schools'); // Add this state
 
   // Fetch user data on component mount
   useEffect(() => {
@@ -288,12 +293,15 @@ const Profile = () => {
 
       if (response.status === 200) {
         toast.success('Password changed successfully');
+        setSuccess('Password changed successfully!'); // <-- Add this line
         // Reset password fields
         setPasswords({
           oldPassword: '',
           newPassword: '',
           confirmPassword: '',
         });
+        // Clear the success message after 3 seconds
+        setTimeout(() => setSuccess(''), 3000); // <-- Add this line
       } else {
         toast.error('Failed to change password. Please try again.');
       }
@@ -425,19 +433,21 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">School / Department</label>
                     <select
                       name="department"
                       value={user.department}
                       onChange={handleInputChange}
                       className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="" disabled>Select Department</option>
-                      {departments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {dept}
-                        </option>
-                      ))}
+                      <option value="">Select School or Department</option>
+                      {departmentGroups.flatMap(group =>
+                        group.options.map(opt => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 
@@ -468,41 +478,65 @@ const Profile = () => {
           {/* Change Password Section */}
           <div className="bg-white bg-opacity-90 shadow-md rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Change Password</h2>
+            {/* Success message for password change */}
+            {success && (
+              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                {success}
+              </div>
+            )}
             <form onSubmit={handlePasswordSubmit}>
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
                 <input
-                  type="password"
+                  type={showPassword.old ? "text" : "password"}
                   name="oldPassword"
                   value={passwords.oldPassword}
                   onChange={handlePasswordChange}
-                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                   required
                 />
+                <span
+                  className="absolute right-3 top-9 cursor-pointer"
+                  onClick={() => setShowPassword({ ...showPassword, old: !showPassword.old })}
+                >
+                  {showPassword.old ? <FaEyeSlash /> : <FaEye />}
+                </span>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                 <input
-                  type="password"
+                  type={showPassword.new ? "text" : "password"}
                   name="newPassword"
                   value={passwords.newPassword}
                   onChange={handlePasswordChange}
-                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                   required
                 />
+                <span
+                  className="absolute right-3 top-9 cursor-pointer"
+                  onClick={() => setShowPassword({ ...showPassword, new: !showPassword.new })}
+                >
+                  {showPassword.new ? <FaEyeSlash /> : <FaEye />}
+                </span>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
                 <input
-                  type="password"
+                  type={showPassword.confirm ? "text" : "password"}
                   name="confirmPassword"
                   value={passwords.confirmPassword}
                   onChange={handlePasswordChange}
-                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                   required
                 />
+                <span
+                  className="absolute right-3 top-9 cursor-pointer"
+                  onClick={() => setShowPassword({ ...showPassword, confirm: !showPassword.confirm })}
+                >
+                  {showPassword.confirm ? <FaEyeSlash /> : <FaEye />}
+                </span>
               </div>
 
               <button

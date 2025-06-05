@@ -110,21 +110,28 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                   </tr>
 
                   {room.isQuadrant &&
+                    Array.isArray(room.subRooms) &&
                     room.subRooms.map((subRoom, index) => {
-                      const subRoomImage = localStorage.getItem(`roomImage_${subRoom.roomName}`);
+                      // Use the correct property names
+                      const subRoomImage =
+                        subRoom.imagePreview ||
+                        (subRoom.subRoomImage
+                          ? `${process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api'}/uploads/${subRoom.subRoomImage}`
+                          : null);
+
                       return (
-                        <tr key={`${room._id}-sub-${index}`} className="hover:bg-gray-50">
+                        <tr key={`${room._id || room.roomId}-sub-${index}`} className="hover:bg-gray-50">
                           <td className="py-3 px-4 pl-8 text-gray-600 flex items-center">
-                            <span className="mr-2">↳</span> {subRoom.roomName}
+                            <span className="mr-2">↳</span> {subRoom.subroomName}
                           </td>
-                          <td className="py-3 px-4">{room.building}</td>
-                          <td className="py-3 px-4">{room.category}</td>
-                          <td className="py-3 px-4">{subRoom.capacity}</td>
+                          <td className="py-3 px-4">{room.building || room.buildingName}</td>
+                          <td className="py-3 px-4">{room.category || room.categoryName}</td>
+                          <td className="py-3 px-4">{subRoom.subroomCapacity}</td>
                           <td className="py-3 px-4">
                             {subRoomImage ? (
                               <img
                                 src={subRoomImage}
-                                alt={subRoom.roomName}
+                                alt={subRoom.subroomName}
                                 className="w-16 h-12 object-cover rounded"
                               />
                             ) : (
@@ -133,7 +140,7 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                               </div>
                             )}
                           </td>
-                          <td className="py-3 px-4 max-w-xs truncate">{subRoom.description}</td>
+                          <td className="py-3 px-4 max-w-xs truncate">{subRoom.subroomDescription}</td>
                           <td className="py-3 px-4 text-center text-gray-400 text-sm">N/A</td>
                         </tr>
                       );

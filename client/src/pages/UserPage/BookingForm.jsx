@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import axios from 'axios';
 import bg from '../../images/bg.png';
@@ -74,9 +74,9 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     lastName: '',
     email: '',
     buildingId: '',
-    buildingName: '', // Add this field to store the name
+    buildingName: '',
     categoryId: '',
-    categoryName: '', // Add this field to store the name
+    categoryName: '',
     roomId: '',
     date: format(new Date(), 'yyyy-MM-dd'), 
     startTime: '09:00 AM',
@@ -90,7 +90,8 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     isMealRoom: false,
     isBreakRoom: false,
     bookingCapacity: 1,
-    status: 'pending'
+    status: 'pending',
+    costCenterCharging: '', // <-- Add this line
   });
 
   const [rooms, setRooms] = useState([]);
@@ -136,8 +137,11 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
         setFormData((prevFormData) => ({
           ...prevFormData,
           buildingId: room.buildingId || '',
+          buildingName: room.buildingName || '',
           categoryId: room.categoryId || '',
+          categoryName: room.categoryName || '',
           roomId: room.roomId || '',
+          roomName: room.roomName || '',
         }));
       }
 
@@ -153,6 +157,37 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
       }
     }
   }, [bookingData]);
+
+  // Step 1: Set building/category from bookingData as soon as it arrives
+  useEffect(() => {
+    if (bookingData && bookingData.room) {
+      setFormData((prevFormData) => ({
+        ...prevFormData,
+        buildingId: bookingData.room.buildingId || '',
+        buildingName: bookingData.room.buildingName || '',
+        categoryId: bookingData.room.categoryId || '',
+        categoryName: bookingData.room.categoryName || '',
+      }));
+    }
+  }, [bookingData]);
+
+  // Step 2: Once filteredRooms are ready, set roomId
+  useEffect(() => {
+    if (
+      bookingData &&
+      bookingData.room &&
+      formData.buildingId &&
+      formData.categoryId &&
+      filteredRooms.length > 0
+    ) {
+      setFormData((prevFormData) => ({
+        ...prevFormData,
+        roomId: bookingData.room.roomId || '',
+        roomName: bookingData.room.roomName || '',
+      }));
+    }
+    // eslint-disable-next-line
+  }, [filteredRooms, bookingData, formData.buildingId, formData.categoryId]);
 
   // Fetch user data and populate the form
   const fetchUserData = async () => {
@@ -212,23 +247,43 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     const fetchRooms = async () => {
       try {
         const response = await axios.get(`${API_BASE_URL}/rooms`);
-        
-        // Map the API response to include the nested name properties
-        const processedRooms = response.data.map(room => ({
+        let processedRooms = response.data.map(room => ({
           ...room,
-          // Extract name from nested objects
           buildingName: room.Building?.buildingName || room.buildingName || room.buildingId,
           categoryName: room.Category?.categoryName || room.categoryName || room.categoryId
         }));
-        
-        setRooms(processedRooms);
-        console.log("Processed rooms data:", processedRooms);
-        
+
+        // Flatten subrooms into the rooms array
+        const flattenedRooms = [];
+        processedRooms.forEach(room => {
+          // Push the main room
+          flattenedRooms.push(room);
+          // Push subrooms as separate rooms
+          if (room.subRooms && Array.isArray(room.subRooms)) {
+            room.subRooms.forEach(subroom => {
+              flattenedRooms.push({
+                ...subroom,
+                buildingId: room.buildingId,
+                buildingName: room.buildingName,
+                categoryId: room.categoryId,
+                categoryName: room.categoryName,
+                roomId: subroom.subroomId,
+                roomName: `${room.roomName} - ${subroom.subRoomName}`,
+                isSubroom: true,
+                parentRoomId: room.roomId,
+                parentRoomName: room.roomName,
+              });
+            });
+          }
+        });
+
+        setRooms(flattenedRooms);
+
         // Extract unique buildings with names from the nested structure
         const uniqueBuildings = [];
         const buildingsMap = {};
         
-        processedRooms.forEach(room => {
+        flattenedRooms.forEach(room => {
           if (!buildingsMap[room.buildingId]) {
             buildingsMap[room.buildingId] = true;
             uniqueBuildings.push({
@@ -240,21 +295,21 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
         
         // Sort buildings by name
         uniqueBuildings.sort((a, b) => a.name.localeCompare(b.name));
-        console.log("Processed buildings:", uniqueBuildings);
         setBuildings(uniqueBuildings);
         
         // Create a map of room IDs to room data with proper names
         const newRoomMap = {};
-        processedRooms.forEach(room => {
+        flattenedRooms.forEach(room => {
           newRoomMap[room.roomId] = {
             roomName: room.roomName,
             buildingId: room.buildingId,
-            buildingName: room.Building?.buildingName || room.buildingName || room.buildingId,
+            buildingName: room.buildingName,
             categoryId: room.categoryId,
-            categoryName: room.Category?.categoryName || room.categoryName || room.categoryId
+            categoryName: room.categoryName
           };
         });
         setRoomMap(newRoomMap);
+
       } catch (err) {
         console.error('Error fetching rooms:', err);
         setError('Failed to fetch rooms. Please try again.');
@@ -285,7 +340,6 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
       
       // Sort categories by name
       uniqueCategories.sort((a, b) => a.name.localeCompare(b.name));
-      console.log("Categories for building:", uniqueCategories);
       setCategories(uniqueCategories);
     } else {
       setCategories([]);
@@ -651,21 +705,29 @@ const getFilteredEndTimes = () => {
 };
 
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasSubmitted = useRef(false);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return; // Prevent double submit
+    setIsSubmitting(true);
 
     if (!formData.startTime || !formData.endTime || !formData.roomId || !formData.buildingId || !userId) {
       setError('All fields (startTime, endTime, roomId, buildingId, and userId) are required.');
+      setIsSubmitting(false);
       return;
     }
 
     if (formData.isRecurring && (!formData.recurrenceType || !formData.recurrenceEndDate)) {
       setError('Please select recurrence type and end date for recurring bookings.');
+      setIsSubmitting(false);
       return;
     }
 
     if (formData.isRecurring && formData.recurrenceEndDate < formData.date) {
       setError('Recurrence end date must be after the booking start date.');
+      setIsSubmitting(false);
       return;
     }
 
@@ -676,7 +738,6 @@ const getFilteredEndTimes = () => {
       const startTimeSQL = convertTo24HourFormat(formData.startTime);
       const endTimeSQL = convertTo24HourFormat(formData.endTime);
 
-      // Always include recurringGroupId for recurring bookings
       const bookingPayload = {
         userId,
         title: formData.title,
@@ -697,7 +758,12 @@ const getFilteredEndTimes = () => {
         isMealRoom: formData.isMealRoom,
         isBreakRoom: formData.isBreakRoom,
         bookingCapacity: formData.bookingCapacity,
-        status: formData.status
+        status: formData.status,
+        costCenterCharging: formData.costCenterCharging,
+        // Breakout Room fields
+        numberOfPaxBreakRoom: formData.isBreakRoom ? formData.numberOfPaxBreakRoom || null : null,
+        startTimeBreakRoom: formData.isBreakRoom ? formData.startTimeBreakRoom || null : null,
+        endTimeBreakRoom: formData.isBreakRoom ? formData.endTimeBreakRoom || null : null,
       };
 
       // Remove undefined fields
@@ -705,29 +771,29 @@ const getFilteredEndTimes = () => {
         (key) => bookingPayload[key] === undefined && delete bookingPayload[key]
       );
 
-      const response = await fetch(`${API_BASE_URL}/bookings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(bookingPayload),
-      });
+      // POST to server
+      const response = await axios.post(
+        `${API_BASE_URL}/bookings`,
+        bookingPayload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create booking.');
+      // Optionally handle response
+      if (response.status === 201 || response.status === 200) {
+        // Success: maybe redirect or show a message
       }
 
-      const data = await response.json();
-      onBookingSubmit(data);
+      // Optionally call the callback
+      if (onBookingSubmit) onBookingSubmit(bookingPayload);
+
     } catch (err) {
       setError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+      setIsSubmitting(false);
+      hasSubmitted.current = false;
     }
   };
-
   return (
     <div className="font-sans">
       <div className="px-4 pb-8">
@@ -857,22 +923,45 @@ const getFilteredEndTimes = () => {
               />
             </div>
 
-             {/* Date*/}
-              <div>
-                <label className="block text-gray-700 font-medium mb-2">
-                  Date of Booking <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  name="date"
-                  value={formData.date}
-                  min={format(new Date(), 'yyyy-MM-dd')}
-                  onChange={handleChange}
-                    style={{ textAlign: 'center', width: '100%', padding: '1rem', border: '1px solid #ccc', borderRadius: '0.5rem', outline: 'none' }}
-                  className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
+            {/* Cost Center Charging */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                Cost Center Charging <span className="text-xs text-gray-500">(Charged To)</span>
+              </label>
+              <input
+                type="text"
+                name="costCenterCharging"
+                value={formData.costCenterCharging || ''}
+                onChange={handleChange}
+                placeholder="Enter cost center or department to be charged"
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Date*/}
+<div>
+  <label className="block text-gray-700 font-medium mb-2">
+    Date of Booking <span className="text-red-500">*</span>
+  </label>
+  <input
+    type="date"
+    name="date"
+    value={formData.date}
+    min={format(new Date(), 'yyyy-MM-dd')}
+    max={format(new Date(new Date().setMonth(new Date().getMonth() + 3)), 'yyyy-MM-dd')}
+    onChange={handleChange}
+    style={{
+      textAlign: 'center',
+      width: '100%',
+      padding: '1rem',
+      border: '1px solid #ccc',
+      borderRadius: '0.5rem',
+      outline: 'none'
+    }}
+    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+    required
+  />
+</div>
 
             {/* Time */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-6">
@@ -1001,8 +1090,7 @@ const getFilteredEndTimes = () => {
                     disabled={!formData.startTimeBreakRoom}
                   >
                     <option value="">Select End Time</option>
-                    {/* You can use a filter here if you want to only allow times after start time */}
-                    {TIME_OPTIONS
+                     {TIME_OPTIONS
                       .filter(
                         (time) =>
                           !formData.startTimeBreakRoom ||
@@ -1018,7 +1106,7 @@ const getFilteredEndTimes = () => {
 
             {/* Recurring Booking Options */}
             <div className="mb-6">
-              <div className="flex items-center mb-2">
+              <div className="flex items-center mb-2 flex-wrap justify-center">
                 <input
                   type="checkbox"
                   id="isRecurring"
@@ -1114,7 +1202,7 @@ const getFilteredEndTimes = () => {
                 className={`px-6 py-3 ${
                   availabilityStatus?.available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'
                 } text-white rounded-lg`}
-                disabled={loading || isCheckingAvailability || !availabilityStatus?.available}
+                disabled={loading || isCheckingAvailability || !availabilityStatus?.available || isSubmitting}
               >
                 {loading ? 'Submitting...' : isCheckingAvailability ? 'Checking Availability...' : 'Submit Booking'}
               </button>
@@ -1126,4 +1214,4 @@ const getFilteredEndTimes = () => {
   );
 };
 
-export default BookingForm; 
+export default BookingForm;

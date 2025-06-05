@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import AdminContentTemplate from './AdminContentTemplate';
 import TopBar from '../../components/AdminComponents/TopBar';
 import {
@@ -16,15 +16,41 @@ import {
   Typography,
   Stack,
 } from '@mui/material';
-import CategoryIcon from '@mui/icons-material/Category'; // <-- Add this import
+import CategoryIcon from '@mui/icons-material/Category';
+import DeleteConfirmation from './modals/DeleteConfirmation';
+import { AuthContext } from '../../context/AuthContext'; // <-- Add this line
+
+// Success Modal Component
+const SuccessModal = ({ open, message, onClose }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 text-center">
+        <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+          <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Success</h3>
+        <p className="text-sm text-gray-600 mb-6">{message}</p>
+        <button
+          onClick={onClose}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // Modal component for adding/editing categories
-const CategoryModal = ({ 
-  isOpen, 
-  onClose, 
-  buildings, 
-  onSave, 
-  editData = null 
+const CategoryModal = ({
+  isOpen,
+  onClose,
+  buildings,
+  onSave,
+  editData = null
 }) => {
   const [categoryName, setCategoryName] = useState('');
   const [selectedBuilding, setSelectedBuilding] = useState('');
@@ -32,14 +58,12 @@ const CategoryModal = ({
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  // Initialize form with edit data if available
   useEffect(() => {
     if (editData) {
       setCategoryName(editData.name || '');
       setSelectedBuilding(editData.building || '');
       setDescription(editData.description || '');
     } else {
-      // Reset form when adding new
       setCategoryName('');
       setSelectedBuilding('');
       setDescription('');
@@ -62,7 +86,7 @@ const CategoryModal = ({
     if (!validateForm()) return;
     setLoading(true);
     onSave({
-      id: editData ? editData.id : Date.now(), // Use existing ID or create new one
+      id: editData ? editData.id : Date.now(),
       name: categoryName,
       building: selectedBuilding,
       description: description
@@ -93,8 +117,8 @@ const CategoryModal = ({
                 <option value="">Please select a building</option>
                 {buildings && buildings.length > 0 ? (
                   buildings.map(building => (
-                    <option 
-                      key={building._id || building.buildingId || building.id} 
+                    <option
+                      key={building._id || building.buildingId || building.id}
                       value={building.buildingName || building.name}
                     >
                       {building.buildingName || building.name}
@@ -108,7 +132,7 @@ const CategoryModal = ({
                 <p className="text-red-500 text-xs mt-1">{errors.building}</p>
               )}
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Category Name*
@@ -124,7 +148,7 @@ const CategoryModal = ({
                 <p className="text-red-500 text-xs mt-1">{errors.name}</p>
               )}
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Description
@@ -146,7 +170,7 @@ const CategoryModal = ({
                 )}
               </div>
             </div>
-            
+
             <div className="flex justify-end gap-3 pt-2">
               <button
                 type="button"
@@ -160,14 +184,14 @@ const CategoryModal = ({
                 type="submit"
                 disabled={loading}
                 className={`px-4 py-2 rounded-md ${loading
-                  ? 'bg-blue-300 cursor-not-allowed' 
+                  ? 'bg-blue-300 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700'} text-white`}
               >
                 {loading
                   ? 'Processing...'
                   : editData
-                  ? 'Update Category'
-                  : 'Add Category'}
+                    ? 'Update Category'
+                    : 'Add Category'}
               </button>
             </div>
           </div>
@@ -186,15 +210,22 @@ const CategoryManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [selectedBuildingTab, setSelectedBuildingTab] = useState('All');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState(null);
+  const [successModal, setSuccessModal] = useState({ open: false, message: '' });
+  const { auth } = useContext(AuthContext); // <-- Add this line
+
+  // Helper to check if current user is SuperAdmin
+  const isSuperAdmin = auth && auth.role === 'SuperAdmin';
 
   useEffect(() => {
-    // Fetch categories and buildings on component mount
     fetchData();
   }, []);
 
   useEffect(() => {
     setPage(0);
-  }, [searchTerm]);
+  }, [searchTerm, selectedBuildingTab]);
 
   const fetchData = async () => {
     try {
@@ -204,15 +235,14 @@ const CategoryManagement = () => {
       if (buildingsResponse.ok && categoriesResponse.ok) {
         const buildingsData = await buildingsResponse.json();
         const categoriesData = await categoriesResponse.json();
-        
-        // Transform API response to frontend format
+
         const normalizedCategories = categoriesData.map(category => ({
           id: category.categoryId,
           name: category.categoryName,
-          building: category.buildingName, // Use the included building name 
+          building: category.buildingName,
           description: category.categoryDescription
         }));
-        
+
         setBuildings(buildingsData);
         setCategories(normalizedCategories);
       } else {
@@ -246,21 +276,19 @@ const CategoryManagement = () => {
       const formattedData = {
         categoryId: categoryData.id,
         categoryName: categoryData.name,
-        building: categoryData.building, // This should be the building name
+        building: categoryData.building,
         description: categoryData.description
       };
 
       let response;
 
       if (editingCategory) {
-        // Update existing category (PUT request)
         response = await fetch(`http://localhost:5000/api/categories/${categoryData.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formattedData),
         });
       } else {
-        // Add new category (POST request)
         response = await fetch('http://localhost:5000/api/categories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -273,53 +301,86 @@ const CategoryManagement = () => {
         throw new Error(`Server error: ${errorText}`);
       }
 
-      // Try to parse the response as JSON
       let updatedCategory;
       const responseText = await response.text();
-      
+
       try {
-        // Only try to parse if there's actual content
         if (responseText.trim()) {
           updatedCategory = JSON.parse(responseText);
         } else {
-          // If no content returned, use the data we sent
           updatedCategory = formattedData;
         }
       } catch (e) {
         console.error('Error parsing response:', e);
-        // Fallback to using the data we sent
         updatedCategory = formattedData;
       }
 
-      // Create a normalized version that matches our frontend structure
       const normalizedCategory = {
         id: updatedCategory.id || updatedCategory.categoryId,
         name: updatedCategory.name || updatedCategory.categoryName,
-        building: updatedCategory.building, // Ensure building is mapped correctly
+        building: updatedCategory.building,
         description: updatedCategory.description || updatedCategory.categoryDescription || ''
       };
 
-      // Update the state with the normalized data
       if (editingCategory) {
-        setCategories(categories.map((cat) => 
+        setCategories(categories.map((cat) =>
           (cat.id === normalizedCategory.id ? normalizedCategory : cat)
         ));
+        setSuccessModal({ open: true, message: 'Category updated successfully!' });
       } else {
         setCategories([...categories, normalizedCategory]);
+        setSuccessModal({ open: true, message: 'Category added successfully!' });
       }
 
-      alert(editingCategory ? 'Category updated successfully!' : 'Category added successfully!');
-      closeModal(); // Close the modal after saving
+      closeModal();
     } catch (error) {
       console.error('Error saving category:', error);
-      alert(`Failed to save category: ${error.message}. Please try again.`);
+      setSuccessModal({ open: true, message: `Failed to save category: ${error.message}. Please try again.` });
     }
   };
 
-  const filteredCategories = categories.filter(category =>
-    category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    category.building.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Delete logic using DeleteConfirmation modal
+  const handleDeleteCategory = (category) => {
+    setCategoryToDelete(category);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteCategory = async () => {
+    if (!categoryToDelete) return;
+    try {
+      const response = await fetch(`http://localhost:5000/api/categories/${categoryToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setCategories(categories.filter((cat) => cat.id !== categoryToDelete.id));
+        setSuccessModal({ open: true, message: 'Category deleted successfully!' });
+      } else {
+        throw new Error('Failed to delete category');
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      setSuccessModal({ open: true, message: 'Failed to delete category. Please try again.' });
+    } finally {
+      setDeleteDialogOpen(false);
+      setCategoryToDelete(null);
+    }
+  };
+
+  const cancelDeleteCategory = () => {
+    setDeleteDialogOpen(false);
+    setCategoryToDelete(null);
+  };
+
+  // Filter by building tab and search
+  const filteredCategories = categories.filter(category => {
+    const matchesSearch =
+      category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      category.building.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesBuilding =
+      selectedBuildingTab === 'All' || category.building === selectedBuildingTab;
+    return matchesSearch && matchesBuilding;
+  });
 
   const pagedCategories = useMemo(() => {
     if (rowsPerPage > 0) {
@@ -337,28 +398,8 @@ const CategoryManagement = () => {
     setPage(0);
   };
 
-  const handleDeleteCategory = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this category?')) return;
-  
-    try {
-      const response = await fetch(`http://localhost:5000/api/categories/${id}`, {
-        method: 'DELETE',
-      });
-  
-      if (response.ok) {
-        setCategories(categories.filter((category) => category.id !== id));
-        alert('Category deleted successfully!');
-      } else {
-        throw new Error('Failed to delete category');
-      }
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      alert('Failed to delete category. Please try again.');
-    }
-  };
-  
   return (
-    <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '120vh'}}>
+    <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '120vh' }}>
       <TopBar onSearch={setSearchTerm} />
       <AdminContentTemplate>
         <div className="p-6 bg-white rounded-lg shadow">
@@ -375,7 +416,6 @@ const CategoryManagement = () => {
                 </Typography>
               </Box>
             </Stack>
-            {/* Add Button on the right */}
             <Button
               onClick={openAddModal}
               sx={{
@@ -392,6 +432,42 @@ const CategoryManagement = () => {
               + Add New Category
             </Button>
           </Box>
+
+          {/* Building Tabs */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+            <button
+              onClick={() => setSelectedBuildingTab('All')}
+              style={{
+                background: selectedBuildingTab === 'All' ? '#2563eb' : '#f3f4f6',
+                color: selectedBuildingTab === 'All' ? '#fff' : '#374151',
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 20px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              All
+            </button>
+            {buildings.map((building) => (
+              <button
+                key={building._id || building.buildingId || building.id}
+                onClick={() => setSelectedBuildingTab(building.buildingName || building.name)}
+                style={{
+                  background: selectedBuildingTab === (building.buildingName || building.name) ? '#2563eb' : '#f3f4f6',
+                  color: selectedBuildingTab === (building.buildingName || building.name) ? '#fff' : '#374151',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '8px 20px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {building.buildingName || building.name}
+              </button>
+            ))}
+          </div>
+
           {/* Categories Table */}
           <div className="overflow-x-auto">
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, textAlign: 'left' }}>
@@ -441,14 +517,16 @@ const CategoryManagement = () => {
                             >
                               Edit
                             </Button>
-                            <Button
-                              variant="contained"
-                              color="error"
-                              size="small"
-                              onClick={() => handleDeleteCategory(category.id)}
-                            >
-                              Delete
-                            </Button>
+                            {isSuperAdmin && (
+                              <Button
+                                variant="contained"
+                                color="error"
+                                size="small"
+                                onClick={() => handleDeleteCategory(category)}
+                              >
+                                Delete
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))
@@ -477,7 +555,7 @@ const CategoryManagement = () => {
             )}
           </div>
         </div>
-        
+
         {/* Modal for Adding/Editing Categories */}
         <CategoryModal
           isOpen={modalOpen}
@@ -485,6 +563,22 @@ const CategoryManagement = () => {
           buildings={buildings}
           onSave={handleSaveCategory}
           editData={editingCategory}
+        />
+
+        {/* Delete Confirmation Modal */}
+        {deleteDialogOpen && (
+          <DeleteConfirmation
+            room={{ roomName: categoryToDelete?.name }}
+            onConfirm={confirmDeleteCategory}
+            onCancel={cancelDeleteCategory}
+          />
+        )}
+
+        {/* Success Modal */}
+        <SuccessModal
+          open={successModal.open}
+          message={successModal.message}
+          onClose={() => setSuccessModal({ open: false, message: '' })}
         />
       </AdminContentTemplate>
     </div>

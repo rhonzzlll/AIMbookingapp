@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import TopBar from '../../components/AdminComponents/TopBar'; // Adjust the path as needed
-
+import { FaEye, FaEyeSlash } from "react-icons/fa"; // Add this import
+import TopBar from '../../components/AdminComponents/TopBar'; 
 const Users = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
@@ -17,12 +17,29 @@ const Users = () => {
     password: '',
     confirmPassword: '',
     isActive: true,
-    role: 'user',
+    role: 'User', // <-- Capital U
   });
   const [errors, setErrors] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [showPasswordFields, setShowPasswordFields] = useState(false);
-  const departments = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetUser, setResetUser] = useState(null);
+  const [passwordFields, setPasswordFields] = useState({
+    oldPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [showPassword, setShowPassword] = useState({
+    old: false,
+    new: false,
+    confirm: false,
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const departments = [
+    { label: "Schools", options: ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'] },
+    { label: "Departments", options: ["SRF", "IMCG", "Marketing", "ICT", "HR", "Finance", "Registrars"] }
+  ];
 
   // Check if user is admin on component mount
   useEffect(() => {
@@ -109,7 +126,7 @@ const Users = () => {
       password: '',
       confirmPassword: '',
       isActive: true,
-      role: 'user',
+      role: 'User', // <-- Capital U
     });
     setErrors({});
     setShowAddModal(true);
@@ -124,13 +141,13 @@ const Users = () => {
       email: user.email,
       department: user.department,
       isActive: user.isActive,
-      role: user.role.toLowerCase(),
+      role: user.role, // <-- Do not use .toLowerCase()
       password: '',
       confirmPassword: '',
-      oldPassword: '',       // Add this
+      oldPassword: '',
     });
     setErrors({});
-    setShowPasswordFields(false); // <-- Add this
+    setShowPasswordFields(false);
     setShowEditModal(true);
   };
 
@@ -174,7 +191,7 @@ const Users = () => {
         password: '',
         confirmPassword: '',
         isActive: true,
-        role: 'user',
+        role: 'User', // <-- Capital U
       });
       setErrors({});
     } catch (error) {
@@ -260,6 +277,31 @@ const Users = () => {
     } catch (error) {
       console.error('Error toggling user status:', error.message);
       alert(error.message);
+    }
+  };
+
+  // Reset password handler (calls the /api/auth/reset-password/:id endpoint)
+  const handleResetPassword = async () => {
+    if (!resetUser) return;
+    try {
+      const token = localStorage.getItem('token');
+      // Always use userId for Sequelize
+      const response = await fetch(`http://localhost:5000/api/auth/reset-password/${resetUser.userId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to reset password');
+      }
+      setShowResetModal(false);
+      setResetUser(null);
+      alert('Password reset successfully. The new password is 123456.');
+    } catch (error) {
+      alert(error.message); 
     }
   };
 
@@ -445,17 +487,21 @@ const Users = () => {
               </div>
 
               <div className="mb-4">
-                <label className="block mb-1 font-medium">School</label>
+                <label className="block mb-1 font-medium">School / Department</label>
                 <select
                   name="department"
                   value={formData.department}
                   onChange={handleChange}
                   className={`w-full p-2 border rounded ${errors.department ? 'border-red-500' : ''}`}
                 >
-                  <option value="">Select School</option>
-                  {departments.map((dept) => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
+                  <option value="">Select School or Department</option>
+                  {departments.flatMap(group =>
+                    group.options.map(opt => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))
+                  )}
                 </select>
                 {errors.department && (
                   <p className="text-red-500 text-sm mt-1">{errors.department}</p>
@@ -470,8 +516,9 @@ const Users = () => {
                   value={formData.role}
                   onChange={handleChange}
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  <option value="User">User</option>
+                  <option value="Admin">Admin</option>
+                  <option value="SuperAdmin">Super Admin</option>
                 </select>
                 {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
               </div>
@@ -595,17 +642,21 @@ const Users = () => {
               </div>
 
               <div className="mb-4">
-                <label className="block mb-1 font-medium">School</label>
+                <label className="block mb-1 font-medium">School / Department</label>
                 <select
                   name="department"
                   value={formData.department}
                   onChange={handleChange}
                   className={`w-full p-2 border rounded ${errors.department ? 'border-red-500' : ''}`}
                 >
-                  <option value="">Select School</option>
-                  {departments.map((dept) => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
+                  <option value="">Select School or Department</option>
+                  {departments.flatMap(group =>
+                    group.options.map(opt => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))
+                  )}
                 </select>
                 {errors.department && (
                   <p className="text-red-500 text-sm mt-1">{errors.department}</p>
@@ -620,8 +671,9 @@ const Users = () => {
                   value={formData.role}
                   onChange={handleChange}
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  <option value="User">User</option>
+                  <option value="Admin">Admin</option>
+                  <option value="SuperAdmin">Super Admin</option> {/* <-- Add this line */}
                 </select>
                 {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
               </div>
@@ -640,46 +692,126 @@ const Users = () => {
 
               {showPasswordFields && (
                 <div className="mb-4 border rounded p-3">
-                  <label className="block mb-1 font-medium">Current Password</label>
-                  <input
-                    type="password"
-                    name="oldPassword"
-                    value={formData.oldPassword}
-                    onChange={handleChange}
-                    className="w-full p-2 border rounded mb-2"
-                    autoComplete="current-password"
-                  />
-                  {errors.oldPassword && (
-                    <p className="text-red-500 text-sm mt-1">{errors.oldPassword}</p>
+                  <h3 className="font-semibold mb-2">Change Password</h3>
+                  {passwordSuccess && (
+                    <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded mb-2">
+                      {passwordSuccess}
+                    </div>
                   )}
-
-                  <label className="block mb-1 font-medium">New Password</label>
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="w-full p-2 border rounded mb-2"
-                    autoComplete="new-password"
-                  />
-                  {errors.password && (
-                    <p className="text-red-500 text-sm mt-1">{errors.password}</p>
-                  )}
-
-                  <label className="block mb-1 font-medium">Confirm New Password</label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    className="w-full p-2 border rounded"
-                    autoComplete="new-password"
-                  />
-                  {errors.confirmPassword && (
-                    <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
-                  )}
+                  <div className="mb-2 relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                    <input
+                      type={showPassword.old ? "text" : "password"}
+                      name="oldPassword"
+                      value={passwordFields.oldPassword}
+                      onChange={e => setPasswordFields({ ...passwordFields, oldPassword: e.target.value })}
+                      className="w-full p-2 border border-gray-300 rounded pr-10"
+                      autoComplete="current-password"
+                    />
+                    <span
+                      className="absolute right-3 top-9 cursor-pointer"
+                      onClick={() => setShowPassword({ ...showPassword, old: !showPassword.old })}
+                    >
+                      {showPassword.old ? <FaEyeSlash /> : <FaEye />}
+                    </span>
+                  </div>
+                  <div className="mb-2 relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                    <input
+                      type={showPassword.new ? "text" : "password"}
+                      name="newPassword"
+                      value={passwordFields.newPassword}
+                      onChange={e => setPasswordFields({ ...passwordFields, newPassword: e.target.value })}
+                      className="w-full p-2 border border-gray-300 rounded pr-10"
+                      autoComplete="new-password"
+                    />
+                    <span
+                      className="absolute right-3 top-9 cursor-pointer"
+                      onClick={() => setShowPassword({ ...showPassword, new: !showPassword.new })}
+                    >
+                      {showPassword.new ? <FaEyeSlash /> : <FaEye />}
+                    </span>
+                  </div>
+                  <div className="mb-2 relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                    <input
+                      type={showPassword.confirm ? "text" : "password"}
+                      name="confirmPassword"
+                      value={passwordFields.confirmPassword}
+                      onChange={e => setPasswordFields({ ...passwordFields, confirmPassword: e.target.value })}
+                      className="w-full p-2 border border-gray-300 rounded pr-10"
+                      autoComplete="new-password"
+                    />
+                    <span
+                      className="absolute right-3 top-9 cursor-pointer"
+                      onClick={() => setShowPassword({ ...showPassword, confirm: !showPassword.confirm })}
+                    >
+                      {showPassword.confirm ? <FaEyeSlash /> : <FaEye />}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="w-full mt-2 py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                    disabled={passwordLoading}
+                    onClick={async () => {
+                      // Password change logic
+                      if (passwordFields.newPassword !== passwordFields.confirmPassword) {
+                        setPasswordSuccess("");
+                        setErrors({ ...errors, confirmPassword: "New passwords do not match" });
+                        return;
+                      }
+                      setPasswordLoading(true);
+                      setErrors({});
+                      try {
+                        const token = localStorage.getItem("token");
+                        const response = await fetch("http://localhost:5000/api/auth/update-password", {
+                          method: "PUT",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({
+                            email: formData.email,
+                            currentPassword: passwordFields.oldPassword,
+                            newPassword: passwordFields.newPassword,
+                          }),
+                        });
+                        if (response.ok) {
+                          setPasswordSuccess("Password changed successfully!");
+                          setPasswordFields({
+                            oldPassword: "",
+                            newPassword: "",
+                            confirmPassword: "",
+                          });
+                          setTimeout(() => setPasswordSuccess(""), 3000);
+                        } else {
+                          const errorData = await response.json();
+                          setErrors({ ...errors, oldPassword: errorData.message || "Failed to change password" });
+                        }
+                      } catch (err) {
+                        setErrors({ ...errors, oldPassword: "Failed to change password" });
+                      } finally {
+                        setPasswordLoading(false);
+                      }
+                    }}
+                  >
+                    {passwordLoading ? "Changing..." : "Change Password"}
+                  </button>
                 </div>
               )}
+
+              <div className="mb-4">
+                <button
+                  type="button"
+                  className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition"
+                  onClick={() => {
+                    setShowResetModal(true);
+                    setResetUser(currentUser);
+                  }}
+                >
+                  Reset Password
+                </button>
+              </div>
 
               <div className="flex justify-end">
                 <button
@@ -697,6 +829,33 @@ const Users = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+            <h3 className="text-lg font-bold mb-4">Reset Password</h3>
+            <p className="mb-6">Are you sure you want to reset this account's password?</p>
+            <div className="flex justify-end">
+              <button
+                className="bg-gray-300 text-gray-700 px-4 py-2 rounded mr-2 hover:bg-gray-400 transition"
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetUser(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
+                onClick={handleResetPassword}
+              >
+                Yes, Reset
+              </button>
+            </div>
           </div>
         </div>
       )}

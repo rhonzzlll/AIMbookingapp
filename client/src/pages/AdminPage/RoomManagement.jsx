@@ -8,19 +8,10 @@ import TopBar from '../../components/AdminComponents/TopBar';
 import AdminContentTemplate from './AdminContentTemplate';
 import Pagination from '@mui/material/Pagination';
 import Stack from '@mui/material/Stack';
-import { AuthContext } from '../../context/AuthContext'; // <-- Add this import
+import { AuthContext } from '../../context/AuthContext';
 
 const RoomManagement = () => {
-  const { auth } = useContext(AuthContext); // <-- Use context
-
-  // Optional: Restrict access to admins
-  useEffect(() => {
-    if (auth.role !== 'admin') {
-      // You can redirect or show a message
-      alert('Access denied. Admins only.');
-      // Optionally, use navigate('/home') if you want to redirect
-    }
-  }, [auth]);
+  const { auth } = useContext(AuthContext);
 
   const [rooms, setRooms] = useState([]);
   const [buildings, setBuildings] = useState([]);
@@ -40,18 +31,26 @@ const RoomManagement = () => {
   const [roomsPerPage] = useState(10);
 
   useEffect(() => {
-    // Fetch all required data when component mounts
     fetchInitialData();
   }, []);
+
+  const getAuthHeaders = () => {
+    const headers = {};
+    if (auth && auth.token) {
+      headers['Authorization'] = `Bearer ${auth.token}`;
+    }
+    return headers;
+  };
 
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      // Use Promise.all to fetch rooms, buildings and categories in parallel
+      const headers = getAuthHeaders();
+      
       const [roomsRes, buildingsRes, categoriesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/rooms`),
-        fetch(`${API_BASE_URL}/buildings`),
-        fetch(`${API_BASE_URL}/categories`)
+        fetch(`${API_BASE_URL}/rooms`, { headers }),
+        fetch(`${API_BASE_URL}/buildings`, { headers }),
+        fetch(`${API_BASE_URL}/categories`, { headers })
       ]);
 
       if (!roomsRes.ok) throw new Error('Failed to fetch rooms');
@@ -87,11 +86,9 @@ const RoomManagement = () => {
 
   const fetchRooms = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/rooms`, {
-        headers: {
-          Authorization: `Bearer ${auth.token}`,
-        },
-      });
+      const headers = getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/rooms`, { headers });
+      
       if (!response.ok) {
         throw new Error('Failed to fetch rooms');
       }
@@ -120,8 +117,10 @@ const RoomManagement = () => {
 
   const confirmDelete = async () => {
     try {
+      const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/rooms/${roomToDelete.roomId}`, {
         method: 'DELETE',
+        headers,
       });
 
       if (!response.ok) {
@@ -140,7 +139,9 @@ const RoomManagement = () => {
 
   const handleFormSubmit = async (formDataToSubmit) => {
     try {
-      // Extract roomData from formDataToSubmit to validate
+      console.log('Form data received:', formDataToSubmit);
+      
+      // Extract and validate roomData
       const roomDataJson = formDataToSubmit.get('roomData');
       if (!roomDataJson) {
         showToast('Missing room data', 'error');
@@ -148,69 +149,75 @@ const RoomManagement = () => {
       }
       
       const roomData = JSON.parse(roomDataJson);
+      console.log('Parsed room data:', roomData);
       
-      // Validate required fields based on database schema
+      // Validate required fields
       if (!roomData.roomName || !roomData.buildingId || !roomData.categoryId || !roomData.roomCapacity) {
         showToast('Please fill in all required fields (Room Name, Building, Category, and Capacity)', 'error');
         return;
       }
 
+      const headers = getAuthHeaders();
       let response;
       
       if (editingRoom) {
-        // For updates - use the existing FormData which already contains everything needed
+        // Update existing room
+        console.log('Updating room with ID:', editingRoom.roomId);
         response = await fetch(`${API_BASE_URL}/rooms/${editingRoom.roomId}`, {
           method: 'PUT',
-          body: formDataToSubmit, // Send FormData directly
+          headers,
+          body: formDataToSubmit,
         });
-
-        let errorMessage = 'Failed to update room';
-        if (!response.ok) {
-          const errorText = await response.text();
-          try {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } catch (e) {
-            errorMessage = errorText || errorMessage;
-          }
-          throw new Error(errorMessage);
-        }
-
-        const updatedRoom = await response.json();
-        setRooms(
-          rooms.map((room) =>
-            room.roomId === editingRoom.roomId ? updatedRoom : room
-          )
-        );
-        showToast(`${updatedRoom.roomName} updated successfully`);
       } else {
-        // For new rooms - use the existing FormData which already contains everything needed
+        // Create new room
+        console.log('Creating new room');
         response = await fetch(`${API_BASE_URL}/rooms`, {
           method: 'POST',
-          body: formDataToSubmit, // Send FormData directly
+          headers,
+          body: formDataToSubmit,
         });
-
-        let errorMessage = 'Failed to create room';
-        if (!response.ok) {
-          const errorText = await response.text();
-          try {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } catch (e) {
-            errorMessage = errorText || errorMessage;
-          }
-          throw new Error(errorMessage);
-        }
-
-        const createdRoom = await response.json();
-        setRooms([...rooms, createdRoom]);
-        showToast(`${roomData.roomName} added successfully`);
       }
 
+      console.log('Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        
+        let errorMessage = `Failed to ${editingRoom ? 'update' : 'create'} room`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const resultRoom = await response.json();
+      console.log('Result room:', resultRoom);
+
+      if (editingRoom) {
+        // Update the room in state
+        setRooms(prevRooms =>
+          prevRooms.map(room =>
+            room.roomId === editingRoom.roomId ? resultRoom : room
+          )
+        );
+        showToast(`${resultRoom.roomName} updated successfully`);
+      } else {
+        // Add new room to state
+        setRooms(prevRooms => [...prevRooms, resultRoom]);
+        showToast(`${resultRoom.roomName} added successfully`);
+      }
+
+      // Close form and refresh data
       setIsFormOpen(false);
       setEditingRoom(null);
-      // Refresh the rooms data
-      fetchRooms();
+      
+      // Refresh rooms to get the latest data including subrooms
+      await fetchRooms();
+      
     } catch (error) {
       console.error('Error saving room:', error);
       showToast(
@@ -224,13 +231,17 @@ const RoomManagement = () => {
     const roomToEdit = rooms.find(room => room.roomId === roomId);
     if (!roomToEdit) return;
     
+    // Generate unique subroom IDs
+    const subroomAId = uuidv4();
+    const subroomBId = uuidv4();
+    
     // Set this room as editing room with subrooms
     setEditingRoom({
       ...roomToEdit,
       isQuadrant: true,
       subRooms: [
         {
-          subroomId: uuidv4(),
+          subroomId: subroomAId,
           roomId: roomToEdit.roomId,
           subroomName: `${roomToEdit.roomName} - Section A`,
           subroomCapacity: Math.floor(roomToEdit.roomCapacity / 2),
@@ -239,7 +250,7 @@ const RoomManagement = () => {
           imagePreview: null
         },
         {
-          subroomId: uuidv4(),
+          subroomId: subroomBId,
           roomId: roomToEdit.roomId,
           subroomName: `${roomToEdit.roomName} - Section B`,
           subroomCapacity: Math.ceil(roomToEdit.roomCapacity / 2),
@@ -278,102 +289,108 @@ const RoomManagement = () => {
   const currentRooms = filteredRooms.slice(indexOfFirstRoom, indexOfLastRoom);
   const totalPages = Math.ceil(filteredRooms.length / roomsPerPage);
 
+  // Helper to check if current user is SuperAdmin
+  const isSuperAdmin = auth && auth.role && auth.role === 'SuperAdmin';
+
   return (
-      <div className="p-2 md:p-4 max-w-7xl mx-auto">
-        {toast && (
-          <Toast
-            message={toast.message}
-            type={toast.type}
-            onClose={closeToast}
-          />
-        )}
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 257,
-            width: 'calc(100% - 257px)',
-            zIndex: 500,
-            overflowY: 'auto',
-            height: '100vh',
-          }}
-        >
-          <TopBar onSearch={setSearchTerm} />
-          <div className="p-4 bg-gray-100 w-full flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
-              <button
-                onClick={handleAddRoom}
-                className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
-              >
-                + Add New Room
-              </button>
+    <div className="p-2 md:p-4 max-w-7xl mx-auto">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={closeToast}
+        />
+      )}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 257,
+          width: 'calc(100% - 257px)',
+          zIndex: 500,
+          overflowY: 'auto',
+          height: '100vh',
+        }}
+      >
+        <TopBar onSearch={setSearchTerm} />
+        <div className="p-4 bg-gray-100 w-full flex flex-col">
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-bold text-gray-800">Room Management</h1>
+            <button
+              onClick={handleAddRoom}
+              className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors flex items-center justify-center"
+            >
+              + Add New Room
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-16">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+              <p className="mt-4 text-gray-600">Loading rooms...</p>
             </div>
-
-            {loading ? (
-              <div className="text-center py-16">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
-                <p className="mt-4 text-gray-600">Loading rooms...</p>
-              </div>
-            ) : (
-              <>
-                <RoomList
-                  rooms={currentRooms}
-                  onEdit={handleEditRoom}
-                  onDelete={handleDeleteRoom}
-                  onDivide={handleDivideRoom}
-                  toggleSubroomVisibility={toggleSubroomVisibility}
-                  isSubroomVisible={isSubroomVisible}
-                  buildings={buildings}
-                  categories={categories}
-                />
-                
-                {filteredRooms.length > 0 && (
-                  <div className="mt-6 flex justify-center">
-                    <Stack spacing={2}>
-                      <Pagination
-                        count={totalPages}
-                        page={page}
-                        onChange={handlePageChange}
-                        showFirstButton 
-                        showLastButton
-                      />
-                    </Stack>
-                  </div>
-                )}
-                
-                {filteredRooms.length === 0 && !loading && (
-                  <div className="text-center py-8">
-                    <p className="text-gray-500">No rooms found matching your search criteria.</p>
-                  </div>
-                )}
-              </>
-            )}
-
-            {isFormOpen && (
-              <RoomForm
-                room={editingRoom}
-                onSubmit={handleFormSubmit}
-                onCancel={() => setIsFormOpen(false)}
+          ) : (
+            <>
+              <RoomList
+                rooms={currentRooms}
+                onEdit={handleEditRoom}
+                onDelete={isSuperAdmin ? handleDeleteRoom : undefined}
+                onDivideRoom={handleDivideRoom}
+                onToggleSubroom={toggleSubroomVisibility}
+                isSubroomVisible={isSubroomVisible}
                 buildings={buildings}
                 categories={categories}
               />
-            )}
+              
+              {filteredRooms.length > 0 && (
+                <div className="mt-6 flex justify-center">
+                  <Stack spacing={2}>
+                    <Pagination
+                      count={totalPages}
+                      page={page}
+                      onChange={handlePageChange}
+                      showFirstButton 
+                      showLastButton
+                    />
+                  </Stack>
+                </div>
+              )}
+              
+              {filteredRooms.length === 0 && !loading && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">No rooms found matching your search criteria.</p>
+                </div>
+              )}
+            </>
+          )}
 
-            {isDeleteModalOpen && (
-              <DeleteConfirmation
-                title="Delete Room"
-                message={`Are you sure you want to delete "${roomToDelete.roomName}"? This action cannot be undone. This will also delete all associated subrooms.`}
-                onConfirm={confirmDelete}
-                onCancel={() => {
-                  setIsDeleteModalOpen(false);
-                  setRoomToDelete(null);
-                }}
-              />
-            )}
-          </div>
+          {isFormOpen && (
+            <RoomForm
+              room={editingRoom}
+              onSubmit={handleFormSubmit}
+              onCancel={() => {
+                setIsFormOpen(false);
+                setEditingRoom(null);
+              }}
+              buildings={buildings}
+              categories={categories}
+            />
+          )}
+
+          {isDeleteModalOpen && isSuperAdmin && (
+            <DeleteConfirmation
+              title="Delete Room"
+              message={`Are you sure you want to delete "${roomToDelete?.roomName}"? This action cannot be undone. This will also delete all associated subrooms.`}
+              onConfirm={confirmDelete}
+              onCancel={() => {
+                setIsDeleteModalOpen(false);
+                setRoomToDelete(null);
+              }}
+            />
+          )}
         </div>
       </div>
+    </div>
   );
 };
 

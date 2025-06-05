@@ -41,6 +41,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(255),
       allowNull: true
     },
+    parentRoomId: { // <-- Add this field
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      references: {
+        model: 'room',
+        key: 'roomId'
+      }
+    },
     createdAt: {
       type: DataTypes.DATE,
       allowNull: true
@@ -72,6 +80,16 @@ module.exports = (sequelize, DataTypes) => {
     Room.belongsTo(models.Category, {
       foreignKey: 'categoryId',
       targetKey: 'categoryId'
+    });
+
+    // Add self-association for parent/child rooms
+    Room.hasMany(models.Room, {
+      as: 'childRooms',
+      foreignKey: 'parentRoomId'
+    });
+    Room.belongsTo(models.Room, {
+      as: 'parentRoom',
+      foreignKey: 'parentRoomId'
     });
   };
 

@@ -1,49 +1,48 @@
 module.exports = (sequelize, DataTypes) => {
   const Subroom = sequelize.define('Subroom', {
-    subRoomId: { // Changed to match database column name (PascalCase)
-      type: DataTypes.INTEGER,
+    subroomId: {
+      type: DataTypes.STRING(255), // Change from INTEGER to STRING(255)
       primaryKey: true,
-      autoIncrement: true,
-      field: 'subRoomId' // Explicitly map to database column name
+      allowNull: false,
+      field: 'subroomId'
     },
-    roomId: {   
+    roomId: {
       type: DataTypes.STRING(255),
       allowNull: false,
       references: {
-        model: 'room', 
+        model: 'room',
         key: 'roomId'
       },
-      field: 'roomId' // Explicitly map to database column name
+      field: 'roomId'
     },
-    subRoomName: { // Changed to match database column name (PascalCase)
+    subRoomName: {
       type: DataTypes.STRING(255),
       allowNull: false,
-      field: 'subRoomName' // Explicitly map to database column name
+      field: 'subRoomName'
     },
-    subRoomCapacity: { // Changed to match database column name (PascalCase)
+    subRoomCapacity: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      field: 'subRoomCapacity' // Explicitly map to database column name
+      field: 'subRoomCapacity'
     },
-    subRoomDescription: { // Changed to match database column name (PascalCase)
+    subRoomDescription: {
       type: DataTypes.STRING(255),
       allowNull: true,
-      field: 'subRoomDescription' // Explicitly map to database column name
+      field: 'subRoomDescription'
     },
-    subRoomImage: { // Changed to match database column name (PascalCase)
+    subRoomImage: {
       type: DataTypes.STRING(255),
       allowNull: true,
-      field: 'subRoomImage' // Explicitly map to database column name
+      field: 'subRoomImage'
     },
-    // Add timestamp fields explicitly with field mappings
     createdAt: {
       type: DataTypes.DATE,
-      allowNull: false,  // Change to false to match database
+      allowNull: false,
       field: 'createdAt'
     },
     updatedAt: {
       type: DataTypes.DATE,
-      allowNull: false,  // Change to false to match database
+      allowNull: false,
       field: 'updatedAt'
     }
   }, {
@@ -53,7 +52,6 @@ module.exports = (sequelize, DataTypes) => {
     freezeTableName: true
   });
 
-  // Add this association code
   Subroom.associate = function(models) {
     Subroom.belongsTo(models.Room, {
       foreignKey: 'roomId',

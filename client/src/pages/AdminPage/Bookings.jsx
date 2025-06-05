@@ -85,6 +85,7 @@ const initialFormState = {
   isBreakRoom: false,
   remarks: '',
   bookingId: null,
+  costCenterCharging: '', // <-- Add this line
 };
 
 // Time options for dropdowns
@@ -119,7 +120,7 @@ function TablePaginationActions(props) {
     onPageChange(event, page - 1);
   };
 
-  const handleNextButtonClick = (event) => {
+  const handleNextPageButtonClick = (event) => {
     onPageChange(event, page + 1);
   };
 
@@ -136,7 +137,7 @@ function TablePaginationActions(props) {
         {theme.direction === 'rtl' ? <KeyboardArrowRight /> : <KeyboardArrowLeft />}
       </IconButton>
       <IconButton
-        onClick={handleNextButtonClick} // Corrected function name
+        onClick={handleNextPageButtonClick} // <-- Fix here
         disabled={page >= Math.ceil(count / rowsPerPage) - 1}
         aria-label="next page"
       >
@@ -208,6 +209,8 @@ const Bookings = () => {
   // Add these states near your other useState hooks
   const [availabilityStatus, setAvailabilityStatus] = useState({ available: true, message: '' });
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [viewBooking, setViewBooking] = useState(null);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -291,6 +294,8 @@ const Bookings = () => {
         );
         
         setBookings(bookingsData);
+        
+
         
         // Also fetch users for dropdown
         const usersResponse = await axios.get(`${API_BASE_URL}/users`, {
@@ -414,20 +419,20 @@ const Bookings = () => {
     setIsAddModalOpen(true);
   };
     const handleEditClick = (booking) => {
-  console.log('Editing booking:', booking);
-
-  // Extract time portion (HH:mm) from startTime and endTime
+  // Helper to extract time in "HH:mm" from a date/time string
   const extractTime = (dateTime) => {
     if (!dateTime) return '';
-    const timePart = new Date(dateTime).toISOString().split('T')[1]; // Extract time portion
-    return timePart ? timePart.slice(0, 5) : ''; // Get HH:mm
+    const d = new Date(dateTime);
+    if (isNaN(d)) return '';
+    return d.toTimeString().slice(0, 5); // "HH:mm"
   };
 
+  // Set form data
   setFormData({
     ...booking,
     date: parseISODate(booking.date),
-    startTime: booking.startTime ? convertTo12HourFormat(extractTime(booking.startTime)) : '', // Convert to 12-hour format
-    endTime: booking.endTime ? convertTo12HourFormat(extractTime(booking.endTime)) : '',       // Convert to 12-hour format
+    startTime: booking.startTime ? convertTo12HourFormat(extractTime(booking.startTime)) : '',
+    endTime: booking.endTime ? convertTo12HourFormat(extractTime(booking.endTime)) : '',
     isRecurring: booking.isRecurring || booking.recurring === 'Yes',
     recurring: booking.isRecurring ? (booking.recurrencePattern || 'Daily') : 'No',
     recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
@@ -437,22 +442,18 @@ const Bookings = () => {
 
   setEditBookingId(booking.bookingId);
 
-  // Get the building ID from the booking
+  // Autofill categories and rooms for the selected building and category
   const buildingId = booking.buildingId || '';
-
   if (buildingId && rooms.length > 0) {
-    // Find rooms in this building
+    // Set categories for this building
     const roomsInBuilding = rooms.filter(room =>
       room.buildingId && room.buildingId.toString() === buildingId.toString()
     );
-
-    // Extract unique categories
     const categoriesMap = {};
     roomsInBuilding.forEach(room => {
       if (room.categoryId) {
         const categoryId = room.categoryId.toString();
         const categoryName = room.Category?.categoryName || room.category || `Category ${categoryId}`;
-
         if (!categoriesMap[categoryId]) {
           categoriesMap[categoryId] = {
             id: categoryId,
@@ -461,15 +462,12 @@ const Bookings = () => {
         }
       }
     });
-
     const categoriesList = Object.values(categoriesMap);
     setCategories(categoriesList);
 
-    // Get category ID from the booking
+    // Set available rooms for this building and category
     const categoryId = booking.categoryId || '';
-
     if (categoryId) {
-      // Find rooms in this building AND category
       const filteredRooms = rooms.filter(room =>
         room.buildingId &&
         room.buildingId.toString() === buildingId.toString() &&
@@ -487,38 +485,28 @@ const Bookings = () => {
     setBookingToDelete(booking);
   };
     
-// Proper building change handler
+// ...existing code...
 const handleBuildingChange = (e) => {
-  console.log("Building selected:", e.target.value);
   const selectedBuildingId = e.target.value;
-  
-  // Reset dependent selections
   setFormData(prev => ({
     ...prev,
     buildingId: selectedBuildingId,
-    building: selectedBuildingId,
-    categoryId: '',
-    category: '',
-    roomId: null,
-    roomName: ''
+    // Only reset category/room if the building actually changed
+    categoryId: prev.buildingId !== selectedBuildingId ? '' : prev.categoryId,
+    roomId: prev.buildingId !== selectedBuildingId ? null : prev.roomId,
+    roomName: prev.buildingId !== selectedBuildingId ? '' : prev.roomName,
   }));
-  
-  // Clear any errors
   setFormError(prev => ({ ...prev, building: '', category: '', room: '' }));
-  
-  // Filter categories for this building
+
   if (selectedBuildingId && rooms.length > 0) {
-    const roomsInBuilding = rooms.filter(room => 
+    const roomsInBuilding = rooms.filter(room =>
       room.buildingId && room.buildingId.toString() === selectedBuildingId
     );
-    
-    // Extract unique categories
     const categoriesMap = {};
     roomsInBuilding.forEach(room => {
       if (room.categoryId) {
         const categoryId = room.categoryId.toString();
         const categoryName = room.Category?.categoryName || room.category || `Category ${categoryId}`;
-        
         if (!categoriesMap[categoryId]) {
           categoriesMap[categoryId] = {
             id: categoryId,
@@ -527,19 +515,30 @@ const handleBuildingChange = (e) => {
         }
       }
     });
-    
     const categoriesList = Object.values(categoriesMap);
-    console.log("Categories for this building:", categoriesList);
     setCategories(categoriesList);
+
+    // If the current categoryId is not in the new list, reset it
+    if (!categoriesList.some(cat => cat.id === formData.categoryId)) {
+      setFormData(prev => ({
+        ...prev,
+        categoryId: '',
+        roomId: null,
+        roomName: ''
+      }));
+    }
   } else {
-    // Reset categories if no building selected
     setCategories([]);
+    setFormData(prev => ({
+      ...prev,
+      categoryId: '',
+      roomId: null,
+      roomName: ''
+    }));
   }
-  
-  // Always reset available rooms when building changes
   setAvailableRooms([]);
 };
-
+// ...existing code...
 // Proper category change handler
 const handleCategoryChange = (e) => {
   console.log("Category selected:", e.target.value);
@@ -860,6 +859,10 @@ const handleNameChange = (e) => {
         bookingCapacity: Number(formData.bookingCapacity) || 1,
         status: (formData.status || 'pending').toLowerCase(),
         recurringGroupId: formData.isRecurring ? recurringGroupId : null,
+        costCenterCharging: formData.costCenterCharging || '', // <-- Add this line
+        numberOfPaxBreakRoom: formData.isBreakRoom ? formData.numberOfPaxBreakRoom || '' : '',
+        startTimeBreakRoom: formData.isBreakRoom ? formData.startTimeBreakRoom || '' : '',
+        endTimeBreakRoom: formData.isBreakRoom ? formData.endTimeBreakRoom || '' : '',
       };
 
       // Only add bookingId for edit
@@ -942,175 +945,76 @@ const handleNameChange = (e) => {
     ).slice(0, 5); // Limit to 5 results
   }, [users, userSearchQuery]);
 
-  const getAvailableTimeOptions = (isStart) => {
-    const now = new Date();
-    const selectedDate = new Date(formData.date);
-    const isToday = now.toDateString() === selectedDate.toDateString();
-  
-    const allTimes = TIME_OPTIONS;
-  
-    if (!isToday) return allTimes;
-  
-    // Convert current time to minutes
-    const currentHour = now.getHours();
-    const currentMinutes = now.getMinutes();
-    const currentTotalMinutes = currentHour * 60 + currentMinutes;
-  
-    return allTimes.filter((time) => {
-      const [timePart, modifier] = time.split(' ');
-      let [hours, minutes] = timePart.split(':').map(Number);
-  
-      if (modifier === 'PM' && hours !== 12) hours += 12;
-      if (modifier === 'AM' && hours === 12) hours = 0;
-  
-      const timeInMinutes = hours * 60 + minutes;
-      return timeInMinutes > currentTotalMinutes;
-    });
-  };
-  const getTimeInMinutes = (timeStr) => {
-    const [time, modifier] = timeStr.split(' ');
-    let [hours, minutes] = time.split(':').map(Number);
-  
-    if (modifier === 'PM' && hours !== 12) hours += 12;
-    if (modifier === 'AM' && hours === 12) hours = 0;
-  
-    return hours * 60 + minutes;
-  };
+const getAvailableStartTimes = () => {
+  if (!formData.roomId || !formData.date) return [];
+  const editingBookingId = isEditModalOpen ? editBookingId : null;
 
-  const isTimeSlotTaken = (timeStr, type = 'start') => {
-    if (!formData.room || !formData.date) return false;
-  
-    const selectedRoom = rooms.find(r => r._id === formData.room);
-    const selectedBuilding = selectedRoom?.building;
-  
-    if (!selectedBuilding) return false;
-  
-    const [hourStr, minuteStr] = timeStr.split(' ')[0].split(':');
-    let hours = parseInt(hourStr, 10);
-    const minutes = parseInt(minuteStr, 10);
-    const modifier = timeStr.split(' ')[1];
-  
-    if (modifier === 'PM' && hours !== 12) hours += 12;
-    if (modifier === 'AM' && hours === 12) hours = 0;
-  
-    const checkTime = new Date(`${formData.date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
-  
-    // Check for conflicts across all rooms in the same building
-    return bookings.some((booking) => {
-      if (isEditModalOpen && editBookingId && booking._id === editBookingId) return false;  // Skip the current booking when editing
-  
-      const bookingDate = new Date(booking.date).toISOString().split('T')[0];
-      const selectedDate = new Date(formData.date).toISOString().split('T')[0];
-  
-      if (
-        booking.building === selectedBuilding && 
-        bookingDate === selectedDate && 
-        booking.status === 'confirmed'
-      ) {
-        const bookingStart = new Date(booking.startTime);
-        const bookingEnd = new Date(booking.endTime);
-  
-        if (type === 'start') {
-          const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);  // Buffer time
-          return checkTime >= bookingStart && checkTime < bufferEnd;
-        }
-  
-        if (type === 'end') {
-          const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);  // Buffer time
-          return checkTime >= bufferStart && checkTime < bookingEnd;
-        }
+  const confirmed = bookings.filter(
+    b => b.roomId === formData.roomId &&
+      b.date === formData.date &&
+      b.status?.toLowerCase() === 'confirmed' &&
+      (!editingBookingId || b.bookingId !== editingBookingId)
+  );
+  const intervals = getAvailableIntervals(confirmed);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isToday = formData.date === todayStr;
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  let options = [];
+  intervals.forEach(({ start, end }) => {
+    for (let t = start; t + 30 <= end; t += 30) {
+      if (!isToday || t > currentMinutes) {
+        options.push(minutesToTime(t));
       }
-  
-      return false;
-    });
-  };  
-
-  const processBookingsForTimeSlots = (bookings) => {
-    if (!bookings || !formData.building || !formData.room || !formData.date) return;
-  
-    // Clear previous unavailable time slots
-    setUnavailableTimeSlots([]);
-  
-    const relevantBookings = bookings.filter(booking =>
-      booking.building === formData.building &&
-      new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
-      booking.status?.toLowerCase() === 'confirmed'
-    );
-  
-    const unavailable = [];
-  
-    relevantBookings.forEach(booking => {
-      const bookingStart = new Date(booking.startTime);
-      const bookingEnd = new Date(booking.endTime);
-      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000); // 30 min buffer time
-  
-      const formatTimeToOption = (date) => {
-        let hours = date.getHours();
-        const minutes = date.getMinutes();
-        const period = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12 || 12;
-        return `${hours}:${minutes.toString().padStart(2, '0')} ${period}`;
-      };
-  
-      TIME_OPTIONS.forEach(timeOption => {
-        const timeOption24 = convertTo24HourFormat(timeOption);
-        const timeOptionDate = new Date(`${formData.date}T${timeOption24}:00`);
-  
-        // Check for overlapping time slots across all rooms in the building
-        if (timeOptionDate >= bookingStart && timeOptionDate < bufferEnd) {
-          unavailable.push({
-            time: timeOption,
-            reason: `Booking: ${formatTimeToOption(bookingStart)} - ${formatTimeToOption(bookingEnd)} (Already booked)`
-          });
-        }
-      });
-    });
-  
-    setUnavailableTimeSlots(unavailable);
-  };
-  
-  
-  const getFilteredStartTimes = () => {
-    const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  
-    return TIME_OPTIONS.filter((time) => {
-      const timeMinutes = getTimeInMinutes(time);
-      const isToday = formData.date === today;
-      return (!isToday || timeMinutes > currentMinutes) && !isTimeSlotTaken(time, 'start');
-    });
-  };
-  
-  const getFilteredEndTimes = () => {
-    const startTime = formData.startTime;
-    if (!startTime) return TIME_OPTIONS;
-  
-    const startMinutes = getTimeInMinutes(startTime);  // Ensure start time is in minutes
-  
-    // Existing logic to filter based on start time
-    const filteredEndTimes = TIME_OPTIONS.filter((time) => getTimeInMinutes(time) > startMinutes);
-  
-    // If today is selected, ensure that only times after the current time are available
-    const now = new Date();
-    const selectedDate = new Date(formData.date);
-    const isToday = now.toDateString() === selectedDate.toDateString();
-    
-    if (isToday) {
-      const currentHour = now.getHours();
-      const currentMinutes = now.getMinutes();
-      const currentTotalMinutes = currentHour * 60 + currentMinutes;
-      
-      return filteredEndTimes.filter(time => {
-        const timeInMinutes = getTimeInMinutes(time);
-        return timeInMinutes > currentTotalMinutes;  // Ensuring only times after current time
-      });
     }
+  });
+
+  // Always add the current value if editing and not present, using formatTime
+  if (
+    editingBookingId &&
+    formData.startTime &&
+    !options.includes(formatTime(formData.startTime))
+  ) {
+    options.push(formatTime(formData.startTime));
+    options.sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
+  }
+  return options;
+};
+
+const getAvailableEndTimes = () => {
+  if (!formData.startTime || !formData.roomId || !formData.date) return [];
+  const editingBookingId = isEditModalOpen ? editBookingId : null;
+
+  const confirmed = bookings.filter(
+    b => b.roomId === formData.roomId &&
+      b.date === formData.date &&
+      b.status?.toLowerCase() === 'confirmed' &&
+      (!editingBookingId || b.bookingId !== editingBookingId)
+  );
+  const intervals = getAvailableIntervals(confirmed);
+  const startMinutes = timeToMinutes(formatTime(formData.startTime));
+
+  const interval = intervals.find(
+    ({ start, end }) => start <= startMinutes && startMinutes < end
+  );
+  let times = [];
+  if (interval) {
+    for (let t = startMinutes + 30; t <= interval.end; t += 30) {
+      times.push(minutesToTime(t));
+    }
+  }
+  // Always add the current value if editing and not present, using formatTime
+  if (
+    editingBookingId &&
+    formData.endTime &&
+    !times.includes(formatTime(formData.endTime))
+  ) {
+    times.push(formatTime(formData.endTime));
+    times.sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
+  }
+  return times;
+};
   
-    return filteredEndTimes;
-  };
-  
-   
 const BookingForm = React.memo(({ isEdit }) => (
   <form onSubmit={handleSubmit} className="space-y-6">
     {/* Error messages */}
@@ -1276,20 +1180,41 @@ const BookingForm = React.memo(({ isEdit }) => (
             </select>
             {formError.room && <p className="text-red-500 text-xs mt-1">{formError.room}</p>}
           </div>
+ <div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Number of Pax <span className="text-red-500">*</span>
+  </label>
+  <input
+    type="text"
+    name="bookingCapacity"
+    defaultValue={formData.bookingCapacity || ''}
+    onBlur={e => setFormData(prev => ({ ...prev, bookingCapacity: e.target.value }))}
+    placeholder="Enter number of participants"
+    autoComplete="off"
+    className={`w-full p-2 border ${formError.bookingCapacity ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+  />
+  {formError.bookingCapacity && (
+    <p className="text-red-500 text-xs mt-1">{formError.bookingCapacity}</p>
+  )}
+</div>
+ 
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pax</label>
-            <input
-              type="number"
-              name="bookingCapacity"
-              value={formData.bookingCapacity || 1}
-              onBlur={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} // Update state on blur
-              min="1"
+ 
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Charged To (Cost Center)
+  </label>
+  <input
+    type="text"
+    name="costCenterCharging"
+    defaultValue={formData.costCenterCharging} // Use defaultValue for uncontrolled input
+              onBlur={(e) => setFormData((prev) => ({ ...prev, costCenterCharging: e.target.value }))} // Update state on blur
               required
-              className={`w-full p-2 border ${formError.bookingCapacity ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
-            />
-            {formError.bookingCapacity && <p className="text-red-500 text-xs mt-1">{formError.bookingCapacity}</p>}
-          </div>
+    placeholder="Enter cost center or department"
+              className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+  />
+</div>
+ 
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -1312,7 +1237,7 @@ const BookingForm = React.memo(({ isEdit }) => (
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
             >
               <option value="">Select Start Time</option>
-              {getFilteredStartTimes().map((time) => (
+              {getAvailableStartTimes().map((time) => (
                 <option key={time} value={time}>
                   {time}
                 </option>
@@ -1328,7 +1253,7 @@ const BookingForm = React.memo(({ isEdit }) => (
               disabled={!formData.startTime}
             >
               <option value="">Select End Time</option>
-              {getFilteredEndTimes().map((time) => (
+              {getAvailableEndTimes().map((time) => (
                 <option key={time} value={time}>
                   {time}
                 </option>
@@ -1390,23 +1315,23 @@ const BookingForm = React.memo(({ isEdit }) => (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-4 w-full">
         {/* Number of Pax for Break Room */}
         <div className="md:col-span-2">
-          <label className="block text-gray-700 font-medium mb-2">
-            Number of Pax (Break Room) <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="number"
-            name="numberOfPaxBreakRoom"
-            value={formData.numberOfPaxBreakRoom || ''}
-            onChange={e => setFormData(prev => ({
-              ...prev,
-              numberOfPaxBreakRoom: e.target.value,
-            }))}
-            min={1}
-            className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter number of participants for break room"
-            required={formData.isBreakRoom}
-          />
-        </div>
+  <label className="block text-gray-700 font-medium mb-2">
+    Number of Pax (Break Room) <span className="text-red-500">*</span>
+  </label>
+  <input
+    type="text"
+    name="numberOfPaxBreakRoom"
+    defaultValue={formData.numberOfPaxBreakRoom || ''}
+    onBlur={e => setFormData(prev => ({
+      ...prev,
+      numberOfPaxBreakRoom: e.target.value,
+    }))}
+    placeholder="Enter number of participants for break room"
+    autoComplete="off"
+    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+    required={formData.isBreakRoom}
+  />
+</div>
         {/* Start Time for Break Room */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">
@@ -1520,28 +1445,30 @@ const BookingForm = React.memo(({ isEdit }) => (
 
     {/* Notes and Remarks */}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
-        <textarea
-          name="notes"
-          value={formData.notes || ''}
-          onChange={handleInputChange}
-          rows="3"
-          placeholder="Add any additional notes here"
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
-        ></textarea>
-      </div>
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">Additional Remarks</label>
-        <textarea
-          name="remarks"
-          value={formData.remarks || ''}
-          onChange={handleInputChange}
-          rows="3"
-          placeholder="Add any additional remarks here"
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
-        ></textarea>
-      </div>
+     <div>
+  <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
+  <textarea
+    name="notes"
+    defaultValue={formData.notes || ''}
+    onBlur={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+    rows="3"
+    placeholder="Add any additional notes here"
+    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
+  ></textarea>
+</div>
+
+
+<div>
+  <label className="block text-sm font-semibold text-gray-700 mb-1">Additional Remarks</label>
+  <textarea
+    name="remarks"
+    defaultValue={formData.remarks || ''}
+    onBlur={e => setFormData(prev => ({ ...prev, remarks: e.target.value }))}
+    rows="3"
+    placeholder="Add any additional remarks here"
+    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-400"
+  ></textarea>
+</div>
     </div>
 
     {/* Actions */}
@@ -1617,6 +1544,27 @@ const BookingForm = React.memo(({ isEdit }) => (
     setSelectedStatus(status);
     setIsStatusModalOpen(true);
   };
+
+  const handleSaveRemarks = async (booking, newRemarks) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/${booking.bookingId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ remarks: newRemarks }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to save remarks');
+      }
+      await fetchBookings(); // Refresh bookings list
+      setViewBooking({ ...booking, remarks: newRemarks }); // Update modal with new remarks
+    } catch (err) {
+      setError(err.message || 'Failed to save remarks.');
+    }
+  };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
       <TopBar onSearch={setSearchTerm} />
@@ -1660,133 +1608,139 @@ const BookingForm = React.memo(({ isEdit }) => (
           <Table sx={{ minWidth: 1200 }} aria-label="bookings table">
             <TableHead>
               <TableRow>
+                <TableCell sx={{ fontWeight: 'bold' }}>Booking ID</TableCell> {/* <-- Add this line */}
                 {[
-                  { key: 'title', label: 'Booking Title' },
-                  { key: 'firstName', label: 'First Name' },
-                  { key: 'lastName', label: 'Last Name' },
-                  { key: 'department', label: 'Department' },
-                  { key: 'category', label: 'Category' },
-                  { key: 'roomName', label: 'Room' },
-                  { key: 'building', label: 'Building' },
-                  { key: 'date', label: 'Date' },
-                  { key: 'startTime', label: 'Time' },
-                  { key: 'bookingCapacity', label: 'Capacity' },
-                  { key: 'isMealRoom', label: 'Meal Room' },
-                  { key: 'isBreakRoom', label: 'Break Room' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'recurring', label: 'Recurring' },
-                  { key: 'timeSubmitted', label: 'Time Submitted' },
-                ].map(({ key, label }) => (
-                  <TableCell
-                    key={key}
-                    onClick={() => handleSort(key)}
-                    sx={{ cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </TableCell>
-                ))}
-                  <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {!loading && currentBookings.length > 0 ? (
-                sortedBookings
-                  .filter(booking =>
-                    `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.category} ${booking.roomName} ${booking.building}`
-                      .toLowerCase()
-                      .includes(searchTerm.toLowerCase())
-                  )
-                  .map((booking) => (
-                    <TableRow key={booking._id || booking.id} hover>
-                      <TableCell>{booking.title}</TableCell>
-                      <TableCell>{booking.firstName}</TableCell>
-                      <TableCell>{booking.lastName}</TableCell>
-                      <TableCell>{booking.department}</TableCell>
-                      <TableCell>{booking.category}</TableCell>
-                      <TableCell>{booking.roomName}</TableCell>
-                      <TableCell>{booking.building}</TableCell>
-                      <TableCell>
-                        {booking.recurring !== 'No' && booking.recurringEndDate ? (
-                          <div>
-                            {formatDate(booking.date)} - {formatDate(booking.recurringEndDate)} ({booking.recurring})
-                          </div>
-                        ) : (
-                          <div>{formatDate(booking.date)}</div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-                        {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </TableCell>
-                      <TableCell>{booking.bookingCapacity || '1'}</TableCell>
-                      <TableCell>
-                        <span style={{
-                          background: booking.isMealRoom ? '#bbf7d0' : '#f3f4f6',
-                          color: booking.isMealRoom ? '#16a34a' : '#374151',
-                          borderRadius: 8,
-                          padding: '2px 8px',
-                          fontSize: 12,
-                          display: 'inline-block'
-                        }}>
-                          {booking.isMealRoom ? 'Yes' : 'No'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span style={{
-                          background: booking.isBreakRoom ? '#bbf7d0' : '#f3f4f6',
-                          color: booking.isBreakRoom ? '#16a34a' : '#374151',
-                          borderRadius: 8,
-                          padding: '2px 8px',
-                          fontSize: 12,
-                          display: 'inline-block'
-                        }}>
-                          {booking.isBreakRoom ? 'Yes' : 'No'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span style={{
-                          background: booking.status === 'confirmed'
-                            ? '#bbf7d0'
-                            : booking.status === 'pending'
-                            ? '#fef9c3'
-                            : '#fecaca',
-                          color: booking.status === 'confirmed'
-                            ? '#16a34a'
-                            : booking.status === 'pending'
-                            ? '#ca8a04'
-                            : '#dc2626',
-                          borderRadius: 8,
-                          padding: '2px 8px',
-                          fontSize: 12,
-                          display: 'inline-block'
-                        }}>
-                          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                        </span>
-                        {/* Show decline reason if declined */}
-                        {booking.status === 'declined' && booking.declineReason && (
-                          <small style={{ display: 'block', color: '#dc2626', marginTop: 2 }}>
-                            Reason: {booking.declineReason}
-                          </small>
-                        )}
-                        {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
-                          <small style={{ display: 'block', color: '#6b7280', marginTop: 2 }}>
-                            Changed by: {booking.changedBy}
-                          </small>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {booking.recurring}
-                      </TableCell>
-                      <TableCell>
-                        {booking.timeSubmitted
-                          ? new Date(booking.timeSubmitted).toLocaleString()
-                          : ''}
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
+      { key: 'title', label: 'Booking Title' },
+      { key: 'firstName', label: 'First Name' },
+      { key: 'lastName', label: 'Last Name' },
+      { key: 'department', label: 'Department' },
+      { key: 'category', label: 'Category' },
+      { key: 'roomName', label: 'Room' },
+      { key: 'building', label: 'Building' },
+      { key: 'date', label: 'Date' },
+      { key: 'startTime', label: 'Time' },
+      { key: 'bookingCapacity', label: 'Capacity' },
+      { key: 'costCenterCharging', label: 'Charged To' },
+      { key: 'isMealRoom', label: 'Meal Room' },
+      { key: 'isBreakRoom', label: 'Break Room' },
+      { key: 'status', label: 'Status' },
+      { key: 'recurring', label: 'Recurring' },
+      { key: 'timeSubmitted', label: 'Time Submitted' },
+    ].map(({ key, label }) => (
+      <TableCell
+        key={key}
+        onClick={() => handleSort(key)}
+        sx={{ cursor: 'pointer', fontWeight: 'bold' }}
+      >
+        {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+      </TableCell>
+    ))}
+    <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+  </TableRow>
+</TableHead>
+<TableBody>
+  {!loading && currentBookings.length > 0 ? (
+    sortedBookings
+      .filter(booking =>
+        `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.category} ${booking.roomName} ${booking.building} ${booking.costCenterCharging || ''}`
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase())
+      )
+      .map((booking) => (
+        <TableRow key={booking._id || booking.id} hover>
+          <TableCell>{booking.bookingId}</TableCell> {/* <-- Add this line */}
+          <TableCell>{booking.title}</TableCell>
+          <TableCell>{booking.firstName}</TableCell>
+          <TableCell>{booking.lastName}</TableCell>
+          <TableCell>{booking.department}</TableCell>
+          <TableCell>{booking.category}</TableCell>
+          <TableCell>{booking.roomName}</TableCell>
+          <TableCell>{booking.building}</TableCell>
+          <TableCell>
+            {booking.recurring !== 'No' && booking.recurringEndDate ? (
+              <div>
+                {formatDate(booking.date)} - {formatDate(booking.recurringEndDate)} ({booking.recurring})
+              </div>
+            ) : (
+              <div>{formatDate(booking.date)}</div>
+            )}
+          </TableCell>
+          <TableCell>
+            {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
+            {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </TableCell>
+          <TableCell>{booking.bookingCapacity || '1'}</TableCell>
+          <TableCell>{booking.costCenterCharging || ''}</TableCell>
+          <TableCell>
+            <span style={{
+              background: booking.isMealRoom ? '#bbf7d0' : '#f3f4f6',
+              color: booking.isMealRoom ? '#16a34a' : '#374151',
+              borderRadius: 8,
+              padding: '2px 8px',
+              fontSize: 12,
+              display: 'inline-block'
+            }}>
+              {booking.isMealRoom ? 'Yes' : 'No'}
+            </span>
+          </TableCell>
+          <TableCell>
+            <span>
+              {booking.isBreakRoom ? 'Yes' : 'No'}
+              {booking.isBreakRoom && (
+                <>
+                  {booking.numberOfPaxBreakRoom ? ` / ${booking.numberOfPaxBreakRoom} pax` : ''}
+                  {booking.startTimeBreakRoom ? ` / ${booking.startTimeBreakRoom}` : ''}
+                  {booking.endTimeBreakRoom ? ` - ${booking.endTimeBreakRoom}` : ''}
+                </>
+              )}
+            </span>
+          </TableCell>
+          <TableCell>
+            <span style={{
+              background: booking.status === 'confirmed'
+                ? '#bbf7d0'
+                : booking.status === 'pending'
+                ? '#fef9c3'
+                : '#fecaca',
+              color: booking.status === 'confirmed'
+                ? '#16a34a'
+                : booking.status === 'pending'
+                ? '#ca8a04'
+                : '#dc2626',
+              borderRadius: 8,
+              padding: '2px 8px',
+              fontSize: 12,
+              display: 'inline-block'
+            }}>
+              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+            </span>
+            {booking.status === 'declined' && booking.declineReason && (
+              <small style={{ display: 'block', color: '#dc2626', marginTop: 2 }}>
+                Reason: {booking.declineReason}
+              </small>
+            )}
+            {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
+              <small style={{ display: 'block', color: '#6b7280', marginTop: 2 }}>
+                Changed by: {booking.changedBy}
+              </small>
+            )}
+          </TableCell>
+          <TableCell>
+            {booking.recurring}
+          </TableCell>
+          <TableCell>
+            {booking.timeSubmitted
+              ? new Date(booking.timeSubmitted).toLocaleString()
+              : ''}
+          </TableCell>
+          <TableCell>
+            <Box sx={{ display: 'flex', gap: 1 }}>
                           <button
                             style={{ color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}
-                            onClick={() => handleEditClick(booking)}
+                            onClick={() => {
+                              setViewBooking(booking);
+                              setIsViewModalOpen(true);
+                            }}
                           >
                             View
                           </button>
@@ -1811,20 +1765,20 @@ const BookingForm = React.memo(({ isEdit }) => (
                             </button>
                           )}
                         </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))
-              ) : (
-                !loading && (
-                  <TableRow>
-                    <TableCell colSpan={17} align="center">
-                      No bookings found. Add a new booking to get started.
-                    </TableCell>
-                  </TableRow>
-                )
-              )}
-            </TableBody>
-            <TableFooter>
+          </TableCell>
+        </TableRow>
+      ))
+  ) : (
+    !loading && (
+      <TableRow>
+        <TableCell colSpan={17} align="center">
+          No bookings found. Add a new booking to get started.
+        </TableCell>
+      </TableRow>
+    )
+  )}
+</TableBody>
+<TableFooter>
               <TableRow>
                 <TablePagination
                   rowsPerPageOptions={[10, 25, 50]}
@@ -1927,6 +1881,7 @@ if (userId) {
             if (!booking.isRecurring) {
               const response = await fetch(
                 `${API_BASE_URL}/bookings/${selectedBookingId}`,
+               
                 {
                   method: 'PUT',
                   headers: {
@@ -1949,12 +1904,13 @@ if (userId) {
                 };
                 return fetch(
                   `${API_BASE_URL}/bookings/${b.bookingId || b._id}`,
+                 
                   {
                     method: 'PUT',
                     headers: {
                       'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${token}`,
-                    },
+                   'Authorization': `Bearer ${token}`,
+                                                                             },
                     body: JSON.stringify(recurringPayload),
                   }
                 );
@@ -1963,7 +1919,7 @@ if (userId) {
 
               // Success - refresh bookings and close modal
             await fetchBookings();
-            setIsStatusModalOpen(false);
+                                                                                         setIsStatusModalOpen(false);
           } catch (err) {
             setError(`Failed to update booking: ${err.message || ''}`);
           } finally {
@@ -1971,8 +1927,316 @@ if (userId) {
           }
         }}
       />
+<BookingDetailsModal
+  isOpen={isViewModalOpen}
+  booking={viewBooking}
+  onClose={() => { setIsViewModalOpen(false); setViewBooking(null); }}
+  onSaveRemarks={handleSaveRemarks} // <-- This must exist in Bookings!
+/>
     </div>
+
+
+
   );
 };
 
 export default Bookings;
+
+// Time formatting function
+const formatTime = (timeString) => {
+  if (!timeString) return '';
+
+  // If AM/PM already, return as-is
+  if (/am|pm/i.test(timeString)) return timeString;
+
+  // If it's ISO string with T, extract the time part and convert to AM/PM
+  if (timeString.includes('T')) {
+    const date = new Date(timeString);
+    if (!isNaN(date)) {
+      let hour = date.getUTCHours();
+      let minute = date.getUTCMinutes();
+      let suffix = 'AM';
+      if (hour === 0) { hour = 12; }
+      else if (hour === 12) { suffix = 'PM'; }
+      else if (hour > 12) { hour -= 12; suffix = 'PM'; }
+      return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
+    }
+  }
+
+  // Handle "HH:mm:ss" or "HH:mm"
+  const match = timeString.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (match) {
+    let [h, m] = [parseInt(match[1]), match[2]];
+    let suffix = 'AM';
+    if (h === 0) h = 12;
+    else if (h === 12) suffix = 'PM';
+    else if (h >  12) h -= 12;
+    return `${h}:${m} ${suffix}`;
+  }
+
+  // Fallback
+  return timeString;
+};
+
+// New helper function to get available time intervals
+const getAvailableIntervals = (bookings, businessHours = { start: "08:00", end: "22:00" }) => {
+  const buffer = 30; // Buffer time in minutes
+  const toMinutes = (time) => {
+    const [h, m] = time.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const toMinutesFromISO = (iso) => {
+    const d = new Date(iso);
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  };
+
+  if (!bookings || bookings.length === 0) {
+    return [{ start: toMinutes(businessHours.start), end: toMinutes(businessHours.end) }];
+  }
+
+  const busy = bookings
+    .map((b) => ({
+      start: Math.max(toMinutesFromISO(b.startTime) - buffer, toMinutes(businessHours.start)),
+      end: Math.min(toMinutesFromISO(b.endTime) + buffer, toMinutes(businessHours.end)),
+    }))
+    .sort((a, b) => a.start - b.start);
+
+  const slots = [];
+  let current = toMinutes(businessHours.start);
+
+  for (const period of busy) {
+    if (period.start > current) {
+      slots.push({ start: current, end: period.start });
+    }
+    current = Math.max(current, period.end);
+  }
+
+  if (current < toMinutes(businessHours.end)) {
+    slots.push({ start: current, end: toMinutes(businessHours.end) });
+  }
+
+  return slots.filter((slot) => slot.end > slot.start);
+};
+  
+// Converts "h:mm AM/PM" to minutes since 00:00
+const timeToMinutes = (timeString) => {
+  if (!timeString) return 0;
+  const [time, period] = timeString.split(' ');
+  let [h, m] = time.split(':').map(Number);
+  if (period === 'PM' && h !== 12) h += 12;
+  if (period === 'AM' && h === 12) h = 0;
+  return h * 60 + m;
+};
+
+// Converts minutes since 00:00 to "h:mm AM/PM"
+const minutesToTime = (minutes) => {
+  let h = Math.floor(minutes / 60);
+  let m = minutes % 60;
+  let suffix = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12;
+  else if (h >  12) h -= 12;
+  return `${h}:${m.toString().padStart(2, '0')} ${suffix}`;
+};
+
+// Booking Details Modal Component
+const BookingDetailsModal = ({
+  isOpen,
+  booking,
+  onClose,
+  onSaveRemarks,
+}) => {
+  const [remarks, setRemarks] = useState(booking?.remarks || "");
+  const [saving, setSaving] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [showRemarksModal, setShowRemarksModal] = useState(false);
+  const [fullRemarks, setFullRemarks] = useState(booking?.remarks || "");
+
+  useEffect(() => {
+    setRemarks(booking?.remarks || "");
+    setFullRemarks(booking?.remarks || "");
+  }, [booking]);
+
+  if (!isOpen || !booking) return null;
+
+  const handleSaveRemarks = async () => {
+    setSaving(true);
+    if (onSaveRemarks) await onSaveRemarks(booking, remarks);
+    setFullRemarks(remarks);
+    setSaving(false);
+  };
+
+  const handleSaveFullRemarks = async () => {
+    setSaving(true);
+    setRemarks(fullRemarks);
+    if (onSaveRemarks) await onSaveRemarks(booking, fullRemarks);
+    setShowRemarksModal(false);
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#f7fafd] bg-opacity-10 backdrop-blur-sm">
+      <div className="relative bg-white rounded-2xl shadow-2xl p-10 w-full max-w-5xl min-h-[650px] max-h-[95vh] overflow-y-auto flex flex-col" style={{ border: "1.5px solid #dde3ed" }}>
+        {/* CLOSE BUTTON */}
+        <button
+          onClick={onClose}
+          className="absolute top-5 right-7 text-gray-400 hover:text-gray-600 text-3xl font-bold"
+          aria-label="Close modal"
+        >
+          ×
+        </button>
+        {/* HEADER */}
+        <div className="flex items-center gap-3 mb-8 pl-12">
+          <span className="bg-blue-100 rounded-xl p-2 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <rect x="4" y="5" width="16" height="16" rx="3" strokeWidth="2" />
+              <path strokeWidth="2" d="M8 3v4m8-4v4M4 11h16"/>
+            </svg>
+          </span>
+          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Booking Details</h2>
+        </div>
+        {/* CONTENT */}
+        <div className="flex flex-col md:flex-row gap-10 md:gap-16 items-start">
+          {/* INFO COLUMN */}
+          <div className="flex-1 text-left text-lg">
+            <div className="mb-2"><b>Booking Title:</b> {booking.title || ""}</div>
+            <div className="mb-2"><b>First Name:</b> {booking.firstName || ""}</div>
+            <div className="mb-2"><b>Last Name:</b> {booking.lastName || ""}</div>
+            <div className="mb-2"><b>Department:</b> {booking.department || ""}</div>
+            <div className="mb-2"><b>Building:</b> {booking.building || ""}</div>
+            <div className="mb-2"><b>Category:</b> {booking.category || ""}</div>
+            <div className="mb-2"><b>Room:</b> {booking.roomName || ""}</div>
+           <div className="mb-2">
+  <b>Date:</b>{" "}
+  {booking.recurring !== 'No' && booking.recurrenceEndDate ? (
+    <>
+      {formatDate(booking.date)} - {formatDate(booking.recurringEndDate)} ({booking.recurring})
+    </>
+  ) : (
+    booking.date ? formatDate(booking.date) : ""
+  )}
+</div>
+<div className="mb-2">
+  <b>Time:</b>{" "}
+  {(booking.startTime
+    ? convertTo12HourFormat(
+        booking.startTime.split('T').length > 1
+          ? booking.startTime.split('T')[1].substring(0, 5)
+          : booking.startTime.substring(0, 5)
+      )
+    : "") +
+    (booking.endTime
+      ? " – " +
+        convertTo12HourFormat(
+          booking.endTime.split('T').length > 1
+            ? booking.endTime.split('T')[1].substring(0, 5)
+            : booking.endTime.substring(0, 5)
+        )
+      : "")}
+</div>
+            <div className="mb-2"><b>Pax:</b> {booking.bookingCapacity || ""}</div>
+            <div className="mb-2"><b>Meal Room:</b> {booking.isMealRoom ? "Yes" : "No"}</div>
+            <div className="mb-2"><b>Break Room:</b> {booking.isBreakRoom ? "Yes" : "No"}</div>
+            <div className="mb-2"><b>Break Room Pax:</b> {booking.numberOfPaxBreakRoom || ""}</div>
+            <div className="mb-2"><b>Break Room Start:</b> {booking.startTimeBreakRoom || ""}</div>
+            <div className="mb-2"><b>Break Room End:</b> {booking.endTimeBreakRoom || ""}</div>
+            <div className="mb-2"><b>Status:</b> {booking.status || ""}</div>
+            <div className="mb-2"><b>Recurring:</b> {booking.recurring || ""}</div>
+          </div>
+          {/* NOTES & REMARKS COLUMN */}
+          <div className="w-full md:w-[380px] flex flex-col gap-6">
+            {/* Notes */}
+            <div>
+              <div className="font-bold text-lg mb-1">Notes:</div>
+              <div className="bg-gray-100 p-4 rounded-lg min-h-[120px] max-h-[220px] text-base overflow-y-auto border border-gray-200 shadow-sm">
+                {booking.notes || ""}
+              </div>
+              <button
+                className="mt-2 px-4 py-1 w-full border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-base"
+                onClick={() => setShowNotesModal(true)}
+                type="button"
+              >
+                Show Full Notes
+              </button>
+            </div>
+            {/* Remarks */}
+            <div>
+              <div className="font-bold text-lg mb-1">Remarks:</div>
+              <textarea
+                className="bg-gray-100 p-4 rounded-lg w-full min-h-[120px] max-h-[220px] border border-gray-200 shadow-sm focus:ring-2 focus:ring-blue-400 text-base"
+                value={remarks}
+                onChange={e => setRemarks(e.target.value)}
+                placeholder="Enter remarks for this booking"
+                disabled={saving}
+                style={{ resize: "vertical" }}
+              />
+              <div className="flex gap-2">
+                <button
+                  className="mt-2 px-4 py-1 flex-1 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-base"
+                  onClick={() => setShowRemarksModal(true)}
+                  type="button"
+                >
+                  Show Full Remarks
+                </button>
+                <button
+                  className="mt-2 px-4 py-1 flex-1 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 text-base transition"
+                  onClick={handleSaveRemarks}
+                  disabled={saving}
+                  type="button"
+                >
+                  {saving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* MODAL FOR FULL NOTES */}
+        {showNotesModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white p-8 rounded-xl max-w-2xl w-full relative border border-gray-200 shadow-xl">
+              <button
+                onClick={() => setShowNotesModal(false)}
+                className="absolute top-2 right-4 text-gray-400 text-2xl font-bold hover:text-gray-600"
+                aria-label="Close"
+              >×</button>
+              <h3 className="text-xl font-bold mb-4">Full Notes</h3>
+              <div className="whitespace-pre-wrap text-base" style={{ maxHeight: 400, overflowY: "auto" }}>
+                {booking.notes}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* MODAL FOR FULL REMARKS (editable) */}
+        {showRemarksModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white p-8 rounded-xl max-w-2xl w-full relative border border-gray-200 shadow-xl flex flex-col">
+              <button
+                onClick={() => setShowRemarksModal(false)}
+                className="absolute top-2 right-4 text-gray-400 text-2xl font-bold hover:text-gray-600"
+                aria-label="Close"
+              >×</button>
+              <h3 className="text-xl font-bold mb-4">Full Remarks</h3>
+              <textarea
+                className="w-full bg-gray-100 p-4 rounded-lg min-h-[220px] border border-gray-200 text-base mb-6"
+                value={fullRemarks}
+                onChange={e => setFullRemarks(e.target.value)}
+                disabled={saving}
+                style={{ resize: "vertical" }}
+              />
+              <button
+                className="px-8 py-2 bg-blue-600 text-white text-lg font-bold rounded-lg hover:bg-blue-700 self-end"
+                onClick={handleSaveFullRemarks}
+                disabled={saving}
+                type="button"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+};

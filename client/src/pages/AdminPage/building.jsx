@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import AdminContentTemplate from './AdminContentTemplate';
 import imageCompression from 'browser-image-compression';
 import TopBar from '../../components/AdminComponents/TopBar';
@@ -17,6 +17,13 @@ import {
 } from '@mui/material';
 import LocationCityIcon from '@mui/icons-material/LocationCity';
 import { Typography, Stack } from '@mui/material';
+import Snackbar from '@mui/material/Snackbar';
+import MuiAlert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import { AuthContext } from '../../context/AuthContext'; // <-- Add this line
 
 // Define the API base URL
 const API_BASE_URL = 'http://localhost:5000';
@@ -288,6 +295,13 @@ const BuildingManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [buildingToDelete, setBuildingToDelete] = useState(null);
+  const { auth } = useContext(AuthContext); // <-- Add this line
+
+  // Helper to check if current user is SuperAdmin
+  const isSuperAdmin = auth && auth.role === 'SuperAdmin';
 
   const filteredBuildings = buildings.filter(bldg =>
     bldg.buildingName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -361,31 +375,50 @@ const BuildingManagement = () => {
     window.dispatchEvent(event);
   };
 
-  // Handle deleting a building
-  const handleDeleteBuilding = async (buildingId) => {
-    if (window.confirm('Are you sure you want to delete this building? This action cannot be undone.')) {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/buildings/${buildingId}`, {
-          method: 'DELETE',
-        });
+  const showSnackbar = (message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  };
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
-        }
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') return;
+    setSnackbar({ ...snackbar, open: false });
+  };
 
-        // Remove the building from the local state
-        setBuildings(buildings.filter(building => building.buildingId !== buildingId));
-        
-        // Signal that building data has changed
-        signalBuildingDataChanged();
-        
-        alert('Building deleted successfully!');
-      } catch (error) {
-        console.error('Error deleting building:', error);
-        alert(`Failed to delete building: ${error.message}`);
+  // Open dialog instead of window.confirm
+  const handleDeleteBuilding = (buildingId) => {
+    setBuildingToDelete(buildingId);
+    setDeleteDialogOpen(true);
+  };
+
+  // Confirm delete action
+  const confirmDeleteBuilding = async () => {
+    if (!buildingToDelete) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/buildings/${buildingToDelete}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
       }
+
+      setBuildings(buildings.filter(building => building.buildingId !== buildingToDelete));
+      signalBuildingDataChanged();
+      showSnackbar('Building deleted successfully!', 'success');
+    } catch (error) {
+      console.error('Error deleting building:', error);
+      showSnackbar(`Failed to delete building: ${error.message}`, 'error');
+    } finally {
+      setDeleteDialogOpen(false);
+      setBuildingToDelete(null);
     }
+  };
+
+  // Cancel delete
+  const cancelDeleteBuilding = () => {
+    setDeleteDialogOpen(false);
+    setBuildingToDelete(null);
   };
 
   // Handle saving building data (create or update)
@@ -442,11 +475,11 @@ const BuildingManagement = () => {
         setBuildings(buildings.map(bldg => 
           (bldg.buildingId === newBuilding.buildingId ? newBuilding : bldg)
         ));
-        alert('Building updated successfully!');
+        showSnackbar('Building updated successfully!', 'success');
       } else {
         // Add the new building to the state
         setBuildings([...buildings, newBuilding]);
-        alert('Building added successfully!');
+        showSnackbar('Building added successfully!', 'success');
       }
 
       // Signal that building data has changed
@@ -455,7 +488,7 @@ const BuildingManagement = () => {
       closeModal();
     } catch (error) {
       console.error('Error saving building:', error);
-      alert(`Failed to save building: ${error.message}`);
+      showSnackbar(`Failed to save building: ${error.message}`, 'error');
     }
   };
 
@@ -609,14 +642,16 @@ const BuildingManagement = () => {
                               >
                                 Edit
                               </Button>
-                              <Button
-                                variant="contained"
-                                color="error"
-                                size="small"
-                                onClick={() => handleDeleteBuilding(building.buildingId)}
-                              >
-                                Delete
-                              </Button>
+                              {isSuperAdmin && (
+                                <Button
+                                  variant="contained"
+                                  color="error"
+                                  size="small"
+                                  onClick={() => handleDeleteBuilding(building.buildingId)}
+                                >
+                                  Delete
+                                </Button>
+                              )}
                               <Button
                                 size="small"
                                 sx={{ color: '#6b7280', ml: 1 }}
@@ -689,7 +724,31 @@ const BuildingManagement = () => {
           onSave={handleSaveBuilding}
           editData={editingBuilding}
         />
+        <Dialog open={deleteDialogOpen} onClose={cancelDeleteBuilding}>
+          <DialogTitle>Delete Building</DialogTitle>
+          <DialogContent>
+            Are you sure you want to delete this building? This action cannot be undone.
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={cancelDeleteBuilding} color="primary">
+              Cancel
+            </Button>
+            <Button onClick={confirmDeleteBuilding} color="error" variant="contained">
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
       </AdminContentTemplate>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3500}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <MuiAlert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }} elevation={6} variant="filled">
+          {snackbar.message}
+        </MuiAlert>
+      </Snackbar>
     </div>
   );
 };

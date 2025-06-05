@@ -64,10 +64,11 @@ function TablePaginationActions(props) {
   );
 }
 
-const RoomList = ({ rooms, onEdit, onDelete }) => {
+const RoomList = ({ rooms, onEdit, onDelete, buildings = [] }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'roomName', direction: 'asc' });
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [selectedBuildingTab, setSelectedBuildingTab] = useState('All');
 
   const handleSort = (key) => {
     setSortConfig((prev) => {
@@ -81,10 +82,22 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
     });
   };
 
+  // Filter rooms by building
+  const filteredRooms = useMemo(() => {
+    if (selectedBuildingTab === 'All') return rooms;
+    return rooms.filter(room => {
+      const buildingName =
+        room.Building?.buildingName ||
+        (typeof room.building === 'object' ? room.building.buildingName : room.building) ||
+        room.buildingId;
+      return buildingName === selectedBuildingTab;
+    });
+  }, [rooms, selectedBuildingTab]);
+
   // Flatten rooms and subRooms for pagination
   const flatRooms = useMemo(() => {
     let result = [];
-    rooms.forEach((room) => {
+    filteredRooms.forEach((room) => {
       result.push({ ...room, isSubRoom: false });
       if (room.isQuadrant && room.subRooms) {
         room.subRooms.forEach((subRoom, index) => {
@@ -98,7 +111,7 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
       }
     });
     return result;
-  }, [rooms]);
+  }, [filteredRooms]);
 
   const sortedRooms = useMemo(() => {
     const compare = (a, b) => {
@@ -150,6 +163,26 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
 
   return (
     <Box>
+      {/* Building Tabs */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+        <Button
+          variant={selectedBuildingTab === 'All' ? 'contained' : 'outlined'}
+          color={selectedBuildingTab === 'All' ? 'primary' : 'inherit'}
+          onClick={() => setSelectedBuildingTab('All')}
+        >
+          All
+        </Button>
+        {buildings.map((building) => (
+          <Button
+            key={building._id || building.buildingId || building.id}
+            variant={selectedBuildingTab === (building.buildingName || building.name) ? 'contained' : 'outlined'}
+            color={selectedBuildingTab === (building.buildingName || building.name) ? 'primary' : 'inherit'}
+            onClick={() => setSelectedBuildingTab(building.buildingName || building.name)}
+          >
+            {building.buildingName || building.name}
+          </Button>
+        ))}
+      </Box>
       {/* Header Section */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4 }}>
         <Stack direction="row" alignItems="center" spacing={2}>
@@ -255,14 +288,16 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                         >
                           Edit
                         </Button>
-                        <Button
-                          variant="contained"
-                          color="error"
-                          size="small"
-                          onClick={() => onDelete(room)}
-                        >
-                          Delete
-                        </Button>
+                        {onDelete && (
+                          <Button
+                            variant="contained"
+                            color="error"
+                            size="small"
+                            onClick={() => onDelete(room)}
+                          >
+                            Delete
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

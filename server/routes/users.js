@@ -34,13 +34,12 @@ const validateUserInput = (req, res, next) => {
   }
   
   // Role validation
-  const normalizedRole = role.toLowerCase();
-  if (!["admin", "user"].includes(normalizedRole)) {
-    return res.status(400).json({ message: "Invalid role. Must be 'Admin' or 'User'." });
-  }
-  
-  // Add normalized role to request for later use
-  req.normalizedRole = normalizedRole;
+ // In validateUserInput middleware:
+const normalizedRole = role.toLowerCase();
+if (!["superadmin", "admin", "user"].includes(normalizedRole)) {
+  return res.status(400).json({ message: "Invalid role. Must be 'SuperAdmin', 'Admin', or 'User'." });
+}
+req.normalizedRole = normalizedRole;
   next();
 };
 
@@ -88,7 +87,9 @@ router.post("/", authenticate, authorizeAdmin, validateUserInput, async (req, re
       email,
       password, // Will be hashed by hook in User model
       department,
-      role: req.normalizedRole === "admin" ? "Admin" : "User", // Match the enum case
+
+      role: req.normalizedRole === "superadmin" ? "SuperAdmin" :
+      req.normalizedRole === "admin" ? "Admin" : "User",
       isActive
     });
 
@@ -160,18 +161,28 @@ router.put("/:id", authenticate, async (req, res) => {
 
     // Explicitly hash password if provided
     if (password) {
-      // You could add password validation here for strength (optional)
       user.password = await bcrypt.hash(password, 10);
     }
 
-    if (req.user.role.toLowerCase() === "admin") {
-      if (role) {
-        const normalizedRole = role.toLowerCase();
-        if (!["admin", "user"].includes(normalizedRole)) {
+    // Only allow role/isActive change if admin or superadmin
+    if (
+      req.user.role.toLowerCase() === "admin" ||
+      req.user.role.toLowerCase() === "superadmin"
+    ) {
+      if (role !== undefined) {
+        let normalizedRole = typeof role === "string" ? role.trim().toLowerCase() : "";
+        if (!["superadmin", "admin", "user"].includes(normalizedRole)) {
           await transaction.rollback();
-          return res.status(400).json({ message: "Invalid role. Must be 'Admin' or 'User'." });
+          return res.status(400).json({
+            message: "Invalid role. Must be 'SuperAdmin', 'Admin', or 'User'.",
+          });
         }
-        user.role = normalizedRole === "admin" ? "Admin" : "User";
+        user.role =
+          normalizedRole === "superadmin"
+            ? "SuperAdmin"
+            : normalizedRole === "admin"
+            ? "Admin"
+            : "User";
       }
 
       if (isActive !== undefined) user.isActive = isActive;
@@ -183,7 +194,7 @@ router.put("/:id", authenticate, async (req, res) => {
 
     // Return user without password
     const userResponse = user.toJSON();
-    delete userResponse.password; // Ensure password is not returned
+    delete userResponse.password;
 
     return res.status(200).json(userResponse);
   } catch (error) {
@@ -227,5 +238,7 @@ router.post("/:id/upload-profile-image", authenticate, upload.single("profileIma
   // await User.update({ profileImage: req.file.filename }, { where: { userId: req.params.id } });
   res.json({ filename: req.file.filename });
 });
+
+// RESET PASSWORD: Admin only
 
 module.exports = router;

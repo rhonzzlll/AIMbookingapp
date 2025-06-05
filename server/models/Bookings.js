@@ -38,15 +38,36 @@ module.exports = (sequelize, DataTypes) => {
       field: 'department', 
       allowNull: true
     },
+    // ...existing code...
+costCenterCharging: {
+  type: DataTypes.STRING, // or DataTypes.VARCHAR(255)
+  allowNull: true,
+  comment: 'Cost center or department charged',
+},
+// ...existing code...
     title: {
       type: DataTypes.STRING(255), // Matches nvarchar(255)
       field: 'title',
       allowNull: true
     },
+    // ...existing code...
+numberOfPaxBreakRoom: {
+  type: Sequelize.STRING, // or INTEGER if you want only numbers
+  allowNull: true,
+},
+startTimeBreakRoom: {
+  type: Sequelize.STRING, // or TIME if you want to store as time
+  allowNull: true,
+},
+endTimeBreakRoom: {
+  type: Sequelize.STRING, // or TIME if you want to store as time
+  allowNull: true,
+},
+// ...existing code...
     categoryId: {
       type: DataTypes.INTEGER, // Matches int
       field: 'categoryId',
-      allowNull: true
+      allowNull: true     
     },
     buildingId: {
       type: DataTypes.STRING(255), // Changed to STRING to match nvarchar(255)

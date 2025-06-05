@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import ProtectedAdminRoute from './components/ProtectedAdminRoute';
 
 // Admin Pages
 import Bookings from './pages/AdminPage/Bookings';
@@ -41,15 +42,27 @@ const AppContent = () => {
                         <Route path="/" element={<Navigate to="/login" replace />} />
                         
                         {/* Admin Routes */}
-                        <Route path="/admin/dashboard" element={<Dashboard />} />
-                        <Route path="/admin/bookings" element={<Bookings />} />
-                        <Route path="/admin/calendar" element={<Calendar />} />
-                        {/* Admin Routes */}
-<Route path="/admin/rooms" element={<Rooms />} />           // Parent: rooms path="/admin/rooms"
-<Route path="/admin/building" element={<Buildings />} />    // Child: building path="/admin/building"
-<Route path="/admin/category" element={<Categories />} />   // Child: category path="/admin/category" 
-    // Child: room path="/admin/room"
-                        <Route path="/admin/users" element={<Users />} />   
+                        <Route path="/admin/dashboard" element={
+  <ProtectedAdminRoute><Dashboard /></ProtectedAdminRoute>
+} />
+<Route path="/admin/bookings" element={
+  <ProtectedAdminRoute><Bookings /></ProtectedAdminRoute>
+} />
+<Route path="/admin/calendar" element={
+  <ProtectedAdminRoute><Calendar /></ProtectedAdminRoute>
+} />
+<Route path="/admin/rooms" element={
+  <ProtectedAdminRoute><Rooms /></ProtectedAdminRoute>
+} />
+<Route path="/admin/building" element={
+  <ProtectedAdminRoute><Buildings /></ProtectedAdminRoute>
+} />
+<Route path="/admin/category" element={
+  <ProtectedAdminRoute><Categories /></ProtectedAdminRoute>
+} />
+<Route path="/admin/users" element={
+  <ProtectedAdminRoute><Users /></ProtectedAdminRoute>
+} />
 
                         {/* User Routes */}
                         <Route path="/Home" element={<Home />} />
