@@ -4,7 +4,7 @@ import axios from 'axios';
 import Modal from '../../components/AdminComponents/Modal';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
   const dates = [];
@@ -300,6 +300,7 @@ const Dashboard = () => {
     if (activeBookingTab === 'pending') return recentBookings.filter(b => b.status === 'pending');
     if (activeBookingTab === 'approved') return recentBookings.filter(b => b.status === 'confirmed');
     if (activeBookingTab === 'declined') return recentBookings.filter(b => b.status === 'declined');
+    if (activeBookingTab === 'cancelled') return recentBookings.filter(b => b.status === 'cancelled');
     return recentBookings;
   };
 
@@ -443,8 +444,7 @@ const Dashboard = () => {
                             key={idx}
                             className={`text-xs p-1.5 rounded-md flex flex-col gap-0.5 border-l-4 ${departmentColors[booking.department] || 'bg-gray-100 border-gray-400 text-gray-900'}`}
                             title={`${booking.title} (${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}) - ${booking.firstName} ${booking.lastName} - ${booking.department || 'No Department'}${booking.isRecurringInstance ? ' (Recurring)' : ''}`}
-                            onClick={() => handleEditClick(booking)}
-                            style={{ cursor: 'pointer' }}
+                            style={{ cursor: 'default' }}
                           >
                             <div className="flex items-center gap-1">
                               <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${getDepartmentColorDot(booking.department)}`}></span>
@@ -470,7 +470,7 @@ const Dashboard = () => {
           {/* Booking Tabs and Table */}
           <div className="flex justify-between items-center mb-6">
             <div className="flex gap-4">
-              {['All', 'Pending', 'Approved', 'Declined'].map((status) => (
+              {['All', 'Pending', 'Approved', 'Declined', 'Cancelled'].map((status) => (
                 <button
                   key={status}
                   className={`px-4 py-2 rounded-lg font-medium transition ${activeBookingTab === status.toLowerCase()
@@ -496,17 +496,16 @@ const Dashboard = () => {
               <thead>
                 <tr className="bg-gray-100">
                   {[
+                    { label: 'Booking ID', key: 'bookingId' }, // <-- NEW COLUMN
                     { label: 'Booking Title', key: 'title' },
-              { label: 'Name', key: 'lastName' },
-           
-{ label: 'Department', key: 'department' },
-
+                    { label: 'Name', key: 'lastName' },
+                    { label: 'Department', key: 'department' },
                     { label: 'Room Type', key: 'category' },
                     { label: 'Meeting Room', key: 'meetingRoom' },
                     { label: 'Building', key: 'buildingName' },
                     { label: 'Date', key: 'date' },
                     { label: 'Time', key: 'startTime' },
-                    { label: 'Time Submitted', key: 'timeSubmitted' }, // NEW COLUMN
+                    { label: 'Time Submitted', key: 'timeSubmitted' },
                     { label: 'Status', key: 'status' },
                   ].map(({ label, key }) => (
                     <th
@@ -527,6 +526,7 @@ const Dashboard = () => {
                         .toLowerCase()
                         .includes(searchTerm.toLowerCase())
                     )
+                    .slice(0, 5) // <-- Only show the first 5 entries
                     .map((booking) => {
                       const recurringDates =
                         booking.recurrenceEndDate && booking.recurring !== 'No'
@@ -534,6 +534,7 @@ const Dashboard = () => {
                           : [booking.date];
                       return (
                         <tr key={booking.bookingId || booking.id} className="hover:bg-gray-50 transition cursor-pointer" onClick={() => handleEditClick(booking)}>
+                          <td className="px-4 py-2 border-b">{booking.bookingId || booking.id}</td>
                           <td className="px-4 py-2 border-b">{booking.title}</td>
                           <td className="px-4 py-2 border-b">
                             {booking.lastName && booking.firstName ? `${booking.lastName}, ${booking.firstName}` : 'N/A'}
@@ -563,7 +564,11 @@ const Dashboard = () => {
                                     ? 'bg-green-100 text-green-600'
                                     : booking.status === 'pending'
                                     ? 'bg-yellow-100 text-yellow-600'
-                                    : 'bg-red-100 text-red-600'
+                                    : booking.status === 'declined'
+                                    ? 'bg-red-100 text-red-600'
+                                    : booking.status === 'cancelled'
+                                    ? 'bg-gray-300 text-gray-700'
+                                    : ''
                                 }`}
                               >
                                 {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
@@ -580,7 +585,7 @@ const Dashboard = () => {
                     })
                 ) : (
                   <tr>
-                    <td colSpan="10" className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan="11" className="px-4 py-8 text-center text-gray-500">
                       No bookings found. {searchTerm && `Try adjusting your search term "${searchTerm}".`}
                     </td>
                   </tr>

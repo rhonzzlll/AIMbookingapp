@@ -11,7 +11,8 @@ import Stack from '@mui/material/Stack';
 import { AuthContext } from '../../context/AuthContext';
 
 const RoomManagement = () => {
-  const { auth } = useContext(AuthContext);
+  // Destructure role, token, etc. directly from context
+  const { role, token, userId, setAuth } = useContext(AuthContext);
 
   const [rooms, setRooms] = useState([]);
   const [buildings, setBuildings] = useState([]);
@@ -23,12 +24,16 @@ const RoomManagement = () => {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [isSubroomVisible, setIsSubroomVisible] = useState({});
-  const API_BASE_URL = 'http://localhost:5000/api';
+ const API_BASE_URL = import.meta.env.VITE_API_URI;
+
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Pagination states
   const [page, setPage] = useState(1);
   const [roomsPerPage] = useState(10);
+
+  // Debug: See what role is coming from context
+  useEffect(() => {
+    console.log('RoomManagement: role from context:', role);
+  }, [role]);
 
   useEffect(() => {
     fetchInitialData();
@@ -36,8 +41,8 @@ const RoomManagement = () => {
 
   const getAuthHeaders = () => {
     const headers = {};
-    if (auth && auth.token) {
-      headers['Authorization'] = `Bearer ${auth.token}`;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     return headers;
   };
@@ -46,7 +51,7 @@ const RoomManagement = () => {
     setLoading(true);
     try {
       const headers = getAuthHeaders();
-      
+
       const [roomsRes, buildingsRes, categoriesRes] = await Promise.all([
         fetch(`${API_BASE_URL}/rooms`, { headers }),
         fetch(`${API_BASE_URL}/buildings`, { headers }),
@@ -64,7 +69,7 @@ const RoomManagement = () => {
       setRooms(roomsData);
       setBuildings(buildingsData);
       setCategories(categoriesData);
-      
+
       console.log('Fetched Rooms:', roomsData);
       console.log('Fetched Buildings:', buildingsData);
       console.log('Fetched Categories:', categoriesData);
@@ -88,7 +93,7 @@ const RoomManagement = () => {
     try {
       const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/rooms`, { headers });
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch rooms');
       }
@@ -106,8 +111,8 @@ const RoomManagement = () => {
   };
 
   const handleEditRoom = (room) => {
-    setEditingRoom(room); 
-    setIsFormOpen(true); 
+    setEditingRoom(room);
+    setIsFormOpen(true);
   };
 
   const handleDeleteRoom = (room) => {
@@ -140,17 +145,17 @@ const RoomManagement = () => {
   const handleFormSubmit = async (formDataToSubmit) => {
     try {
       console.log('Form data received:', formDataToSubmit);
-      
+
       // Extract and validate roomData
       const roomDataJson = formDataToSubmit.get('roomData');
       if (!roomDataJson) {
         showToast('Missing room data', 'error');
         return;
       }
-      
+
       const roomData = JSON.parse(roomDataJson);
       console.log('Parsed room data:', roomData);
-      
+
       // Validate required fields
       if (!roomData.roomName || !roomData.buildingId || !roomData.categoryId || !roomData.roomCapacity) {
         showToast('Please fill in all required fields (Room Name, Building, Category, and Capacity)', 'error');
@@ -159,7 +164,7 @@ const RoomManagement = () => {
 
       const headers = getAuthHeaders();
       let response;
-      
+
       if (editingRoom) {
         // Update existing room
         console.log('Updating room with ID:', editingRoom.roomId);
@@ -183,7 +188,7 @@ const RoomManagement = () => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Error response:', errorText);
-        
+
         let errorMessage = `Failed to ${editingRoom ? 'update' : 'create'} room`;
         try {
           const errorData = JSON.parse(errorText);
@@ -214,10 +219,10 @@ const RoomManagement = () => {
       // Close form and refresh data
       setIsFormOpen(false);
       setEditingRoom(null);
-      
+
       // Refresh rooms to get the latest data including subrooms
       await fetchRooms();
-      
+
     } catch (error) {
       console.error('Error saving room:', error);
       showToast(
@@ -230,11 +235,11 @@ const RoomManagement = () => {
   const handleDivideRoom = (roomId) => {
     const roomToEdit = rooms.find(room => room.roomId === roomId);
     if (!roomToEdit) return;
-    
+
     // Generate unique subroom IDs
     const subroomAId = uuidv4();
     const subroomBId = uuidv4();
-    
+
     // Set this room as editing room with subrooms
     setEditingRoom({
       ...roomToEdit,
@@ -260,7 +265,7 @@ const RoomManagement = () => {
         },
       ]
     });
-    
+
     setIsFormOpen(true);
     showToast('Room is ready to be divided. Please complete the subroom details.');
   };
@@ -271,18 +276,18 @@ const RoomManagement = () => {
       [roomId]: !prev[roomId],
     }));
   };
-  
+
   // Pagination handler
   const handlePageChange = (event, value) => {
     setPage(value);
   };
-  
+
   // Filter rooms based on search term
   const filteredRooms = rooms.filter(room =>
     room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (room.roomDescription && room.roomDescription.toLowerCase().includes(searchTerm.toLowerCase()))
   );
-  
+
   // Calculate pagination
   const indexOfLastRoom = page * roomsPerPage;
   const indexOfFirstRoom = indexOfLastRoom - roomsPerPage;
@@ -290,7 +295,7 @@ const RoomManagement = () => {
   const totalPages = Math.ceil(filteredRooms.length / roomsPerPage);
 
   // Helper to check if current user is SuperAdmin
-  const isSuperAdmin = auth && auth.role && auth.role === 'SuperAdmin';
+  const isSuperAdmin = role && role.toLowerCase() === 'superadmin';
 
   return (
     <div className="p-2 md:p-4 max-w-7xl mx-auto">
@@ -334,14 +339,14 @@ const RoomManagement = () => {
               <RoomList
                 rooms={currentRooms}
                 onEdit={handleEditRoom}
-                onDelete={isSuperAdmin ? handleDeleteRoom : undefined}
+                onDelete={isSuperAdmin ? handleDeleteRoom : undefined} // Only SuperAdmin can delete
                 onDivideRoom={handleDivideRoom}
                 onToggleSubroom={toggleSubroomVisibility}
                 isSubroomVisible={isSubroomVisible}
                 buildings={buildings}
                 categories={categories}
               />
-              
+
               {filteredRooms.length > 0 && (
                 <div className="mt-6 flex justify-center">
                   <Stack spacing={2}>
@@ -349,13 +354,13 @@ const RoomManagement = () => {
                       count={totalPages}
                       page={page}
                       onChange={handlePageChange}
-                      showFirstButton 
+                      showFirstButton
                       showLastButton
                     />
                   </Stack>
                 </div>
               )}
-              
+
               {filteredRooms.length === 0 && !loading && (
                 <div className="text-center py-8">
                   <p className="text-gray-500">No rooms found matching your search criteria.</p>

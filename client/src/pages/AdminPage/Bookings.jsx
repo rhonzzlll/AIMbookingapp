@@ -21,6 +21,7 @@ import LastPageIcon from '@mui/icons-material/LastPage';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import { v4 as uuidv4 } from 'uuid';
+import ClickAwayListener from '@mui/material/ClickAwayListener'; // Add for dropdown UX
 
 
 
@@ -59,7 +60,7 @@ function convertTo12HourFormat(time24) {
 }
 
 // Base API URL
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 // Predefined options for dropdowns
 const DEPARTMENTS = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
@@ -211,6 +212,29 @@ const Bookings = () => {
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewBooking, setViewBooking] = useState(null);
+
+  // Define all columns in an array for visibility control
+const ALL_COLUMNS = [
+  { key: 'bookingId', label: 'Booking ID' },
+  { key: 'title', label: 'Booking Title' },
+  { key: 'firstName', label: 'First Name' },
+  { key: 'lastName', label: 'Last Name' },
+  { key: 'department', label: 'Department' },
+  { key: 'category', label: 'Category' },
+  { key: 'roomName', label: 'Room' },
+  { key: 'building', label: 'Building' },
+  { key: 'date', label: 'Date' },
+  { key: 'startTime', label: 'Time' },
+  { key: 'bookingCapacity', label: 'Capacity' },
+  { key: 'costCenterCharging', label: 'Charged To' },
+  { key: 'isMealRoom', label: 'Meal Room' },
+  { key: 'isBreakRoom', label: 'Break Room' },
+  { key: 'status', label: 'Status' },
+  { key: 'recurring', label: 'Recurring' },
+  { key: 'timeSubmitted', label: 'Time Submitted' },
+  { key: 'notes', label: 'Notes' },         // <-- Added
+  { key: 'remarks', label: 'Remarks' },     // <-- Added
+];
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -1565,13 +1589,53 @@ const BookingForm = React.memo(({ isEdit }) => (
     }
   };
 
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+  Object.fromEntries(ALL_COLUMNS.map(col => [col.key, true]))
+);
+const [showColumnMenu, setShowColumnMenu] = useState(false);
+
+const handleToggleColumn = (key) => {
+  setVisibleColumns(prev => ({
+    ...prev,
+    [key]: !prev[key],
+  }));
+};
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 257, width: 'calc(100% - 257px)', zIndex: 500, overflowY: 'auto', height: '100vh'}}>
       <TopBar onSearch={setSearchTerm} />
       <div className="p-4 bg-gray-100 w-full flex flex-col">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Bookings</h2>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* Column Visibility Button */}
+            <div className="relative">
+              <button
+                className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm font-medium"
+                onClick={() => setShowColumnMenu(v => !v)}
+                type="button"
+              >
+                Columns
+              </button>
+              {showColumnMenu && (
+                <ClickAwayListener onClickAway={() => setShowColumnMenu(false)}>
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded shadow-lg z-50 p-3">
+                    <div className="font-bold mb-2 text-gray-700 text-sm">Show/Hide Columns</div>
+                    {ALL_COLUMNS.map(col => (
+                      <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-gray-800 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns[col.key]}
+                          onChange={() => handleToggleColumn(col.key)}
+                          className="accent-blue-600"
+                        />
+                        {col.label}
+                      </label>
+                    ))}
+                  </div>
+                </ClickAwayListener>
+              )}
+            </div>
             <button
               onClick={handleAddNewClick}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -1608,198 +1672,180 @@ const BookingForm = React.memo(({ isEdit }) => (
           <Table sx={{ minWidth: 1200 }} aria-label="bookings table">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 'bold' }}>Booking ID</TableCell> {/* <-- Add this line */}
-                {[
-      { key: 'title', label: 'Booking Title' },
-      { key: 'firstName', label: 'First Name' },
-      { key: 'lastName', label: 'Last Name' },
-      { key: 'department', label: 'Department' },
-      { key: 'category', label: 'Category' },
-      { key: 'roomName', label: 'Room' },
-      { key: 'building', label: 'Building' },
-      { key: 'date', label: 'Date' },
-      { key: 'startTime', label: 'Time' },
-      { key: 'bookingCapacity', label: 'Capacity' },
-      { key: 'costCenterCharging', label: 'Charged To' },
-      { key: 'isMealRoom', label: 'Meal Room' },
-      { key: 'isBreakRoom', label: 'Break Room' },
-      { key: 'status', label: 'Status' },
-      { key: 'recurring', label: 'Recurring' },
-      { key: 'timeSubmitted', label: 'Time Submitted' },
-    ].map(({ key, label }) => (
-      <TableCell
-        key={key}
-        onClick={() => handleSort(key)}
-        sx={{ cursor: 'pointer', fontWeight: 'bold' }}
-      >
-        {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-      </TableCell>
-    ))}
-    <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
-  </TableRow>
-</TableHead>
-<TableBody>
-  {!loading && currentBookings.length > 0 ? (
-    sortedBookings
-      .filter(booking =>
-        `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.category} ${booking.roomName} ${booking.building} ${booking.costCenterCharging || ''}`
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase())
-      )
-      .map((booking) => (
-        <TableRow key={booking._id || booking.id} hover>
-          <TableCell>{booking.bookingId}</TableCell> {/* <-- Add this line */}
-          <TableCell>{booking.title}</TableCell>
-          <TableCell>{booking.firstName}</TableCell>
-          <TableCell>{booking.lastName}</TableCell>
-          <TableCell>{booking.department}</TableCell>
-          <TableCell>{booking.category}</TableCell>
-          <TableCell>{booking.roomName}</TableCell>
-          <TableCell>{booking.building}</TableCell>
-          <TableCell>
-            {booking.recurring !== 'No' && booking.recurringEndDate ? (
-              <div>
-                {formatDate(booking.date)} - {formatDate(booking.recurringEndDate)} ({booking.recurring})
-              </div>
-            ) : (
-              <div>{formatDate(booking.date)}</div>
-            )}
-          </TableCell>
-          <TableCell>
-            {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-            {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </TableCell>
-          <TableCell>{booking.bookingCapacity || '1'}</TableCell>
-          <TableCell>{booking.costCenterCharging || ''}</TableCell>
-          <TableCell>
-            <span style={{
-              background: booking.isMealRoom ? '#bbf7d0' : '#f3f4f6',
-              color: booking.isMealRoom ? '#16a34a' : '#374151',
-              borderRadius: 8,
-              padding: '2px 8px',
-              fontSize: 12,
-              display: 'inline-block'
-            }}>
-              {booking.isMealRoom ? 'Yes' : 'No'}
-            </span>
-          </TableCell>
-          <TableCell>
-            <span>
-              {booking.isBreakRoom ? 'Yes' : 'No'}
-              {booking.isBreakRoom && (
-                <>
-                  {booking.numberOfPaxBreakRoom ? ` / ${booking.numberOfPaxBreakRoom} pax` : ''}
-                  {booking.startTimeBreakRoom ? ` / ${booking.startTimeBreakRoom}` : ''}
-                  {booking.endTimeBreakRoom ? ` - ${booking.endTimeBreakRoom}` : ''}
-                </>
-              )}
-            </span>
-          </TableCell>
-          <TableCell>
-            <span style={{
-              background: booking.status === 'confirmed'
-                ? '#bbf7d0'
-                : booking.status === 'pending'
-                ? '#fef9c3'
-                : '#fecaca',
-              color: booking.status === 'confirmed'
-                ? '#16a34a'
-                : booking.status === 'pending'
-                ? '#ca8a04'
-                : '#dc2626',
-              borderRadius: 8,
-              padding: '2px 8px',
-              fontSize: 12,
-              display: 'inline-block'
-            }}>
-              {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-            </span>
-            {booking.status === 'declined' && booking.declineReason && (
-              <small style={{ display: 'block', color: '#dc2626', marginTop: 2 }}>
-                Reason: {booking.declineReason}
-              </small>
-            )}
-            {['confirmed', 'declined'].includes(booking.status) && booking.changedBy && (
-              <small style={{ display: 'block', color: '#6b7280', marginTop: 2 }}>
-                Changed by: {booking.changedBy}
-              </small>
-            )}
-          </TableCell>
-          <TableCell>
-            {booking.recurring}
-          </TableCell>
-          <TableCell>
-            {booking.timeSubmitted
-              ? new Date(booking.timeSubmitted).toLocaleString()
-              : ''}
-          </TableCell>
-          <TableCell>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-                          <button
-                            style={{ color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}
-                            onClick={() => {
-                              setViewBooking(booking);
-                              setIsViewModalOpen(true);
-                            }}
-                          >
-                            View
-                          </button>
-                          <button
-                            style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer' }}
-                            onClick={() => handleStatusChange(booking.bookingId, 'confirmed')}
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}
-                            onClick={() => handleStatusChange(booking.bookingId, 'declined')}
-                          >
-                            Decline
-                          </button>
-                          {booking.status !== 'cancelled' && (
-                            <button
-                              style={{ color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}
-                              onClick={() => handleStatusChange(booking.bookingId, 'cancelled')}
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </Box>
-          </TableCell>
-        </TableRow>
-      ))
-  ) : (
-    !loading && (
-      <TableRow>
-        <TableCell colSpan={17} align="center">
-          No bookings found. Add a new booking to get started.
-        </TableCell>
-      </TableRow>
-    )
-  )}
-</TableBody>
-<TableFooter>
-              <TableRow>
-                <TablePagination
-                  rowsPerPageOptions={[10, 25, 50]}
-                  colSpan={17}
-                  count={filteredBookings.length}
-                  rowsPerPage={itemsPerPage}
-                  page={currentPage - 1}
-                  SelectProps={{
-                    inputProps: { 'aria-label': 'rows per page' },
-                    native: true,
-                  }}
-                  onPageChange={(_, newPage) => setCurrentPage(newPage + 1)}
-                  onRowsPerPageChange={e => {
-                    // You may want to add logic to update itemsPerPage state if you want to support changing rows per page
-                  }}
-                  ActionsComponent={TablePaginationActions}
-                />
+                {ALL_COLUMNS.filter(col => visibleColumns[col.key]).map(({ key, label }) => (
+                  <TableCell
+                    key={key}
+                    onClick={() => handleSort(key)}
+                    sx={{ cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    {label} {sortConfig.key === key && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </TableCell>
+                ))}
+                <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
               </TableRow>
-            </TableFooter>
-          </Table>
-        </TableContainer>
+            </TableHead>
+            <TableBody>
+              {!loading && currentBookings.length > 0 ? (
+                sortedBookings
+                  .filter(booking =>
+                    `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.category} ${booking.roomName} ${booking.building} ${booking.costCenterCharging || ''}`
+                      .toLowerCase()
+                      .includes(searchTerm.toLowerCase())
+                  )
+                  .map((booking) => (
+                    <TableRow key={booking._id || booking.id} hover>
+                      {ALL_COLUMNS.filter(col => visibleColumns[col.key]).map(col => (
+                        <TableCell key={col.key}>
+                          {/* Custom rendering for Notes and Remarks */}
+                          {col.key === 'notes'
+                            ? (
+                        <div className="truncate max-w-[200px]" title={booking.notes || ""}>
+                          {booking.notes ? booking.notes.slice(0, 60) : ""}
+                          {booking.notes && booking.notes.length > 60 ? "..." : ""}
+                        </div>
+                      )
+                    : col.key === 'remarks'
+                    ? (
+                        <div className="truncate max-w-[200px]" title={booking.remarks || ""}>
+                          {booking.remarks ? booking.remarks.slice(0, 60) : ""}
+                          {booking.remarks && booking.remarks.length > 60 ? "..." : ""}
+                        </div>
+                      )
+                    // ...existing custom rendering for other columns...
+                    : col.key === 'date'
+                    ? (booking.recurring !== 'No' && booking.recurringEndDate
+                        ? <div>{formatDate(booking.date)} - {formatDate(booking.recurringEndDate)} ({booking.recurring})</div>
+                        : <div>{formatDate(booking.date)}</div>)
+                    : col.key === 'startTime'
+                    ? (
+                      <>
+                        {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
+                        {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </>
+                    )
+                    : col.key === 'isMealRoom'
+                    ? (
+                      <span style={{
+                        background: booking.isMealRoom ? '#bbf7d0' : '#f3f4f6',
+                        color: booking.isMealRoom ? '#16a34a' : '#374151',
+                        borderRadius: 8,
+                        padding: '2px 8px',
+                        fontSize: 12,
+                        display: 'inline-block'
+                      }}>
+                        {booking.isMealRoom ? 'Yes' : 'No'}
+                      </span>
+                    )
+                    : col.key === 'isBreakRoom'
+                    ? (
+                      <span>
+                        {booking.isBreakRoom ? 'Yes' : 'No'}
+                        {booking.isBreakRoom && (
+                          <>
+                            {booking.numberOfPaxBreakRoom ? ` / ${booking.numberOfPaxBreakRoom} pax` : ''}
+                            {booking.startTimeBreakRoom ? ` / ${booking.startTimeBreakRoom}` : ''}
+                            {booking.endTimeBreakRoom ? ` - ${booking.endTimeBreakRoom}` : ''}
+                          </>
+                        )}
+                      </span>
+                    )
+                    : col.key === 'status'
+                    ? (
+                      <span style={{
+                        background: booking.status === 'confirmed'
+                          ? '#bbf7d0'
+                          : booking.status === 'pending'
+                          ? '#fef9c3'
+                          : '#fecaca',
+                        color: booking.status === 'confirmed'
+                          ? '#16a34a'
+                          : booking.status === 'pending'
+                          ? '#ca8a04'
+                          : '#dc2626',
+                        borderRadius: 8,
+                        padding: '2px 8px',
+                        fontSize: 12,
+                        display: 'inline-block'
+                      }}>
+                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                      </span>
+                    )
+                    : col.key === 'timeSubmitted'
+                    ? (booking.timeSubmitted
+                        ? new Date(booking.timeSubmitted).toLocaleString()
+                        : '')
+                    : booking[col.key]
+                  }
+                </TableCell>
+              ))}
+              <TableCell>
+                {/* ...existing Actions buttons... */}
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <button
+                    style={{ color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onClick={() => {
+                      setViewBooking(booking);
+                      setIsViewModalOpen(true);
+                    }}
+                  >
+                    View
+                  </button>
+                  <button
+                    style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onClick={() => handleStatusChange(booking.bookingId, 'confirmed')}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onClick={() => handleStatusChange(booking.bookingId, 'declined')}
+                  >
+                    Decline
+                  </button>
+                  {booking.status !== 'cancelled' && (
+                    <button
+                      style={{ color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onClick={() => handleStatusChange(booking.bookingId, 'cancelled')}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </Box>
+              </TableCell>
+            </TableRow>
+          ))
+      ) : (
+        !loading && (
+          <TableRow>
+            <TableCell colSpan={ALL_COLUMNS.filter(col => visibleColumns[col.key]).length + 1} align="center">
+              No bookings found. Add a new booking to get started.
+            </TableCell>
+          </TableRow>
+        )
+      )}
+    </TableBody>
+    <TableFooter>
+      <TableRow>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          colSpan={17}
+          count={filteredBookings.length}
+          rowsPerPage={itemsPerPage}
+          page={currentPage - 1}
+          SelectProps={{
+            inputProps: { 'aria-label': 'rows per page' },
+            native: true,
+          }}
+          onPageChange={(_, newPage) => setCurrentPage(newPage + 1)}
+          onRowsPerPageChange={e => {
+            // You may want to add logic to update itemsPerPage state if you want to support changing rows per page
+          }}
+          ActionsComponent={TablePaginationActions}
+        />
+      </TableRow>
+    </TableFooter>
+  </Table>
+</TableContainer>
       </div>
 
       {/* Add Booking Modal */}
@@ -1958,7 +2004,7 @@ const formatTime = (timeString) => {
       let suffix = 'AM';
       if (hour === 0) { hour = 12; }
       else if (hour === 12) { suffix = 'PM'; }
-      else if (hour > 12) { hour -= 12; suffix = 'PM'; }
+      else if (hour >  12) { hour -= 12; suffix = 'PM'; }
       return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
     }
   }
@@ -2108,7 +2154,7 @@ const BookingDetailsModal = ({
             <div className="mb-2"><b>Room:</b> {booking.roomName || ""}</div>
            <div className="mb-2">
   <b>Date:</b>{" "}
-  {booking.recurring !== 'No' && booking.recurrenceEndDate ? (
+  {booking.recurring !== 'No' && booking.recurringEndDate ? (
     <>
       {formatDate(booking.date)} - {formatDate(booking.recurringEndDate)} ({booking.recurring})
     </>
@@ -2159,6 +2205,17 @@ const BookingDetailsModal = ({
                 Show Full Notes
               </button>
             </div>
+
+            {/* Cancel Reason - only for cancelled bookings */}
+            {booking.status === 'cancelled' && booking.cancelReason && (
+              <div>
+                <div className="font-bold text-lg mb-1">Cancel Reason:</div>
+                <div className="bg-gray-100 p-4 rounded-lg min-h-[80px] max-h-[220px] text-base overflow-y-auto border border-gray-200 shadow-sm">
+                  {booking.cancelReason}
+                </div>
+              </div>
+            )}
+
             {/* Remarks */}
             <div>
               <div className="font-bold text-lg mb-1">Remarks:</div>

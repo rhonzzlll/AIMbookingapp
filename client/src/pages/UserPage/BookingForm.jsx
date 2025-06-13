@@ -6,7 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Confirm from "../../components/ui/ConfirmationModal";  
 import { v4 as uuidv4 } from 'uuid'; // <-- Add this at the top
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',

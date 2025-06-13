@@ -4,6 +4,8 @@ import FacilityModal from '../../components/FacilityModal';
 import AIMLogo from "../../images/AIM_Logo.png";
 import { AuthContext } from '../../context/AuthContext';
 
+const API_BASE_URL = import.meta.env.VITE_API_URI;
+
 const Header = () => {
   const { setAuth } = useContext(AuthContext);
   const [user, setUser] = useState(null);
@@ -22,7 +24,7 @@ const Header = () => {
     // Fetch buildings when Header mounts
     const fetchBuildings = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/buildings');
+        const response = await fetch(`${API_BASE_URL}/buildings`); // <-- FIXED
         if (!response.ok) throw new Error('Failed to fetch buildings');
         const data = await response.json();
         setBuildings(data);

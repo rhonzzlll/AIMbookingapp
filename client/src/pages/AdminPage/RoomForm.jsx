@@ -23,7 +23,8 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
   const [touchedFields, setTouchedFields] = useState({});
   const [loading, setLoading] = useState(false);
   const [availableCategories, setAvailableCategories] = useState([]);
-  const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
+
 
   const [localBuildings, setLocalBuildings] = useState([]);
   const [localCategories, setLocalCategories] = useState([]);
@@ -554,7 +555,7 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Room Description* <span className="text-xs text-gray-500">(Max 255 characters)</span>
+                    Room Description* 
                   </label>
                   <textarea
                     name="roomDescription"

@@ -2,6 +2,13 @@ import React, { useState } from 'react';
 
 const CancelBookingConfirmation = ({ booking, onConfirm, onCancel }) => {
   const [checked, setChecked] = useState(false);
+  const [reason, setReason] = useState('');
+  const maxChars = 150;
+
+  // Only pass the reason up, don't do the API call here
+  const handleConfirm = () => {
+    if (onConfirm) onConfirm(reason);
+  };
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -27,6 +34,24 @@ const CancelBookingConfirmation = ({ booking, onConfirm, onCancel }) => {
             Are you sure you want to cancel the booking for <strong>{booking?.title}</strong> on{' '}
             <strong>{booking?.date}</strong>? This action cannot be undone.
           </p>
+          {/* Reason for cancelling */}
+          <div className="mb-4 text-left">
+            <label htmlFor="cancel-reason" className="block text-sm font-medium text-gray-700 mb-1">
+              Reason for Cancelling <span className="text-gray-400">(max {maxChars} chars)</span>
+            </label>
+            <textarea
+              id="cancel-reason"
+              value={reason}
+              onChange={e => {
+                if (e.target.value.length <= maxChars) setReason(e.target.value);
+              }}
+              maxLength={maxChars}
+              rows={3}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+              placeholder="Please provide a reason for cancelling..."
+            />
+            <div className="text-xs text-gray-400 text-right">{reason.length}/{maxChars}</div>
+          </div>
           <div className="flex items-center justify-center mb-4">
             <input
               id="confirm-cancel"
@@ -47,9 +72,9 @@ const CancelBookingConfirmation = ({ booking, onConfirm, onCancel }) => {
               Cancel
             </button>
             <button
-              onClick={onConfirm}
+              onClick={handleConfirm}
               className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-              disabled={!checked}
+              disabled={!checked || reason.trim().length === 0}
             >
               Yes, Cancel Booking
             </button>

@@ -10,7 +10,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@azure/msal-browser": "^4.13.0",
     "@azure/msal-node": "^3.6.0",
+    "@azure/msal-react": "^3.0.12",
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",

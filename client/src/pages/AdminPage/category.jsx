@@ -18,7 +18,9 @@ import {
 } from '@mui/material';
 import CategoryIcon from '@mui/icons-material/Category';
 import DeleteConfirmation from './modals/DeleteConfirmation';
-import { AuthContext } from '../../context/AuthContext'; // <-- Add this line
+import { AuthContext } from '../../context/AuthContext';
+
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 // Success Modal Component
 const SuccessModal = ({ open, message, onClose }) => {
@@ -54,7 +56,6 @@ const CategoryModal = ({
 }) => {
   const [categoryName, setCategoryName] = useState('');
   const [selectedBuilding, setSelectedBuilding] = useState('');
-  const [description, setDescription] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -62,11 +63,9 @@ const CategoryModal = ({
     if (editData) {
       setCategoryName(editData.name || '');
       setSelectedBuilding(editData.building || '');
-      setDescription(editData.description || '');
     } else {
       setCategoryName('');
       setSelectedBuilding('');
-      setDescription('');
       setErrors({});
     }
   }, [editData, isOpen]);
@@ -75,8 +74,6 @@ const CategoryModal = ({
     const newErrors = {};
     if (!categoryName.trim()) newErrors.name = 'Category name is required';
     if (!selectedBuilding) newErrors.building = 'Please select a building';
-    if (description && description.length > 500)
-      newErrors.description = 'Description must be less than 500 characters';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -89,7 +86,6 @@ const CategoryModal = ({
       id: editData ? editData.id : Date.now(),
       name: categoryName,
       building: selectedBuilding,
-      description: description
     });
     setLoading(false);
     onClose();
@@ -148,29 +144,6 @@ const CategoryModal = ({
                 <p className="text-red-500 text-xs mt-1">{errors.name}</p>
               )}
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className={`w-full px-3 py-2 border ${errors.description ? 'border-red-500' : 'border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                placeholder="Enter category description"
-                rows="3"
-              />
-              <div className="flex justify-between">
-                {errors.description ? (
-                  <p className="text-red-500 text-xs mt-1">{errors.description}</p>
-                ) : (
-                  <span className="text-xs text-gray-500 mt-1">
-                    {description ? description.length : 0}/500 characters
-                  </span>
-                )}
-              </div>
-            </div>
-
             <div className="flex justify-end gap-3 pt-2">
               <button
                 type="button"
@@ -214,10 +187,10 @@ const CategoryManagement = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState(null);
   const [successModal, setSuccessModal] = useState({ open: false, message: '' });
-  const { auth } = useContext(AuthContext); // <-- Add this line
+  const { role } = useContext(AuthContext);
 
-  // Helper to check if current user is SuperAdmin
-  const isSuperAdmin = auth && auth.role === 'SuperAdmin';
+  // Helper to check if current user is SuperAdmin (case-insensitive)
+  const isSuperAdmin = role && role.toLowerCase() === 'superadmin';
 
   useEffect(() => {
     fetchData();
@@ -229,8 +202,8 @@ const CategoryManagement = () => {
 
   const fetchData = async () => {
     try {
-      const buildingsResponse = await fetch('http://localhost:5000/api/buildings');
-      const categoriesResponse = await fetch('http://localhost:5000/api/categories');
+      const buildingsResponse = await fetch(`${API_BASE_URL}/buildings`);
+      const categoriesResponse = await fetch(`${API_BASE_URL}/categories`);
 
       if (buildingsResponse.ok && categoriesResponse.ok) {
         const buildingsData = await buildingsResponse.json();
@@ -239,8 +212,7 @@ const CategoryManagement = () => {
         const normalizedCategories = categoriesData.map(category => ({
           id: category.categoryId,
           name: category.categoryName,
-          building: category.buildingName,
-          description: category.categoryDescription
+          building: category.buildingName || '', // Always a string
         }));
 
         setBuildings(buildingsData);
@@ -277,19 +249,18 @@ const CategoryManagement = () => {
         categoryId: categoryData.id,
         categoryName: categoryData.name,
         building: categoryData.building,
-        description: categoryData.description
       };
 
       let response;
 
       if (editingCategory) {
-        response = await fetch(`http://localhost:5000/api/categories/${categoryData.id}`, {
+        response = await fetch(`${API_BASE_URL}/categories/${categoryData.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formattedData),
         });
       } else {
-        response = await fetch('http://localhost:5000/api/categories', {
+        response = await fetch(`${API_BASE_URL}/categories`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formattedData),
@@ -301,25 +272,13 @@ const CategoryManagement = () => {
         throw new Error(`Server error: ${errorText}`);
       }
 
-      let updatedCategory;
-      const responseText = await response.text();
+      const responseJson = await response.json();
 
-      try {
-        if (responseText.trim()) {
-          updatedCategory = JSON.parse(responseText);
-        } else {
-          updatedCategory = formattedData;
-        }
-      } catch (e) {
-        console.error('Error parsing response:', e);
-        updatedCategory = formattedData;
-      }
-
+      // Always normalize to { id, name, building }
       const normalizedCategory = {
-        id: updatedCategory.id || updatedCategory.categoryId,
-        name: updatedCategory.name || updatedCategory.categoryName,
-        building: updatedCategory.building,
-        description: updatedCategory.description || updatedCategory.categoryDescription || ''
+        id: responseJson.categoryId || responseJson.id,
+        name: responseJson.categoryName || responseJson.name,
+        building: responseJson.buildingName || responseJson.building || '',
       };
 
       if (editingCategory) {
@@ -348,7 +307,7 @@ const CategoryManagement = () => {
   const confirmDeleteCategory = async () => {
     if (!categoryToDelete) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/categories/${categoryToDelete.id}`, {
+      const response = await fetch(`${API_BASE_URL}/categories/${categoryToDelete.id}`, {
         method: 'DELETE',
       });
 
@@ -412,7 +371,7 @@ const CategoryManagement = () => {
                   Category Management
                 </Typography>
                 <Typography variant="subtitle1" sx={{ color: 'gray.600', fontSize: 18 }}>
-                  manage room categories for your buildings
+                   
                 </Typography>
               </Box>
             </Stack>
@@ -486,14 +445,13 @@ const CategoryManagement = () => {
                     <TableRow>
                       <TableCell sx={{ fontWeight: 'bold' }}>Category Name</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>Building</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {pagedCategories.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} align="center">
+                        <TableCell colSpan={3} align="center">
                           No categories found. Add your first category using the button above.
                         </TableCell>
                       </TableRow>
@@ -502,11 +460,6 @@ const CategoryManagement = () => {
                         <TableRow key={category.id}>
                           <TableCell>{category.name || 'No Name'}</TableCell>
                           <TableCell>{category.building || 'No Building Assigned'}</TableCell>
-                          <TableCell>
-                            <Box sx={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {category.description || 'No Description'}
-                            </Box>
-                          </TableCell>
                           <TableCell>
                             <Button
                               variant="contained"
@@ -536,7 +489,7 @@ const CategoryManagement = () => {
                     <TableRow>
                       <TablePagination
                         rowsPerPageOptions={[10, 25, 50]}
-                        colSpan={4}
+                        colSpan={3}
                         count={filteredCategories.length}
                         rowsPerPage={rowsPerPage}
                         page={page}

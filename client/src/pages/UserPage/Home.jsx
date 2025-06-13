@@ -14,7 +14,7 @@ import FacilityModal from '../../components/FacilityModal';
 import { AuthContext } from '../../context/AuthContext';
 import CancelBookingConfirmation from './modals/CancelBookingConfirmation'; // Import your modal
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 const token = localStorage.getItem('token');
 const headers = {
@@ -155,10 +155,10 @@ function EditBookingModal({ booking, user, onClose, onBookingUpdated }) {
     async function fetchData() {
       const token = localStorage.getItem('token');
       // Rooms and bookings
-      const resRooms = await fetch(`http://localhost:5000/api/rooms`, { headers: { Authorization: `Bearer ${token}` } });
+      const resRooms = await fetch(`${API_BASE_URL}/rooms`, { headers: { Authorization: `Bearer ${token}` } });
       const roomData = await resRooms.json();
       setRooms(roomData);
-      const resBookings = await fetch(`http://localhost:5000/api/bookings`, { headers: { Authorization: `Bearer ${token}` } });
+      const resBookings = await fetch(`${API_BASE_URL}/bookings`, { headers: { Authorization: `Bearer ${token}` } });
       const bookingData = await resBookings.json();
       setAllBookings(bookingData);
 
@@ -358,7 +358,7 @@ function EditBookingModal({ booking, user, onClose, onBookingUpdated }) {
 
     try {
       // PUT to update booking
-      await fetch(`http://localhost:5000/api/bookings/${booking.bookingId}`, {
+      await fetch(`${API_BASE_URL}/bookings/${booking.bookingId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -378,17 +378,17 @@ function EditBookingModal({ booking, user, onClose, onBookingUpdated }) {
   // Cancel
   const handleCancel = () => setShowCancelModal(true);
 
-  const handleCancelConfirm = async () => {
+  const handleCancelConfirm = async (reason) => {
     try {
       const response = await fetch(
-        `http://localhost:5000/api/bookings/${booking.bookingId}/cancel`,
+        `${API_BASE_URL}/bookings/${booking.bookingId}/cancel`,
         {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${localStorage.getItem('token')}`,
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ cancelReason: reason }),
         }
       );
       if (!response.ok) {
@@ -397,7 +397,7 @@ function EditBookingModal({ booking, user, onClose, onBookingUpdated }) {
       setStatus('cancelled'); // Update status
       setShowCancelModal(false); // Close modal after success
     } catch (error) {
-      console.error('Error cancelling booking:', error);
+      alert('Failed to cancel booking. Please try again.');
     }
   };
 
@@ -764,7 +764,7 @@ const HomePage = () => {
     setBuildingsError(null);
 
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/buildings`, {
+      const response = await axios.get(`${API_BASE_URL}/buildings`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -778,7 +778,7 @@ const HomePage = () => {
           // Check if image URL is already complete or needs to be prefixed with API URL
           let imageUrl = facility.buildingImageUrl || facility.buildingImage;
           if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
-            imageUrl = `${API_BASE_URL}/api/uploads/${imageUrl}`;
+            imageUrl = `${API_BASE_URL}/uploads/${imageUrl}`;
           } else if (imageUrl && imageUrl.startsWith('/')) {
             imageUrl = `${API_BASE_URL}${imageUrl}`;
           }
@@ -809,7 +809,7 @@ const HomePage = () => {
   useEffect(() => {
     const fetchUserAndBookings = async () => {
       try {
-        const userResponse = await axios.get(`${API_BASE_URL}/api/users/${userId}`, {
+        const userResponse = await axios.get(`${API_BASE_URL}/users/${userId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -820,16 +820,16 @@ const HomePage = () => {
           firstName: userData.firstName,
           lastName: userData.lastName,
           profileImage: userData.profileImage
-            ? `${API_BASE_URL}/api/uploads/${userData.profileImage}`
+            ? `${API_BASE_URL}/uploads/${userData.profileImage}` // <-- FIXED: removed /api
             : (localStorage.getItem('profileImage')
-              ? `${API_BASE_URL}/api/uploads/${localStorage.getItem('profileImage')}`
+              ? `${API_BASE_URL}/uploads/${localStorage.getItem('profileImage')}` // <-- FIXED: removed /api
               : '/default-avatar.png'),
           department: userData.department || '',
         });
 
         // Fetch bookings but handle 404 gracefully
         try {
-          const bookingsResponse = await axios.get(`${API_BASE_URL}/api/bookings/user/${userId}`, {
+          const bookingsResponse = await axios.get(`${API_BASE_URL}/bookings/user/${userId}`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
@@ -846,7 +846,7 @@ const HomePage = () => {
           firstName: localStorage.getItem('firstName') || '',
           lastName: localStorage.getItem('lastName') || '',
           profileImage: localStorage.getItem('profileImage')
-            ? `${API_BASE_URL}/api/uploads/${localStorage.getItem('profileImage')}`
+            ? `${API_BASE_URL}/uploads/${localStorage.getItem('profileImage')}` // <-- FIXED: removed /api
             : '/default-avatar.png',
           department: localStorage.getItem('department') || '',
         });
@@ -1206,7 +1206,7 @@ const BookingCard = ({ booking, setShowEditModal, setEditingBooking }) => {
       try {
         if (booking.roomId) {
           const roomResponse = await axios.get(
-            `http://localhost:5000/api/rooms/${booking.roomId}`
+            `${API_BASE_URL}/rooms/${booking.roomId}`
           );
           setRoomName(roomResponse.data.roomName || 'Unknown Room');
         } else {
@@ -1263,17 +1263,17 @@ const BookingCard = ({ booking, setShowEditModal, setEditingBooking }) => {
   // Cancel booking handler (like confirm/decline)
   const handleCancel = () => setShowCancelModal(true);
 
-  const handleCancelConfirm = async () => {
+  const handleCancelConfirm = async (reason) => {
     try {
       const response = await fetch(
-        `http://localhost:5000/api/bookings/${booking.bookingId}/cancel`,
+        `${API_BASE_URL}/bookings/${booking.bookingId}/cancel`,
         {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${localStorage.getItem('token')}`,
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ cancelReason: reason }),
         }
       );
       if (!response.ok) {
@@ -1282,7 +1282,7 @@ const BookingCard = ({ booking, setShowEditModal, setEditingBooking }) => {
       setStatus('cancelled'); // Update status
       setShowCancelModal(false); // Close modal after success
     } catch (error) {
-      console.error('Error cancelling booking:', error);
+      alert('Failed to cancel booking. Please try again.');
     }
   };
 

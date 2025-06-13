@@ -19,6 +19,8 @@ import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom'; // <-- Add this import
 
+const API_BASE_URL = import.meta.env.VITE_API_URI;
+
 function TablePaginationActions(props) {
   const { count, page, rowsPerPage, onPageChange } = props;
 
@@ -161,6 +163,26 @@ const RoomList = ({ rooms, onEdit, onDelete, buildings = [] }) => {
     setPage(0);
   };
 
+  // Helper to get image URL for main rooms and subrooms
+  const getRoomImageSrc = (room) => {
+    if (room.roomImageUrl) return room.roomImageUrl;
+    if (room.roomImage && !room.roomImage.startsWith('roomImage-')) {
+      return `data:image/jpeg;base64,${room.roomImage}`;
+    }
+    if (room.roomImage) {
+      return `${API_BASE_URL}/uploads/${room.roomImage}`;
+    }
+    return null;
+  };
+
+  const getSubRoomImageSrc = (subRoom) => {
+    if (subRoom.subRoomImageUrl) return subRoom.subRoomImageUrl;
+    if (subRoom.subRoomImage) {
+      return `${API_BASE_URL}/uploads/${subRoom.subRoomImage}`;
+    }
+    return null;
+  };
+
   return (
     <Box>
       {/* Building Tabs */}
@@ -192,7 +214,7 @@ const RoomList = ({ rooms, onEdit, onDelete, buildings = [] }) => {
               Room Management
             </Typography>
             <Typography variant="subtitle1" sx={{ color: 'gray.600', fontSize: 18 }}>
-               manage all rooms in your facility
+            
             </Typography>
           </Box>
         </Stack>
@@ -234,12 +256,7 @@ const RoomList = ({ rooms, onEdit, onDelete, buildings = [] }) => {
                 if (!item.isSubRoom) {
                   // Main room row
                   const room = item;
-                  const roomImageSrc = room.roomImageUrl ||
-                    (room.roomImage && !room.roomImage.startsWith('roomImage-')
-                      ? `data:image/jpeg;base64,${room.roomImage}`
-                      : room.roomImage
-                        ? `/api/uploads/${room.roomImage}`
-                        : null);
+                  const roomImageSrc = getRoomImageSrc(room);
 
                   const buildingName = room.Building?.buildingName ||
                     (typeof room.building === 'object' ? room.building.buildingName : room.building) ||
@@ -305,10 +322,7 @@ const RoomList = ({ rooms, onEdit, onDelete, buildings = [] }) => {
                   // Sub-room row
                   const subRoom = item;
                   const parentRoom = subRoom.parentRoom || {};
-                  const subRoomImageSrc = subRoom.subRoomImageUrl ||
-                    (subRoom.subRoomImage
-                      ? `/api/uploads/${subRoom.subRoomImage}`
-                      : null);
+                  const subRoomImageSrc = getSubRoomImageSrc(subRoom);
 
                   const buildingName = parentRoom.Building?.buildingName ||
                     (typeof parentRoom.building === 'object' ? parentRoom.building.buildingName : parentRoom.building) ||

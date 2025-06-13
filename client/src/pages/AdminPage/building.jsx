@@ -23,10 +23,10 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import { AuthContext } from '../../context/AuthContext'; // <-- Add this line
+import { AuthContext } from '../../context/AuthContext';
 
 // Define the API base URL
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 // Enhanced image handling function using imageCompression library
 const processImage = async (file) => {
@@ -286,6 +286,8 @@ const BuildingModal = ({
 };
 
 const BuildingManagement = () => {
+  // Destructure role directly from context
+  const { role } = useContext(AuthContext);
   const [buildings, setBuildings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -298,10 +300,9 @@ const BuildingManagement = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [buildingToDelete, setBuildingToDelete] = useState(null);
-  const { auth } = useContext(AuthContext); // <-- Add this line
 
-  // Helper to check if current user is SuperAdmin
-  const isSuperAdmin = auth && auth.role === 'SuperAdmin';
+  // Helper to check if current user is SuperAdmin (case-insensitive)
+  const isSuperAdmin = role && role.toLowerCase() === 'superadmin';
 
   const filteredBuildings = buildings.filter(bldg =>
     bldg.buildingName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -333,7 +334,7 @@ const BuildingManagement = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/buildings`);
+      const response = await fetch(`${API_BASE_URL}/buildings`);
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
@@ -394,7 +395,7 @@ const BuildingManagement = () => {
   const confirmDeleteBuilding = async () => {
     if (!buildingToDelete) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/buildings/${buildingToDelete}`, {
+      const response = await fetch(`${API_BASE_URL}/buildings/${buildingToDelete}`, {
         method: 'DELETE',
       });
 
@@ -424,38 +425,25 @@ const BuildingManagement = () => {
   // Handle saving building data (create or update)
   const handleSaveBuilding = async (buildingData) => {
     try {
-      // Extract special properties we added for handling in this function
       const imageFile = buildingData._imageFile;
-      
-      // Remove the special properties before sending to the server
       delete buildingData._imageFile;
-      
       let response;
-      
-      // Create FormData object for the multipart/form-data request
       const formData = new FormData();
-      
-      // Add building data as JSON string
       formData.append('buildingData', JSON.stringify(buildingData));
-      
-      // If there's an image file, add it to FormData
       if (imageFile) {
         formData.append('buildingImage', imageFile);
       }
-      
       if (editingBuilding) {
-        // Update existing building
         response = await fetch(
-          `${API_BASE_URL}/api/buildings/${buildingData.buildingId}`, 
+          `${API_BASE_URL}/buildings/${buildingData.buildingId}`,
           {
             method: 'PUT',
             body: formData
           }
         );
       } else {
-        // Add new building
         response = await fetch(
-          `${API_BASE_URL}/api/buildings`, 
+          `${API_BASE_URL}/buildings`,
           {
             method: 'POST',
             body: formData
@@ -469,22 +457,18 @@ const BuildingManagement = () => {
       }
 
       const newBuilding = await response.json();
-      
+
       if (editingBuilding) {
-        // Update the local state with the updated building
-        setBuildings(buildings.map(bldg => 
+        setBuildings(buildings.map(bldg =>
           (bldg.buildingId === newBuilding.buildingId ? newBuilding : bldg)
         ));
         showSnackbar('Building updated successfully!', 'success');
       } else {
-        // Add the new building to the state
         setBuildings([...buildings, newBuilding]);
         showSnackbar('Building added successfully!', 'success');
       }
 
-      // Signal that building data has changed
       signalBuildingDataChanged();
-      
       closeModal();
     } catch (error) {
       console.error('Error saving building:', error);
@@ -522,7 +506,7 @@ const BuildingManagement = () => {
                   Building Management
                 </Typography>
                 <Typography variant="subtitle1" sx={{ color: 'gray.600', fontSize: 18 }}>
-               manage buildings in your facility
+               
                 </Typography>
               </Box>
             </Stack>

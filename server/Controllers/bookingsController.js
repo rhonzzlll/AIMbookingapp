@@ -785,6 +785,7 @@ exports.getRecurringGroupBookingById = async (req, res) => {
 exports.cancelBooking = async (req, res) => {
   try {
     const { bookingId } = req.params;
+    const { cancelReason } = req.body; // <-- Accept cancelReason from request
     const booking = await Booking.findByPk(bookingId);
 
     if (!booking) {
@@ -798,13 +799,14 @@ exports.cancelBooking = async (req, res) => {
 
     const originalStatus = booking.status;
     booking.status = 'cancelled';
+    booking.cancelReason = cancelReason ?? null; // <-- Set to null if undefined
     await booking.save();
 
     // Send cancellation email if status changed
     if (originalStatus !== 'cancelled') {
       setImmediate(() => {
-        sendBookingEmail(booking, 'cancelled');           // To user
-        sendCancelledBookingToAdmins(booking);            // To all admins
+        sendBookingEmail(booking, 'cancelled');
+        sendCancelledBookingToAdmins(booking);
       });
     }
 

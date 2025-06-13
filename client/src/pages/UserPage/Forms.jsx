@@ -11,7 +11,7 @@ import PrivacyModal from '../../components/ui/PrivacyModal';
 import CancelBookingConfirmation from './modals/CancelBookingConfirmation';
 import { useLocation } from 'react-router-dom';
  
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 // Helper function to expand recurring bookings
 const expandRecurringBookings = (bookings) => {

@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaEye, FaEyeSlash } from "react-icons/fa"; // Add this import
-import TopBar from '../../components/AdminComponents/TopBar'; 
+import { FaEye, FaEyeSlash } from "react-icons/fa";
+import TopBar from '../../components/AdminComponents/TopBar';
+
+// Use env variable for API base
+const API_BASE = import.meta.env.VITE_API_URI;
+
 const Users = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
@@ -41,36 +45,29 @@ const Users = () => {
     { label: "Departments", options: ["SRF", "IMCG", "Marketing", "ICT", "HR", "Finance", "Registrars"] }
   ];
 
-  // Check if user is admin on component mount
-  useEffect(() => {
-    const role = localStorage.getItem('role');
-    if (!role || role.toLowerCase() !== 'admin') {
-      navigate('/login');
-      return;
-    }
+useEffect(() => {
+  const role = localStorage.getItem('role');
+  if (!role || (role.toLowerCase() !== 'admin' && role.toLowerCase() !== 'superadmin')) {
+    navigate('/login');
+    return;
+  }
 
-    fetchUsers();
-  }, [navigate]);
+  fetchUsers();
+}, [navigate]);
 
   // Fetch users with proper auth header
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) throw new Error('Authentication token missing');
 
-      if (!token) {
-        throw new Error('Authentication token missing');
-      }
-
-      const response = await fetch('http://localhost:5000/api/users', {
+      const response = await fetch(`${API_BASE}/users`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch users');
-      }
-
+      if (!response.ok) throw new Error('Failed to fetch users');
       const data = await response.json();
       setUsers(data);
     } catch (error) {
@@ -154,19 +151,13 @@ const Users = () => {
   // Save new user
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     try {
       const token = localStorage.getItem('token');
+      if (!token) throw new Error('Authentication token missing');
 
-      if (!token) {
-        throw new Error('Authentication token missing');
-      }
-
-      const response = await fetch('http://localhost:5000/api/users', {
+      const response = await fetch(`${API_BASE}/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,7 +182,7 @@ const Users = () => {
         password: '',
         confirmPassword: '',
         isActive: true,
-        role: 'User', // <-- Capital U
+        role: 'User',
       });
       setErrors({});
     } catch (error) {
@@ -203,26 +194,13 @@ const Users = () => {
   // Update existing user
   const handleEditSubmit = async (e) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
-
-    if (showEditModal && showPasswordFields) {
-      if (!formData.oldPassword) newErrors.oldPassword = 'Old password is required';
-      if (!formData.password) newErrors.password = 'New password is required';
-      if (formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = 'Passwords do not match';
-      }
-    }
+    if (!validateForm()) return;
 
     try {
       const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token missing');
-      }
+      if (!token) throw new Error('Authentication token missing');
 
-      const response = await fetch(`http://localhost:5000/api/users/${currentUser.userId || currentUser._id}`, {
+      const response = await fetch(`${API_BASE}/users/${currentUser.userId || currentUser._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -256,7 +234,7 @@ const Users = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
+      const response = await fetch(`${API_BASE}/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -285,8 +263,7 @@ const Users = () => {
     if (!resetUser) return;
     try {
       const token = localStorage.getItem('token');
-      // Always use userId for Sequelize
-      const response = await fetch(`http://localhost:5000/api/auth/reset-password/${resetUser.userId}`, {
+      const response = await fetch(`${API_BASE}/auth/reset-password/${resetUser.userId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -764,7 +741,7 @@ const Users = () => {
                       setErrors({});
                       try {
                         const token = localStorage.getItem("token");
-                        const response = await fetch("http://localhost:5000/api/auth/update-password", {
+                        const response = await fetch(`${API_BASE}/auth/update-password`, {
                           method: "PUT",
                           headers: {
                             "Content-Type": "application/json",

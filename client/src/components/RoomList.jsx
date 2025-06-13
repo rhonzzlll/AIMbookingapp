@@ -100,12 +100,14 @@ const RoomList = ({ rooms, onEdit, onDelete }) => {
                       >
                         Edit
                       </button>
-                      <button
-                        onClick={() => onDelete(room)}
-                        className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm"
-                      >
-                        Delete
-                      </button>
+                      {onDelete && (
+                        <button
+                          onClick={() => onDelete(room)}
+                          className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
 

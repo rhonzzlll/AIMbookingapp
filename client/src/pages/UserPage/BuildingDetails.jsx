@@ -4,7 +4,8 @@ import axios from 'axios';
 import Header from './Header';
 import bg from '../../images/bg.png';
 
-const API_BASE_URL = 'http://localhost:5000';
+// Use environment variable for API base URL
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -111,15 +112,15 @@ const BuildingDetails = () => {
       const headers = { Authorization: `Bearer ${token}` };
 
       // Fetch building details
-      const buildingResponse = await axios.get(`${API_BASE_URL}/api/buildings/${buildingId}`, { headers });
+      const buildingResponse = await axios.get(`${API_BASE_URL}/buildings/${buildingId}`, { headers });
       setBuilding(buildingResponse.data);
 
       // Fetch rooms in this building
-      const roomsResponse = await axios.get(`${API_BASE_URL}/api/rooms?buildingId=${buildingId}`, { headers });
+      const roomsResponse = await axios.get(`${API_BASE_URL}/rooms?buildingId=${buildingId}`, { headers });
       const roomsData = roomsResponse.data;
 
       // Fetch bookings for these rooms
-      const bookingsResponse = await axios.get(`${API_BASE_URL}/api/bookings`, { headers });
+      const bookingsResponse = await axios.get(`${API_BASE_URL}/bookings`, { headers });
       const bookingsData = bookingsResponse.data;
 
       // Flatten rooms and subrooms
@@ -406,7 +407,7 @@ const BuildingDetails = () => {
         {building && (
           <div>
             {/* Sidebar */}
-            <div className="fixed top-8 left-20 bottom-5 w-80 overflow-y-auto p-6 z-20">
+            <div className="fixed top-24 left-20 bottom-5 w-80 overflow-y-auto p-6 z-20">
               <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-200 space-y-6">
                 <h2 className="text-xl font-semibold text-gray-800">Find a Room</h2>
                 {/* Search input */}

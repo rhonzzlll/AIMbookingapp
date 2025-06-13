@@ -6,6 +6,8 @@ import home from "../../images/home.png";
 import imageCompression from 'browser-image-compression';
 import { FaEye, FaEyeSlash } from "react-icons/fa"; // Add this import at the top
 
+const API_BASE_URL = import.meta.env.VITE_API_URI; // Use env variable
+
 const Profile = () => {
   // Grouped options for toggleable select
   const departmentGroups = [
@@ -16,7 +18,6 @@ const Profile = () => {
   const userId = localStorage.getItem("userId");
   const token = localStorage.getItem("token");
   const userRole = localStorage.getItem("role");
-  const API_BASE_URL = 'http://localhost:5000/api';
   
   const [user, setUser] = useState({
     firstName: '',
@@ -46,13 +47,11 @@ const Profile = () => {
     new: false,
     confirm: false,
   });
-  // const [deptType, setDeptType] = useState('Schools'); // Add this state
 
   // Fetch user data on component mount
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        console.log(`Fetching user data for userId: ${userId}`);
         const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -64,7 +63,7 @@ const Profile = () => {
           firstName: userData.firstName,
           lastName: userData.lastName,
           department: userData.department || '',
-          birthdate: userData.birthdate || '', // Handle Sequelize DATEONLY format
+          birthdate: userData.birthdate || '',
           email: userData.email,
           profileImage: userData.profileImage || '',
           role: userData.role || userRole || '',
@@ -72,11 +71,9 @@ const Profile = () => {
 
         // Set preview image with proper URL path
         if (userData.profileImage) {
-          setPreviewImage(`http://localhost:5000/api/uploads/${userData.profileImage}`);
+          setPreviewImage(`${API_BASE_URL}/uploads/${userData.profileImage}`);
         }
       } catch (error) {
-        console.error('Error fetching user data:', error);
-
         setUseLocalData(true);
 
         const firstName = localStorage.getItem('firstName') || '';
@@ -102,7 +99,7 @@ const Profile = () => {
     } else {
       setError('User ID not found. Please log in again.');
     }
-  }, [userId, token, userRole]);
+  }, [userId, token, userRole, API_BASE_URL]);
 
   // Handle input changes for user data
   const handleInputChange = (e) => {
@@ -150,7 +147,6 @@ const Profile = () => {
         };
         reader.readAsDataURL(compressedFile);
       } catch (error) {
-        console.error('Error processing image:', error);
         setError('Failed to process image. Please try a different file.');
       } finally {
         setLoading(false);
@@ -187,7 +183,7 @@ const Profile = () => {
 
         if (uploadRes.ok) {
           const data = await uploadRes.json();
-          uploadedImageName = data.filename; // The backend should return { filename: '...' }
+          uploadedImageName = data.filename;
         } else {
           const err = await uploadRes.json().catch(() => null);
           toast.error(err?.error || "Failed to upload image");
@@ -223,7 +219,7 @@ const Profile = () => {
         const updatedUser = await response.json();
         setUser(updatedUser);
         if (uploadedImageName) {
-          setPreviewImage(`http://localhost:5000/api/uploads/${uploadedImageName}`);
+          setPreviewImage(`${API_BASE_URL}/uploads/${uploadedImageName}`);
         }
         // Update localStorage so HomePage can use the latest image
         localStorage.setItem('profileImage', uploadedImageName || '');
@@ -232,7 +228,7 @@ const Profile = () => {
         // Notify HomePage to refresh user info
         window.dispatchEvent(new Event('userProfileUpdated'));
         toast.success("Profile updated successfully!");
-        setSuccess("Profile updated successfully!"); // <-- Add this line
+        setSuccess("Profile updated successfully!");
 
         // Clear the success message after 3 seconds
         setTimeout(() => setSuccess(''), 3000);
@@ -241,28 +237,9 @@ const Profile = () => {
         toast.error(errorData?.message || "Failed to update profile");
       }
     } catch (error) {
-      console.error("Error updating profile:", error);
       toast.error("Something went wrong! Please try again.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Helper function to decode JWT tokens
-  const parseJwt = (token) => {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (error) {
-      console.error('Error parsing JWT:', error);
-      return null;
     }
   };
 
@@ -293,21 +270,18 @@ const Profile = () => {
 
       if (response.status === 200) {
         toast.success('Password changed successfully');
-        setSuccess('Password changed successfully!'); // <-- Add this line
-        // Reset password fields
+        setSuccess('Password changed successfully!');
         setPasswords({
           oldPassword: '',
           newPassword: '',
           confirmPassword: '',
         });
-        // Clear the success message after 3 seconds
-        setTimeout(() => setSuccess(''), 3000); // <-- Add this line
+        setTimeout(() => setSuccess(''), 3000);
       } else {
         toast.error('Failed to change password. Please try again.');
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to change password');
-      console.error('Error changing password:', error);
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import { MdEmail, MdLock } from 'react-icons/md';
 import AIMLogo from '../../images/AIM_Logo.png';
 import AIMlogotest from '../../images/AIM_bldg.jpg';
 import { AuthContext } from '../../context/AuthContext';
+import { useMsal } from "@azure/msal-react";
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -13,6 +14,7 @@ const Login = () => {
   const [errorMsg, setErrorMsg] = useState(''); // <-- Add error message state
   const navigate = useNavigate();
   const { setAuth } = useContext(AuthContext);
+  const { instance } = useMsal();
 
   // Load remembered email on mount
   useEffect(() => {
@@ -33,7 +35,10 @@ const Login = () => {
     setLoading(true);
     setErrorMsg(''); // Clear previous error
     try {
-      const url = 'http://localhost:5000/api/auth';
+      // Use Vite environment variable for API base URI
+      const url = `${import.meta.env.VITE_API_URI}/auth`;
+      console.log('API URI:', import.meta.env.VITE_API_URI);
+      console.log('ALL ENV:', import.meta.env);
       const { data: res } = await axios.post(url, formData);
 
       // Save auth details in context
@@ -65,6 +70,23 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMicrosoftLogin = () => {
+    instance.loginPopup({
+      scopes: ["user.read"],
+    }).then((response) => {
+      // You can handle the response here, e.g., send the token to your backend
+      // For now, just redirect or set auth context
+      setAuth({
+        userId: response.account.homeAccountId,
+        token: response.idToken,
+        role: "user", // You may want to determine role from backend
+      });
+      navigate("/home");
+    }).catch((error) => {
+      setErrorMsg("Microsoft login failed. Please try again.");
+    });
   };
 
   return (
@@ -155,12 +177,18 @@ const Login = () => {
                     {loading ? 'Logging in...' : 'Log In'}
                   </button>
 
+                  {/* Microsoft 365 SSO Button */}
+                  <button
+                    type="button"
+                    onClick={handleMicrosoftLogin}
+                    className="w-full mt-4 bg-white border border-blue-600 text-blue-600 py-3 rounded-lg font-semibold text-lg flex items-center justify-center gap-2 hover:bg-blue-50 transition"
+                  >
+                    <img src="https://img.icons8.com/color/28/000000/microsoft.png" alt="Microsoft" className="w-6 h-6" />
+                    Sign in with Microsoft
+                  </button>
+
                   {/* Forgot Password */}
-                  <div className="text-center mt-4">
-                    <Link to="/forgot-password" className="text-sm text-blue-600 hover:underline font-medium">
-                      Forgot Password?
-                    </Link>
-                  </div>
+             
                 </form>
               </div>
             </div>

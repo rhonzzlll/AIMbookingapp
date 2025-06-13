@@ -23,11 +23,14 @@ const ConfirmationModal = ({ isOpen, onOpenChange }) => {
             Booking Submitted Successfully
           </DialogTitle>
         </DialogHeader>
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            Your booking has been submitted successfully and is awaiting admin approval. You will be notified once it is approved.
-          </p>
-        </div>
+       <div className="mt-4 text-center">
+  <p className="text-sm text-gray-600">
+    Your booking has been submitted.
+  </p>
+  <p className="text-sm text-gray-600">
+    You will be notified once it is approved.
+  </p>
+</div>
         <div className="mt-6 flex justify-center space-x-3">
           <Button
             onClick={handleRedirect}

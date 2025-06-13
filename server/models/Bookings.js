@@ -50,6 +50,10 @@ costCenterCharging: {
       field: 'title',
       allowNull: true
     },
+    declineReason: {
+  type: DataTypes.STRING, // or DataTypes.TEXT if you want longer reasons
+  allowNull: true,
+},
     // ...existing code...
 numberOfPaxBreakRoom: {
   type: Sequelize.STRING, // or INTEGER if you want only numbers
@@ -150,12 +154,11 @@ timeSubmitted: {
       allowNull: true
       
     },
-    // ...existing code...
-declineReason: {
-  type: DataTypes.STRING, // or DataTypes.TEXT if you want longer reasons
+cancelReason: {
+  type: DataTypes.STRING, 
   allowNull: true,
 },
-// ...existing code...
+
     recurrencePattern: {
       type: DataTypes.ENUM('Daily', 'Weekly', 'Monthly'),
       field: 'recurrencePattern',

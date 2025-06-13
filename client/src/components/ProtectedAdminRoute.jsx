@@ -5,8 +5,8 @@ import { useAuth } from '../context/AuthContext';
 const ProtectedAdminRoute = ({ children }) => {
   const { token, role } = useAuth();
 
-  // Not logged in or not admin? Redirect to login
-  if (!token || !role || role.toLowerCase() !== 'admin') {
+  // Not logged in or not admin/superadmin? Redirect to login
+  if (!token || !role || (role.toLowerCase() !== 'admin' && role.toLowerCase() !== 'superadmin')) {
     return <Navigate to="/login" replace />;
   }
 
