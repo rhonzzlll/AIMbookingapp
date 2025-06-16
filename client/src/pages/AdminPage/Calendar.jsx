@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { FaSearch } from "react-icons/fa"; // Add this import at the top with other imports
 
 // API base URL configuration
 const API_BASE_URL = import.meta.env.VITE_API_URI;
@@ -37,6 +38,7 @@ const BookingCalendar = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState(""); // <-- Add search state
 
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
@@ -448,13 +450,30 @@ const BookingCalendar = () => {
     );
   };
 
+  // Filtered bookings for the selected day based on search
+  const getFilteredDayBookings = (date) => {
+    const formattedDate = date
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      : null;
+    const dayBookings = processedBookings.filter(booking => booking.date === formattedDate);
+
+    if (!searchTerm.trim()) return dayBookings;
+
+    const lowerSearch = searchTerm.trim().toLowerCase();
+    return dayBookings.filter(booking =>
+      Object.values(booking)
+        .filter(val => typeof val === "string" || typeof val === "number")
+        .some(val => String(val).toLowerCase().includes(lowerSearch))
+    );
+  };
+
   // Day view rendering with vertical time slots
   const renderDayView = () => {
     if (!selectedDate) return null;
 
     const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const formattedDate = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
-    const dayBookings = processedBookings.filter(booking => booking.date === formattedDate);
+    const dayBookings = getFilteredDayBookings(selectedDate);
 
     const uniqueTimeSlots = [...new Set(dayBookings.map(
       booking => `${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`
@@ -479,6 +498,22 @@ const BookingCalendar = () => {
             <button onClick={goToPreviousDay} className="p-2 bg-gray-200 rounded hover:bg-gray-300">← Previous</button>
             <button onClick={goToNextDay} className="p-2 bg-gray-200 rounded hover:bg-gray-300">Next →</button>
             <button onClick={backToCalendar} className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Back to Calendar</button>
+          </div>
+        </div>
+
+        {/* Search input for filtering bookings */}
+        <div className="mb-4 px-4">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search bookings for this day..."
+              className="w-full p-2 pl-10 border rounded"
+            />
+            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+              <FaSearch />
+            </span>
           </div>
         </div>
 
@@ -533,19 +568,15 @@ const BookingCalendar = () => {
                             )}
                           </div>
                         </div>
-                        
                         <div className="space-y-2">
                           <p className="text-base font-semibold">{booking.title}</p>
                           <p className="text-base font-semibold">{booking.firstName} {booking.lastName}</p>
-                          
-                          {/* Department with color indicator */}
                           <div className="flex items-center gap-2">
                             <span className={`w-3 h-3 rounded-full ${getDepartmentColorDot(booking.department)}`}></span>
                             <span className="text-sm font-medium text-gray-800">
                               Department: {booking.department || 'Not specified'}
                             </span>
                           </div>
-                          
                           <p className="text-sm text-gray-800">Building: {booking.buildingName}</p>
                           <p className="text-sm italic text-gray-700">
                             ⏰{formatTime(booking.startTime)} - {formatTime(booking.endTime)}

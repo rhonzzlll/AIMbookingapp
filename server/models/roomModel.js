@@ -38,7 +38,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     roomDescription: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.STRING(500),
       allowNull: true
     },
     parentRoomId: { // <-- Add this field

@@ -14,13 +14,6 @@ const TIME_OPTIONS = [
   '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
 
-function format(date, formatStr) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return formatStr.replace('yyyy', year).replace('MM', month).replace('dd', day);
-}
-
 const BuildingDetails = () => {
   const { buildingId } = useParams();
   const navigate = useNavigate();
@@ -40,6 +33,13 @@ const BuildingDetails = () => {
     toTime: '',
     isRecurring: false,
   });
+
+  function format(date, formatStr) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return formatStr.replace('yyyy', year).replace('MM', month).replace('dd', day);
+  }
 
   useEffect(() => {
     fetchBuildingDetails();
@@ -186,7 +186,7 @@ const BuildingDetails = () => {
 
   const handleDateTimeChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setSearchParams(prev => ({
+    setSearchParams((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
@@ -195,39 +195,37 @@ const BuildingDetails = () => {
   const handleSearch = () => {
     const { fromDate, fromTime, toDate, toTime } = searchParams;
 
-    let filtered = rooms;
-    if (currentCategory) {
-      filtered = filtered.filter(room => room.category === currentCategory);
+    // Use the current category filter if set, otherwise all rooms
+    const base = currentCategory
+      ? rooms.filter((room) => room.category === currentCategory)
+      : rooms;
+
+    if (!fromTime || !toTime) {
+      const filtered = searchTerm
+        ? base.filter((room) =>
+            (room.displayName || room.roomName).toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        : base;
+
+      setFilteredRooms(filtered);
+      return;
     }
 
-    if (searchTerm) {
-      filtered = filtered.filter(room =>
-        room.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (room.roomDescription && room.roomDescription.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
+    const fromDateTime = new Date(`${fromDate}T${convertTo24HourFormat(fromTime)}`);
+    const toDateTime = new Date(`${toDate}T${convertTo24HourFormat(toTime)}`);
 
-    if (fromTime && toTime) {
-      const fromDateTime = new Date(`${fromDate}T${convertTo24HourFormat(fromTime)}`);
-      const toDateTime = new Date(`${toDate}T${convertTo24HourFormat(toTime)}`);
+    const filtered = base.filter((room) => {
+      if (!room.bookings || room.bookings.length === 0) return true;
 
-      filtered = filtered.filter(room => {
-        if (!room.bookings || room.bookings.length === 0) return true;
+      return room.bookings.every((booking) => {
+        const bookingStart = new Date(`${booking.fromDate}T${convertTo24HourFormat(booking.fromTime)}`);
+        const bookingEnd = new Date(`${booking.toDate}T${convertTo24HourFormat(booking.toTime)}`);
 
-        return room.bookings.every(booking => {
-          if (booking.fromDate !== fromDate && booking.toDate !== toDate) {
-            return true;
-          }
-
-          const bookingStart = new Date(`${booking.fromDate}T${booking.fromTime}`);
-          const bookingEnd = new Date(`${booking.toDate}T${booking.toTime}`);
-
-          return !(toDateTime > bookingStart && fromDateTime < bookingEnd);
-        });
+        // Conflict if (requested start < booking end) && (requested end > booking start)
+        const isConflict = fromDateTime < bookingEnd && toDateTime > bookingStart;
+        return !isConflict;
       });
-    }
+    });
 
     setFilteredRooms(filtered);
   };
@@ -467,6 +465,65 @@ const BuildingDetails = () => {
                       ))}
                   </ul>
                 </div>
+
+                {/* Date/Time Search */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    <input
+                      type="date"
+                      name="fromDate"
+                      value={searchParams.fromDate}
+                      onChange={handleDateTimeChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <select
+                      name="fromTime"
+                      value={searchParams.fromTime}
+                      onChange={handleDateTimeChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                    >
+                      <option value="">Select Start Time</option>
+                      {futureStartTimes.map((time) => (
+                        <option key={time} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    <input
+                      type="date"
+                      name="toDate"
+                      value={searchParams.toDate}
+                      onChange={handleDateTimeChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <select
+                      name="toTime"
+                      value={searchParams.toTime}
+                      onChange={handleDateTimeChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                    >
+                      <option value="">Select End Time</option>
+                      {futureEndTimes.map((time) => (
+                        <option key={time} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSearch}
+                  className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-all duration-300 font-medium"
+                >
+                  Search
+                </button>
               </div>
             </div>
 

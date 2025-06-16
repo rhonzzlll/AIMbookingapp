@@ -241,114 +241,116 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
       </button>
 
       {showOptions && (
-        <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded shadow-lg p-4 z-50 w-80">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-bold text-gray-800">Export Options</h3>
-            <button 
-              onClick={() => setShowOptions(false)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              ✕
-            </button>
-          </div>
-          
-          <div className="mb-3">
-            <div className="font-medium text-gray-700 mb-2 flex items-center">
-              <Filter size={16} className="mr-1" />
-              Select Status to Export:
-            </div>
-          
-            <div className="flex flex-col gap-2 mb-4 pl-1">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedStatuses.includes('confirmed')} 
-                  onChange={() => handleCheckboxChange('confirmed')}
-                  className="rounded text-teal-600 focus:ring-teal-500"
-                />
-                <span className="text-sm">Confirmed</span>
-              </label>
-              
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedStatuses.includes('pending')} 
-                  onChange={() => handleCheckboxChange('pending')}
-                  className="rounded text-teal-600 focus:ring-teal-500"
-                />
-                <span className="text-sm">Pending</span>
-              </label>
-              
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={selectedStatuses.includes('declined')} 
-                  onChange={() => handleCheckboxChange('declined')}
-                  className="rounded text-teal-600 focus:ring-teal-500"
-                />
-                <span className="text-sm">Declined</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="mb-3">
-            <div className="font-medium text-gray-700 mb-2 flex items-center">
-              <Calendar size={16} className="mr-1" />
-              Filter by Date Range:
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+          <div className="bg-white border border-gray-200 rounded shadow-lg p-4 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-800">Export Options</h3>
+              <button 
+                onClick={() => setShowOptions(false)}
+                className="text-gray-500 hover:text-gray-700 absolute top-4 right-4"
+              >
+                ✕
+              </button>
             </div>
             
-            <div className="flex flex-col gap-3 mb-4">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Start Date</label>
-                <input
-                  type="date"
-                  name="startDate"
-                  value={startDate}
-                  onChange={handleDateChange}
-                  className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-teal-500 focus:border-teal-500"
-                />
+            <div className="mb-3">
+              <div className="font-medium text-gray-700 mb-2 flex items-center">
+                <Filter size={16} className="mr-1" />
+                Select Status to Export:
               </div>
-              
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">End Date</label>
-                <input
-                  type="date"
-                  name="endDate"
-                  value={endDate}
-                  min={startDate}
-                  onChange={handleDateChange}
-                  className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-teal-500 focus:border-teal-500"
-                />
+            
+              <div className="flex flex-col gap-2 mb-4 pl-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedStatuses.includes('confirmed')} 
+                    onChange={() => handleCheckboxChange('confirmed')}
+                    className="rounded text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className="text-sm">Confirmed</span>
+                </label>
+                
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedStatuses.includes('pending')} 
+                    onChange={() => handleCheckboxChange('pending')}
+                    className="rounded text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className="text-sm">Pending</span>
+                </label>
+                
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedStatuses.includes('declined')} 
+                    onChange={() => handleCheckboxChange('declined')}
+                    className="rounded text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className="text-sm">Declined</span>
+                </label>
               </div>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-gray-200">
-            <button
-              onClick={togglePreview}
-              className="px-4 py-2 text-sm text-center block w-full rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
-            >
-              {showPreview ? 'Hide Preview' : 'Show Preview'}
-            </button>
-            
-            <button
-              onClick={exportToExcel}
-              disabled={selectedStatuses.length === 0 || isExporting}
-              className={`px-4 py-2 text-sm text-center block w-full rounded flex items-center justify-center gap-2 ${
-                selectedStatuses.length === 0 
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                : 'bg-teal-600 text-white hover:bg-teal-700'} transition`}
-            >
-              <FileSpreadsheet size={16} />
-              {isExporting 
-                ? 'Exporting...' 
-                : selectedStatuses.length === 0 
-                  ? 'Select at least one status'
-                  : `Export ${filteredBookings.length} Events to Excel`}
-            </button>
-            
-            <div className="mt-1 text-xs text-center text-gray-500">
-              {filteredBookings.length} events match your filters
+            <div className="mb-3">
+              <div className="font-medium text-gray-700 mb-2 flex items-center">
+                <Calendar size={16} className="mr-1" />
+                Filter by Date Range:
+              </div>
+              
+              <div className="flex flex-col gap-3 mb-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    name="startDate"
+                    value={startDate}
+                    onChange={handleDateChange}
+                    className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    name="endDate"
+                    value={endDate}
+                    min={startDate}
+                    onChange={handleDateChange}
+                    className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-gray-200">
+              <button
+                onClick={togglePreview}
+                className="px-4 py-2 text-sm text-center block w-full rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+              >
+                {showPreview ? 'Hide Preview' : 'Show Preview'}
+              </button>
+              
+              <button
+                onClick={exportToExcel}
+                disabled={selectedStatuses.length === 0 || isExporting}
+                className={`px-4 py-2 text-sm text-center block w-full rounded flex items-center justify-center gap-2 ${
+                  selectedStatuses.length === 0 
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                  : 'bg-teal-600 text-white hover:bg-teal-700'} transition`}
+              >
+                <FileSpreadsheet size={16} />
+                {isExporting 
+                  ? 'Exporting...' 
+                  : selectedStatuses.length === 0 
+                    ? 'Select at least one status'
+                    : `Export ${filteredBookings.length} Events to Excel`}
+              </button>
+              
+              <div className="mt-1 text-xs text-center text-gray-500">
+                {filteredBookings.length} events match your filters
+              </div>
             </div>
           </div>
         </div>

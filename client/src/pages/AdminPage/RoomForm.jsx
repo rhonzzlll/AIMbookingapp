@@ -250,7 +250,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URI;
       case 'roomDescription':
         if (!value.trim()) {
           fieldErrors.roomDescription = 'Description is required';
-        } else if (value.length > 255) {
+        } else if (value.length > 255) { // <-- Changed back to 255
           fieldErrors.roomDescription = 'Description must be less than 255 characters';
         } else {
           delete fieldErrors.roomDescription;
@@ -291,7 +291,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URI;
       isValid = false;
     }
 
-    if (formData.roomDescription && formData.roomDescription.length > 255) {
+    if (formData.roomDescription && formData.roomDescription.length > 255) { // <-- Changed back to 255
       formErrors.roomDescription = 'Description must be less than 255 characters';
       isValid = false;
     }
@@ -566,7 +566,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URI;
                     }`}
                     rows="3"
                     placeholder="Enter room description"
-                    maxLength="255" // Enforce limit in UI
+                    maxLength="255" // <-- Changed back to 255
                   ></textarea>
                   <div className="flex justify-between">
                     {errors.roomDescription && touchedFields.roomDescription ? (

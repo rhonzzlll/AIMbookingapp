@@ -4,24 +4,23 @@ dotenv.config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const multer = require('multer'); // Added for file uploads
-const path = require('path'); // For path operations
-const fs = require('fs'); // For directory operations
+const multer = require('multer'); 
+const path = require('path');  
+const fs = require('fs');  
 
 const app = express();
 
-// Load Sequelize instance
+ 
 const db = require('./models');
 const sequelize = db.sequelize;
-
-// SET THE DB TO THE APP - THIS IS THE CRITICAL ADDITION
+ 
 app.set('db', db);
 
-// Configure multer storage
+ 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = path.join(__dirname, 'public/uploads');
-    // Create directory if it doesn't exist
+   
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -56,12 +55,16 @@ const upload = multer({
 // Make upload available throughout the app
 app.locals.upload = upload;
 
-// Middleware
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://aimbooking.aim.edu',
+  'http://aimbooking.aim.edu'
+];
+
 app.use(cors({
-  origin: 'http://localhost:5173',  
+  origin: allowedOrigins,
   credentials: true,
 }));
-
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 

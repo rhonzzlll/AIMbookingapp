@@ -75,17 +75,32 @@ const Login = () => {
   const handleMicrosoftLogin = () => {
     instance.loginPopup({
       scopes: ["user.read"],
-    }).then((response) => {
-      // You can handle the response here, e.g., send the token to your backend
-      // For now, just redirect or set auth context
-      setAuth({
-        userId: response.account.homeAccountId,
-        token: response.idToken,
-        role: "user", // You may want to determine role from backend
-      });
-      navigate("/home");
+    }).then(async (response) => {
+      try {
+        console.log("MSAL login response:", response); // <-- Add this
+        const { data: res } = await axios.post(
+          `${import.meta.env.VITE_API_URI}/auth/microsoft`,
+          { idToken: response.idToken }
+        );
+        console.log("Backend response:", res); // <-- Add this
+        setAuth({
+          userId: res.userId,
+          token: res.token,
+          role: res.role,
+        });
+        const userRole = res.role ? res.role.toLowerCase() : '';
+        if (userRole === 'admin' || userRole === 'superadmin') {
+          navigate('/admin/dashboard');
+        } else {
+          navigate('/home');
+        }
+      } catch (err) {
+        setErrorMsg("Microsoft login failed. Please try again.");
+        console.error("Backend error:", err); // <-- Add this
+      }
     }).catch((error) => {
       setErrorMsg("Microsoft login failed. Please try again.");
+      console.error("MSAL error:", error); // <-- Add this
     });
   };
 
@@ -136,8 +151,6 @@ const Login = () => {
                       />
                     </div>
                   </div>
-
-                  {/* Password */}
                   <div className="mb-6">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
                     <div className="flex items-center border border-gray-300 rounded-lg shadow-sm focus-within:ring-2 focus-within:ring-blue-500">

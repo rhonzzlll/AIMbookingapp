@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../models');
+const axios = require('axios');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -13,28 +14,17 @@ const authenticate = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'No token provided, authorization denied' });
     }
-
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    const user = await db.User.findOne({
-      where: { userId: decoded.id },
-    });
-
+    const user = await db.User.findOne({ where: { userId: decoded.id } });
     if (!user) {
       return res.status(401).json({ message: 'User not found, authorization denied' });
     }
-
     if (!user.isActive) {
       return res.status(403).json({ message: 'Your account is inactive. Please contact the administrator.' });
     }
-
-    // Normalize user data and role before attaching
-    req.user = {
-      ...user.toJSON(),
-      // Do NOT lowercase here
-    };
-
+    req.user = { ...user.toJSON() };
     next();
   } catch (error) {
     console.error('Authentication error:', error);
@@ -44,7 +34,7 @@ const authenticate = async (req, res, next) => {
 
 // Middleware: Authorize Admin
 const authorizeAdmin = (req, res, next) => {
-        if (
+  if (
     req.user &&
     req.user.role &&
     (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'superadmin')
@@ -53,8 +43,6 @@ const authorizeAdmin = (req, res, next) => {
   } else {
     return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
   }
-
-  
 };
 
 // Middleware: Authorize Super Admin
@@ -185,6 +173,94 @@ router.delete('/dangerous-action', authenticate, authorizeSuperAdmin, async (req
 // Admins or Super Admins
 router.post('/admin-action', authenticate, authorizeAdmin, async (req, res) => {
   // Implementation for admin action
+});
+
+// Microsoft SSO config
+const TENANT_ID = '22ca3d67-8165-476e-b918-4b2e31e047ba';
+const CLIENT_ID = 'c1f688aa-ec46-42be-937a-3a020e6a6524';
+
+// Helper to get Microsoft public keys (cached)
+let msKeysCache = null;
+async function getMicrosoftKeys() {
+  if (msKeysCache) return msKeysCache;
+  const res = await axios.get(`https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`);
+  msKeysCache = res.data.keys;
+  return msKeysCache;
+}
+
+// Validate Microsoft ID token
+async function validateMicrosoftToken(idToken) {
+  const decoded = jwt.decode(idToken, { complete: true });
+  if (!decoded) throw new Error('Invalid token');
+  const kid = decoded.header.kid;
+  const keys = await getMicrosoftKeys();
+  const key = keys.find(k => k.kid === kid);
+  if (!key) throw new Error('Key not found');
+  // Build public key
+  const pubKey = `-----BEGIN CERTIFICATE-----\n${key.x5c[0]}\n-----END CERTIFICATE-----`;
+  // Verify token
+  return jwt.verify(idToken, pubKey, {
+    algorithms: ['RS256'],
+    audience: CLIENT_ID,
+    issuer: `https://login.microsoftonline.com/${TENANT_ID}/v2.0`
+  });
+}
+
+// Microsoft SSO endpoint
+router.post('/microsoft', async (req, res) => {
+  const { idToken } = req.body;
+  if (!idToken) return res.status(400).json({ message: 'No idToken provided' });
+
+  try {
+    const msUser = await validateMicrosoftToken(idToken);
+
+    // Extract names robustly
+    const email = msUser.email || msUser.preferred_username || msUser.upn;
+    const firstName = msUser.given_name || msUser.name?.split(' ')[0] || '';
+    const lastName = msUser.family_name || msUser.name?.split(' ').slice(1).join(' ') || '';
+
+    if (!email) return res.status(400).json({ message: 'No email found in Microsoft token' });
+
+    let user = await db.User.findOne({ where: { email } });
+
+    if (!user) {
+      user = await db.User.create({
+        firstName,
+        lastName,
+        email,
+        password: null,
+        role: 'User',
+        isActive: true,
+      });
+    } else {
+      // Optionally update names if changed in Microsoft
+      user.firstName = firstName;
+      user.lastName = lastName;
+      await user.save();
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'Your account is inactive. Please contact the administrator.' });
+    }
+
+    const token = jwt.sign(
+      { id: user.userId, role: user.role.toLowerCase() },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.json({
+      userId: user.userId,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      token,
+    });
+  } catch (err) {
+    console.error('Microsoft SSO error:', err);
+    res.status(401).json({ message: 'Invalid Microsoft token', error: err.message });
+  }
 });
 
 module.exports = {

@@ -231,7 +231,7 @@ const ALL_COLUMNS = [
   { key: 'isBreakRoom', label: 'Break Room' },
   { key: 'status', label: 'Status' },
   { key: 'recurring', label: 'Recurring' },
-  { key: 'timeSubmitted', label: 'Time Submitted' },
+    { key: 'timeSubmitted', label: 'Time Submitted' },
   { key: 'notes', label: 'Notes' },         // <-- Added
   { key: 'remarks', label: 'Remarks' },     // <-- Added
 ];
@@ -385,7 +385,10 @@ const ALL_COLUMNS = [
             firstName: userData.firstName || booking.firstName || '',
             lastName: userData.lastName || booking.lastName || '',
             department: userData.department || booking.department || '',
+             changedBy: booking.changedBy || 'Unknown', // Ensure changedBy is included
+      declineReason: booking.declineReason || '', // Ensure declineReason is included
             email: userData.email || '',
+
               startTime: booking.startTime ? convertTo24HourFormat(booking.startTime) : '',
               endTime: booking.endTime ? convertTo24HourFormat(booking.endTime) : '',
             recurring: booking.isRecurring ? (booking.recurrencePattern || 'Yes') : 'No'
@@ -1751,25 +1754,41 @@ const handleToggleColumn = (key) => {
                     )
                     : col.key === 'status'
                     ? (
-                      <span style={{
-                        background: booking.status === 'confirmed'
-                          ? '#bbf7d0'
-                          : booking.status === 'pending'
-                          ? '#fef9c3'
-                          : '#fecaca',
-                        color: booking.status === 'confirmed'
-                          ? '#16a34a'
-                          : booking.status === 'pending'
-                          ? '#ca8a04'
-                          : '#dc2626',
-                        borderRadius: 8,
-                        padding: '2px 8px',
-                        fontSize: 12,
-                        display: 'inline-block'
-                      }}>
-                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                      </span>
-                    )
+  <span style={{
+    background: booking.status === 'confirmed'
+      ? '#bbf7d0'
+      : booking.status === 'pending'
+      ? '#fef9c3'
+      : booking.status === 'declined'
+      ? '#fecaca'
+      : '#f3f4f6',
+    color: booking.status === 'confirmed'
+      ? '#16a34a'
+      : booking.status === 'pending'
+      ? '#ca8a04'
+      : booking.status === 'declined'
+      ? '#dc2626'
+      : '#374151',
+    borderRadius: 8,
+    padding: '2px 8px',
+    fontSize: 12,
+    display: 'inline-block'
+  }}>
+    {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+    {/* Show decline reason if declined */}
+    {booking.status === 'declined' && booking.declineReason && (
+      <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>
+        <b>Reason:</b> {booking.declineReason}
+      </div>
+    )}
+    {/* Show changedBy for confirmed, declined, or cancelled */}
+    {['confirmed', 'declined', 'cancelled'].includes(booking.status) && booking.changedBy && (
+      <div style={{ color: '#374151', fontSize: 11, marginTop: 4 }}>
+        <b>Changed By:</b> {booking.changedBy}
+      </div>
+    )}
+  </span>
+)
                     : col.key === 'timeSubmitted'
                     ? (booking.timeSubmitted
                         ? new Date(booking.timeSubmitted).toLocaleString()
@@ -1847,6 +1866,7 @@ const handleToggleColumn = (key) => {
   </Table>
 </TableContainer>
       </div>
+
 
       {/* Add Booking Modal */}
       <Modal isOpen={isAddModalOpen} title="Add New Booking" onClose={() => { setIsAddModalOpen(false); resetForm(); }}>
