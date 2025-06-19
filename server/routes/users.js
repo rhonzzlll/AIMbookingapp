@@ -126,10 +126,15 @@ router.put("/:id", authenticate, async (req, res) => {
     }
 
     // Only allow if the user is updating their own profile or is admin
-    if (Number(req.user.userId) !== id && req.user.role.toLowerCase() !== "admin") {
-      await transaction.rollback();
-      return res.status(403).json({ message: "Access denied. You can only update your own profile." });
-    }
+ // Only allow if the user is updating their own profile or is admin or superadmin
+if (
+  Number(req.user.userId) !== id &&
+  req.user.role.toLowerCase() !== "admin" &&
+  req.user.role.toLowerCase() !== "superadmin"
+) {
+  await transaction.rollback();
+  return res.status(403).json({ message: "Access denied. You can only update your own profile." });
+}
 
     const {
       firstName,

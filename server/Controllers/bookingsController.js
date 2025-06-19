@@ -35,7 +35,7 @@ function formatTimeToHHMM(timeVal) {
   }
   return '';
 }
-
+  
  
 function formatDate(dateVal) {
   if (!dateVal) return '';
@@ -114,10 +114,7 @@ ACC Reservations`;
 
 Thank you for your reservation request. Unfortunately, we are unable to accommodate your booking at this time due to unavailability or a scheduling conflict.
 
-We encourage you to check the booking calendar for alternative dates, and please feel free to contact us—we’d be glad to assist you in finding a suitable arrangement.
-
-Booking Details:
-Date: ${bookingDate}
+We encourage you to check the booking calendar for alternative date and/or time.
  Time: ${startTime} - ${endTime}
  Room: ${roomDisplay}
  Building: ${buildingDisplay}
