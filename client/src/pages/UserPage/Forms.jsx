@@ -216,6 +216,66 @@ const Calendar = ({ selectedDate, onDateSelect, bookings }) => {
   );
 };
 
+const AvailableRooms = ({ rooms, bookings, selectedDate, fromTime, toTime }) => {
+  // Utility to check if a room is free for the given range
+  const isRoomAvailable = (roomId) => {
+    const startDateTime = `${selectedDate}T${fromTime}:00.000Z`;
+    const endDateTime = `${selectedDate}T${toTime}:00.000Z`;
+    return !bookings.some(booking => {
+      if (booking.roomId !== roomId) return false;
+      if (!['confirmed', 'pending'].includes((booking.status || '').toLowerCase())) return false;
+      if (booking.date !== selectedDate) return false;
+
+      const bookingStart = parseISO(booking.startTime);
+      const bookingEnd = parseISO(booking.endTime);
+      const desiredStart = parseISO(startDateTime);
+      const desiredEnd = parseISO(endDateTime);
+
+      // Overlap check
+      return isBefore(bookingStart, desiredEnd) && isAfter(bookingEnd, desiredStart);
+    });
+  };
+
+  // Memoize for speed
+  const availableRooms = useMemo(
+    () =>
+      rooms && fromTime && toTime && selectedDate
+        ? rooms.filter(room => isRoomAvailable(room.roomId))
+        : [],
+    [rooms, bookings, selectedDate, fromTime, toTime]
+  );
+
+  // UI
+  if (!selectedDate || !fromTime || !toTime) {
+    return (
+      <div className="mt-2 text-gray-500">Select date, start, and end time to view available rooms.</div>
+    );
+  }
+
+  return (
+    <div className="relative bg-white rounded-lg shadow-md p-4 mt-4">
+      <h2 className="text-xl font-bold mb-4">
+        Available Rooms from <span className="text-blue-600">{fromTime}</span> to <span className="text-blue-600">{toTime}</span>
+      </h2>
+      {availableRooms.length > 0 ? (
+        <ul className="space-y-2">
+          {availableRooms.map(room => (
+            <li key={room.roomId} className="p-3 bg-green-50 rounded border border-green-200 flex justify-between items-center">
+              <span className="font-medium">{room.roomName}</span>
+              {room.capacity && (
+                <span className="ml-4 text-xs text-gray-500">Capacity: {room.capacity}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="text-gray-500 py-6 text-center">No available rooms for this time range.</div>
+      )}
+    </div>
+  );
+};
+
+
 const AvailableTime = ({
   selectedDate,
   bookings,
@@ -526,6 +586,9 @@ const BookingApp = () => {
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [selectedRoomName, setSelectedRoomName] = useState('');
   const location = useLocation();
+  const [rooms, setRooms] = useState([]);
+  const [fromTime, setFromTime] = useState('');
+  const [toTime, setToTime] = useState('');
 
   useEffect(() => {
     if (
@@ -538,6 +601,23 @@ const BookingApp = () => {
       setSelectedRoomName(room.roomName);
     }
   }, [location.state]);
+
+  useEffect(() => {
+  const fetchRooms = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/rooms`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch rooms');
+      const data = await res.json();
+      setRooms(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  fetchRooms();
+}, []);
 
   const fetchBookings = async () => {
     try {
@@ -664,7 +744,9 @@ const BookingApp = () => {
   };
 
   const confirmedBookings = useMemo(() => {
-    return bookings.filter(b => b.status?.toLowerCase() === 'confirmed');
+return bookings.filter(
+  b => ['confirmed', 'pending'].includes(b.status?.toLowerCase())
+);
   }, [bookings]);
   
   const bookingsForSelectedDate = useMemo(() => {
@@ -677,7 +759,7 @@ const BookingApp = () => {
     return expanded.filter(
       (booking) =>
         booking.date === formattedSelectedDate &&
-        booking.status?.toLowerCase() === 'confirmed'
+    ['confirmed', 'pending'].includes(booking.status?.toLowerCase())
     );
   }, [bookings, selectedDate]);
 
@@ -693,7 +775,7 @@ const BookingApp = () => {
         (booking) =>
           booking.roomId === selectedRoomId &&
           booking.date === formattedSelectedDate &&
-          booking.status?.toLowerCase() === 'confirmed'
+    ['confirmed', 'pending'].includes(booking.status?.toLowerCase())
       ),
       { start: "08:00", end: "22:00" }
     );
@@ -705,7 +787,7 @@ const BookingApp = () => {
       (booking) =>
         booking.roomId === selectedRoomId &&
         booking.date === formattedSelectedDate &&
-        booking.status?.toLowerCase() === 'confirmed'
+    ['confirmed', 'pending'].includes(booking.status?.toLowerCase())
     );
   }, [bookings, selectedRoomId, selectedDate, formattedSelectedDate]);
 
@@ -758,17 +840,49 @@ const BookingApp = () => {
                     booking.roomId === selectedRoomId &&
                     format(parseISO(booking.date), 'yyyy-MM-dd') ===
                       format(typeof selectedDate === 'string' ? parseISO(selectedDate) : selectedDate, 'yyyy-MM-dd') &&
-                    booking.status?.toLowerCase() === 'confirmed'
+                        ['confirmed', 'pending'].includes(booking.status?.toLowerCase())
                 )
               }
               roomName={selectedRoomName}
               businessHours={{ start: "08:00", end: "22:00" }}
             />
-          <DaySchedule
-            selectedDate={selectedDate}
-            bookings={bookingsForSelectedRoomAndDate}
-            roomName={selectedRoomName}
-          />
+
+            <div className="flex gap-4 mb-4">
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+    <input
+      type="time"
+      value={fromTime}
+      onChange={e => setFromTime(e.target.value)}
+      className="px-3 py-2 border border-gray-300 rounded-md"
+      min="08:00"
+      max="21:30"
+    />
+  </div>
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+    <input
+      type="time"
+      value={toTime}
+      onChange={e => setToTime(e.target.value)}
+      className="px-3 py-2 border border-gray-300 rounded-md"
+      min="08:30"
+      max="22:00"
+    />
+  </div>
+</div>
+            <AvailableRooms
+              rooms={rooms}
+              bookings={bookings}
+              selectedDate={selectedDate}
+              fromTime={fromTime}
+              toTime={toTime}
+            />
+            <DaySchedule
+              selectedDate={selectedDate}
+              bookings={bookingsForSelectedRoomAndDate}
+              roomName={selectedRoomName}
+            />
           </div>
         </div>
       </div>

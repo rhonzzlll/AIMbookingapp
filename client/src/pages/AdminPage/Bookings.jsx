@@ -972,6 +972,10 @@ const handleNameChange = (e) => {
     ).slice(0, 5); // Limit to 5 results
   }, [users, userSearchQuery]);
 
+
+
+  
+
 const getAvailableStartTimes = () => {
   if (!formData.roomId || !formData.date) return [];
   const editingBookingId = isEditModalOpen ? editBookingId : null;
@@ -1015,7 +1019,7 @@ const getAvailableEndTimes = () => {
   const confirmed = bookings.filter(
     b => b.roomId === formData.roomId &&
       b.date === formData.date &&
-      b.status?.toLowerCase() === 'confirmed' &&
+      (['confirmed', 'pending'].includes(b.status?.toLowerCase())) &&
       (!editingBookingId || b.bookingId !== editingBookingId)
   );
   const intervals = getAvailableIntervals(confirmed);

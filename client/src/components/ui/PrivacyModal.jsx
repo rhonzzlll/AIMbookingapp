@@ -36,7 +36,7 @@ const PrivacyModal = ({ isOpen, onOpenChange, onConfirm }) => {
         </DialogHeader>
 
         <div className="mt-2">
-          <div className="space-y-4 text-sm">
+          <div className="space-y-4 text-base">
             <p>
               We value your privacy and we uphold your rights under the Data Privacy Act of 2012.
             </p>

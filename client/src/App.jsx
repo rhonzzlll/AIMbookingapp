@@ -15,6 +15,7 @@ import Users from './pages/AdminPage/Users';
 import Buildings from './pages/AdminPage/building';
 import Categories from './pages/AdminPage/category';
 import AdminSidebar from './components/AdminComponents/admin-sidebar';
+import AuditTrail from './pages/AdminPage/AuditTrail';
 
 // User Pages
 import Home from './pages/UserPage/Home';
@@ -63,6 +64,9 @@ const AppContent = () => {
                         } />
                         <Route path="/admin/users" element={
                             <ProtectedAdminRoute><Users /></ProtectedAdminRoute>
+                        } />
+                        <Route path="/admin/audit-trail" element={
+                            <ProtectedAdminRoute><AuditTrail /></ProtectedAdminRoute>
                         } />
 
                         {/* User Routes */}

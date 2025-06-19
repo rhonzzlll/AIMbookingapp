@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import FacilityModal from '../../components/FacilityModal';
 import AIMLogo from "../../images/AIM_Logo.png";
 import { AuthContext } from '../../context/AuthContext';
 
@@ -11,7 +10,6 @@ const Header = () => {
   const [user, setUser] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const [showFacilityModal, setShowFacilityModal] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [buildings, setBuildings] = useState([]);
 
@@ -24,7 +22,7 @@ const Header = () => {
     // Fetch buildings when Header mounts
     const fetchBuildings = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/buildings`); // <-- FIXED
+        const response = await fetch(`${API_BASE_URL}/buildings`);
         if (!response.ok) throw new Error('Failed to fetch buildings');
         const data = await response.json();
         setBuildings(data);
@@ -42,18 +40,25 @@ const Header = () => {
   };
 
   const handleLogout = () => {
-    // Clear the auth context - this will trigger the useEffect in AuthContext 
-    // to remove the localStorage items automatically
     setAuth({ userId: null, token: null, role: null });
-    
-    // Clear the local user state
     setUser(null);
-    
-    // Close any open menus
     setUserMenuOpen(false);
-    
-    // Navigate to login
     navigate('/login');
+  };
+
+  // Go to the first building's details page
+  const handleBookNow = () => {
+    if (buildings.length > 0) {
+      const building = buildings[0];
+      const buildingId = building._id || building.id || building.buildingId;
+      if (buildingId) {
+        navigate(`/building/${buildingId}`, { state: { searchAllBuildings: true } });
+      } else {
+        alert('No valid building ID found.');
+      }
+    } else {
+      alert('No buildings available.');
+    }
   };
 
   // Close user menu when clicking outside
@@ -61,7 +66,6 @@ const Header = () => {
     setUserMenuOpen(false);
   };
 
-  // Close user menu when pressing Escape key
   useEffect(() => {
     const handleEscapeKey = (event) => {
       if (event.key === 'Escape') {
@@ -103,8 +107,9 @@ const Header = () => {
           {/* User Profile Section */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowFacilityModal(true)}
+              onClick={handleBookNow}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={buildings.length === 0}
             >
               Book Now
             </button>
@@ -136,7 +141,6 @@ const Header = () => {
               {/* User Dropdown Menu */}
               {userMenuOpen && (
                 <>
-                  {/* Invisible overlay to handle clicks outside */}
                   <div 
                     className="fixed inset-0 z-10" 
                     onClick={handleClickOutside}
@@ -161,14 +165,6 @@ const Header = () => {
         </div>
         <div className="border-t border-gray-200"></div>
       </header>
-
-      {/* Facility Modal */}
-      {showFacilityModal && (
-        <FacilityModal 
-          buildings={buildings} 
-          onClose={() => setShowFacilityModal(false)} 
-        />
-      )}
     </>
   );
 };

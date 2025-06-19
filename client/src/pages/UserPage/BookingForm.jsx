@@ -405,11 +405,12 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     setUnavailableTimeSlots([]);
   
     // Filter bookings for the selected building and room
-    const relevantBookings = bookings.filter(booking =>
-      booking.buildingId === formData.buildingId &&
-      new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
-      booking.status?.toLowerCase() === 'confirmed'
-    );
+  const relevantBookings = bookings.filter(
+  booking =>
+    booking.roomId === formData.roomId &&
+    new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
+    ['confirmed', 'pending'].includes(booking.status?.toLowerCase())
+);
   
     const unavailable = [];
   
@@ -427,6 +428,7 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
       };
   
       TIME_OPTIONS.forEach(timeOption => {
+        
         const timeOption24 = convertTo24HourFormat(timeOption);
         const timeOptionDate = new Date(`${formData.date}T${timeOption24}:00`);
   
@@ -926,42 +928,43 @@ const getFilteredEndTimes = () => {
             {/* Cost Center Charging */}
             <div className="mb-6">
               <label className="block text-gray-700 font-medium mb-2">
-                Cost Center Charging <span className="text-xs text-gray-500">(Charged To)</span>
+                Cost Center Charging <span className="text-xs text-gray-500">(Charge to)</span>
               </label>
               <input
                 type="text"
                 name="costCenterCharging"
                 value={formData.costCenterCharging || ''}
                 onChange={handleChange}
-                placeholder="Enter cost center or department to be charged"
+                placeholder="for meeting, Leave it blank"
                 className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <p className="text-s text-gray-500 mt-1">Enter Cost Center/Department/Program to be charged</p>
             </div>
 
             {/* Date*/}
-<div>
-  <label className="block text-gray-700 font-medium mb-2">
-    Date of Booking <span className="text-red-500">*</span>
-  </label>
-  <input
-    type="date"
-    name="date"
-    value={formData.date}
-    min={format(new Date(), 'yyyy-MM-dd')}
-    max={format(new Date(new Date().setMonth(new Date().getMonth() + 3)), 'yyyy-MM-dd')}
-    onChange={handleChange}
-    style={{
-      textAlign: 'center',
-      width: '100%',
-      padding: '1rem',
-      border: '1px solid #ccc',
-      borderRadius: '0.5rem',
-      outline: 'none'
-    }}
-    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-    required
-  />
-</div>
+            <div>
+              <label className="block text-gray-700 font-medium mb-2">
+                Date of Booking <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                name="date"
+                value={formData.date}
+                min={format(new Date(), 'yyyy-MM-dd')}
+                max={format(new Date(new Date().setMonth(new Date().getMonth() + 3)), 'yyyy-MM-dd')}
+                onChange={handleChange}
+                style={{
+                  textAlign: 'center',
+                  width: '100%',
+                  padding: '1rem',
+                  border: '1px solid #ccc',
+                  borderRadius: '0.5rem',
+                  outline: 'none'
+                }}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
 
             {/* Time */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-6">

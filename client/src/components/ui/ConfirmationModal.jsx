@@ -30,12 +30,9 @@ const ConfirmationModal = ({ isOpen, onOpenChange }) => {
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-200/50 to-transparent h-px"></div>
             <p className="text-base text-gray-700 font-medium relative bg-white px-4">
-              Your booking has been submitted.
+              You will be notified once it is approved.
             </p>
           </div>
-          <p className="text-sm text-gray-600 leading-relaxed">
-            You will be notified once it is approved.
-          </p>
         </div>
 
         <div className="mt-8 flex justify-center space-x-4">

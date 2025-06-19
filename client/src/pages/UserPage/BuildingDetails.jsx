@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Header from './Header';
 import bg from '../../images/bg.png';
@@ -17,6 +17,8 @@ const TIME_OPTIONS = [
 const BuildingDetails = () => {
   const { buildingId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const bookNowMode = location.state?.searchAllBuildings === true;
 
   const [building, setBuilding] = useState(null);
   const [rooms, setRooms] = useState([]);
@@ -27,12 +29,13 @@ const BuildingDetails = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchParams, setSearchParams] = useState({
-    fromDate: format(new Date(), 'yyyy-MM-dd'),
-    fromTime: '',
-    toDate: format(new Date(), 'yyyy-MM-dd'),
-    toTime: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    startTime: '',
+    endTime: '',
     isRecurring: false,
   });
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchAllBuildings, setSearchAllBuildings] = useState(bookNowMode);
 
   function format(date, formatStr) {
     const year = date.getFullYear();
@@ -44,7 +47,21 @@ const BuildingDetails = () => {
   useEffect(() => {
     fetchBuildingDetails();
     // eslint-disable-next-line
-  }, [buildingId]);
+  }, [buildingId, searchAllBuildings]);
+
+  // Apply filters whenever rooms, currentCategory, or searchTerm changes
+  useEffect(() => {
+    applyFilters();
+  }, [rooms, currentCategory, searchTerm]);
+
+  // This effect handles the initial setting of searchAllBuildings from location state
+  useEffect(() => {
+    if (location.state?.searchAllBuildings) {
+      setSearchAllBuildings(true);
+      // Optionally clear the state (if using React Router v6+)
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Helper function to flatten rooms and subrooms into a single array
   const flattenRoomsWithSubrooms = (roomsData, bookingsData) => {
@@ -102,6 +119,14 @@ const BuildingDetails = () => {
       }
     });
 
+    console.log("🛏️ Flattened Rooms:", flattenedRooms);
+    flattenedRooms.forEach(room => {
+      console.log(`📦 Room: ${room.displayName || room.roomName}`);
+      room.bookings.forEach(bk => {
+        console.log("  🧾 Booking:", bk);
+      });
+    });
+
     return flattenedRooms;
   };
 
@@ -111,12 +136,16 @@ const BuildingDetails = () => {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
-      // Fetch building details
+      // Fetch building details (always fetch for sidebar info)
       const buildingResponse = await axios.get(`${API_BASE_URL}/buildings/${buildingId}`, { headers });
       setBuilding(buildingResponse.data);
 
-      // Fetch rooms in this building
-      const roomsResponse = await axios.get(`${API_BASE_URL}/rooms?buildingId=${buildingId}`, { headers });
+      // Fetch rooms: use buildingId only if not searching all buildings
+      let roomsUrl = `${API_BASE_URL}/rooms`;
+      if (!searchAllBuildings) {
+        roomsUrl += `?buildingId=${buildingId}`;
+      }
+      const roomsResponse = await axios.get(roomsUrl, { headers });
       const roomsData = roomsResponse.data;
 
       // Fetch bookings for these rooms
@@ -136,7 +165,6 @@ const BuildingDetails = () => {
       ];
 
       setRooms(flattenedRooms);
-      setFilteredRooms(flattenedRooms);
       setRoomCategories(uniqueCategories);
       setLoading(false);
     } catch (err) {
@@ -146,42 +174,39 @@ const BuildingDetails = () => {
     }
   };
 
-  // Filter rooms by category and search term
-  const filterRooms = (categoryName, search) => {
-    setFilteredRooms(() => {
-      let filtered = rooms;
+  // Separate function to apply filters (called by useEffect)
+  const applyFilters = () => {
+    let filtered = [...rooms];
 
-      if (categoryName) {
-        filtered = filtered.filter(room =>
-          room.category &&
-          room.category.toString().toLowerCase() === categoryName.toString().toLowerCase()
-        );
-      }
+    // Apply category filter
+    if (currentCategory) {
+      filtered = filtered.filter(room =>
+        room.category &&
+        room.category.toString().toLowerCase() === currentCategory.toString().toLowerCase()
+      );
+    }
 
-      if (search) {
-        filtered = filtered.filter(room =>
-          room.displayName.toLowerCase().includes(search.toLowerCase()) ||
-          room.roomName.toLowerCase().includes(search.toLowerCase()) ||
-          (room.description && room.description.toLowerCase().includes(search.toLowerCase())) ||
-          (room.roomDescription && room.roomDescription.toLowerCase().includes(search.toLowerCase()))
-        );
-      }
+    // Apply search term filter
+    if (searchTerm) {
+      filtered = filtered.filter(room =>
+        (room.displayName && room.displayName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (room.roomName && room.roomName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (room.roomDescription && room.roomDescription.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    }
 
-      return filtered;
-    });
+    setFilteredRooms(filtered);
   };
-
-  useEffect(() => {
-    filterRooms(currentCategory, searchTerm);
-    // eslint-disable-next-line
-  }, [rooms, currentCategory, searchTerm]);
 
   const handleCategoryChange = (category) => {
     setCurrentCategory(category);
+    // The useEffect will handle the filtering
   };
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
+    // The useEffect will handle the filtering
   };
 
   const handleDateTimeChange = (e) => {
@@ -192,43 +217,78 @@ const BuildingDetails = () => {
     }));
   };
 
-  const handleSearch = () => {
-    const { fromDate, fromTime, toDate, toTime } = searchParams;
+  function buildISODate(dateString, timeString) {
+    // Ensure date is provided
+    if (!dateString || !timeString) return null;
+    // Convert time to 24-hour and add seconds if missing
+    let time24 = timeString;
+    if (typeof time24 !== "string") return null;
+    if (time24.match(/am|pm/i)) {
+      time24 = convertTo24HourFormat(time24);
+    }
+    if (/^\d{2}:\d{2}$/.test(time24)) {
+      time24 = time24 + ':00';
+    }
+    // If after all that, still not valid, bail out
+    if (!/^\d{2}:\d{2}:\d{2}$/.test(time24)) return null;
+    return `${dateString}T${time24}`;
+  }
 
-    // Use the current category filter if set, otherwise all rooms
-    const base = currentCategory
-      ? rooms.filter((room) => room.category === currentCategory)
-      : rooms;
+  const handleSearch = async () => {
+    setSearchLoading(true);
+    const { date, startTime, endTime } = searchParams;
 
-    if (!fromTime || !toTime) {
-      const filtered = searchTerm
-        ? base.filter((room) =>
-            (room.displayName || room.roomName).toLowerCase().includes(searchTerm.toLowerCase())
-          )
-        : base;
-
-      setFilteredRooms(filtered);
+    if (!startTime || !endTime) {
+      setSearchLoading(false);
       return;
     }
 
-    const fromDateTime = new Date(`${fromDate}T${convertTo24HourFormat(fromTime)}`);
-    const toDateTime = new Date(`${toDate}T${convertTo24HourFormat(toTime)}`);
-
-    const filtered = base.filter((room) => {
-      if (!room.bookings || room.bookings.length === 0) return true;
-
-      return room.bookings.every((booking) => {
-        const bookingStart = new Date(`${booking.fromDate}T${convertTo24HourFormat(booking.fromTime)}`);
-        const bookingEnd = new Date(`${booking.toDate}T${convertTo24HourFormat(booking.toTime)}`);
-
-        // Conflict if (requested start < booking end) && (requested end > booking start)
-        const isConflict = fromDateTime < bookingEnd && toDateTime > bookingStart;
-        return !isConflict;
-      });
+    // Use the currently filtered rooms (by category/search)
+    // Always start from all rooms, then apply category and search term filters
+let base = [...rooms];
+if (currentCategory) {
+  base = base.filter(room =>
+    room.category &&
+    room.category.toString().toLowerCase() === currentCategory.toString().toLowerCase()
+  );
+}
+if (searchTerm) {
+  base = base.filter(room =>
+    (room.displayName && room.displayName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (room.roomName && room.roomName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (room.roomDescription && room.roomDescription.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+}
+    // Prepare all availability checks in parallel
+    const availabilityPromises = base.map(async (room) => {
+      try {
+        const res = await axios.post(
+          `${API_BASE_URL}/bookings/check-availability`, // <-- use dash, not camelCase
+          {
+            date,
+            startTime: convertTo24HourFormat(startTime) + ':00',
+            endTime: convertTo24HourFormat(endTime) + ':00',
+            roomId: room.uniqueId,
+            buildingId: room.buildingId || buildingId,
+            categoryId: room.categoryDetails?._id || room.categoryId || undefined,
+          }
+        );
+        return res.data.available ? room : null;
+      } catch (err) {
+        // If error, treat as unavailable
+        return null;
+      }
     });
 
-    setFilteredRooms(filtered);
+    // Wait for all checks to finish
+    const availableRooms = (await Promise.all(availabilityPromises)).filter(Boolean);
+
+    setFilteredRooms(availableRooms);
+    setSearchLoading(false);
   };
+
+  // --- Helper functions and the rest ---
 
   const convertTo24HourFormat = (timeStr) => {
     if (!timeStr) return '';
@@ -250,7 +310,7 @@ const BuildingDetails = () => {
     if (!time) return false;
 
     const todayDate = new Date();
-    const selectedDate = new Date(searchParams.fromDate);
+    const selectedDate = new Date(searchParams.date);
 
     const todayFormatted = format(todayDate, 'yyyy-MM-dd');
     const selectedFormatted = format(selectedDate, 'yyyy-MM-dd');
@@ -277,27 +337,27 @@ const BuildingDetails = () => {
   const isTimeSlotTaken = (timeStr) => {
     if (!rooms || rooms.length === 0 || !timeStr) return false;
 
-    const fromDate = searchParams.fromDate;
+    const date = searchParams.date;
     const time24 = convertTo24HourFormat(timeStr);
-    const selectedTime = new Date(`${fromDate}T${time24}`);
+    const selectedTime = new Date(`${date}T${time24}:00`);
 
     return rooms.some(room => 
       room.bookings &&
       room.bookings.some(booking => {
-        const bookingStart = new Date(`${booking.fromDate}T${booking.fromTime}`);
-        const bookingEnd = new Date(`${booking.toDate}T${booking.toTime}`);
+        const bookingStart = new Date(`${booking.date}T${booking.startTime}`);
+        const bookingEnd = new Date(`${booking.date}T${booking.endTime}`);
         return selectedTime >= bookingStart && selectedTime < bookingEnd;
       })
     );
   };
 
   const handleReserve = (room) => {
+    // Use defaults only if empty
     const validatedSearchParams = {
       ...searchParams,
-      fromDate: searchParams.fromDate || format(new Date(), 'yyyy-MM-dd'),
-      fromTime: searchParams.fromTime || '09:00 AM',
-      toDate: searchParams.toDate || format(new Date(), 'yyyy-MM-dd'),
-      toTime: searchParams.toTime || '10:00 AM',
+      date: searchParams.date || format(new Date(), 'yyyy-MM-dd'),
+      startTime: searchParams.startTime || '09:00 AM',
+      endTime: searchParams.endTime || '10:00 AM',
     };
 
     let roomForReservation = { ...room };
@@ -333,20 +393,27 @@ const BuildingDetails = () => {
     });
   };
 
-  const futureStartTimes = useMemo(() => {
-    return TIME_OPTIONS.filter(time => 
-      isFutureTime(time) && 
-      !isTimeSlotTaken(time)
-    );
-  }, [searchParams.fromDate, rooms]);
-  
-  const futureEndTimes = useMemo(() => {
-    return TIME_OPTIONS.filter(time => 
-      isFutureTime(time) &&
-      (!searchParams.fromTime || isFutureTime(time, searchParams.fromTime)) &&
-      !isTimeSlotTaken(time)
-    );
-  }, [searchParams.fromDate, searchParams.fromTime, rooms]);
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+  // Only filter by present/future time if date is today, else show all times
+  const availableStartTimes = useMemo(() => {
+    if (searchParams.date === todayStr) {
+      const now = new Date();
+      return TIME_OPTIONS.filter(time => {
+        const [hour, minute] = convertTo24HourFormat(time).split(':').map(Number);
+        const nowHour = now.getHours();
+        const nowMinute = now.getMinutes();
+        return hour > nowHour || (hour === nowHour && minute > nowMinute);
+      });
+    }
+    return TIME_OPTIONS;
+  }, [searchParams.date]);
+
+  const availableEndTimes = useMemo(() => {
+    // End time must be after start time
+    const startIdx = searchParams.startTime ? TIME_OPTIONS.indexOf(searchParams.startTime) + 1 : 0;
+    return TIME_OPTIONS.slice(startIdx);
+  }, [searchParams.startTime]);
 
   if (loading) return (
     <div className="flex items-center justify-center">
@@ -405,8 +472,8 @@ const BuildingDetails = () => {
         {building && (
           <div>
             {/* Sidebar */}
-            <div className="fixed top-24 left-20 bottom-5 w-80 overflow-y-auto p-6 z-20">
-              <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-200 space-y-6">
+              <div className="fixed left-20 bottom-5 w-[420px] overflow-y-auto p-6 z-20">
+                <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-200 space-y-6">
                 <h2 className="text-xl font-semibold text-gray-800">Find a Room</h2>
                 {/* Search input */}
                 <div className="relative w-full">
@@ -466,64 +533,81 @@ const BuildingDetails = () => {
                   </ul>
                 </div>
 
-                {/* Date/Time Search */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
-                  <div className="grid grid-cols-1 gap-2">
+                <div className="bg-white p-6 rounded-xl shadow-md w-full max-w-md mx-auto">
+                  <h2 className="text-lg font-semibold text-gray-800 mb-4">Search Available</h2>
+                  
+                  {/* Date */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                     <input
                       type="date"
-                      name="fromDate"
-                      value={searchParams.fromDate}
+                      name="date"
+                      value={searchParams.date}
                       onChange={handleDateTimeChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
+                  </div>
+                  
+                  {/* From Time */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
                     <select
-                      name="fromTime"
-                      value={searchParams.fromTime}
+                      name="startTime"
+                      value={searchParams.startTime}
                       onChange={handleDateTimeChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
                     >
                       <option value="">Select Start Time</option>
-                      {futureStartTimes.map((time) => (
+                      {availableStartTimes.map((time) => (
                         <option key={time} value={time}>
                           {time}
                         </option>
                       ))}
                     </select>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                  <div className="grid grid-cols-1 gap-2">
-                    <input
-                      type="date"
-                      name="toDate"
-                      value={searchParams.toDate}
-                      onChange={handleDateTimeChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
+                  
+                  {/* To Time */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
                     <select
-                      name="toTime"
-                      value={searchParams.toTime}
+                      name="endTime"
+                      value={searchParams.endTime}
                       onChange={handleDateTimeChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
                     >
                       <option value="">Select End Time</option>
-                      {futureEndTimes.map((time) => (
+                      {availableEndTimes.map((time) => (
                         <option key={time} value={time}>
                           {time}
                         </option>
                       ))}
                     </select>
                   </div>
-                </div>
 
-                <button
-                  onClick={handleSearch}
-                  className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-all duration-300 font-medium"
-                >
-                  Search
-                </button>
+                  {/* Search All Buildings Toggle - moved above the button */}
+                  {!bookNowMode && (
+                    <div className="flex items-center mb-6">
+                      <input
+                        type="checkbox"
+                        id="searchAllBuildings"
+                        checked={searchAllBuildings}
+                        onChange={(e) => setSearchAllBuildings(e.target.checked)}
+                        className="w-6 h-6 mr-2"
+                      />
+                      <label htmlFor="searchAllBuildings" className="text-lg font-bold text-blue-700">
+                        Search all buildings
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Search Button */}
+                  <button
+                    onClick={handleSearch}
+                    className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-all duration-300 font-medium"
+                  >
+                    Search Available Rooms
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -533,21 +617,26 @@ const BuildingDetails = () => {
                   {currentCategory ? currentCategory + ' Rooms' : 'Available Rooms'}
                 </h2>
                 
-                {filteredRooms.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center min-h-[200px] text-black-600 bg-white rounded-lg shadow p-6">
-                    <h3 className="text-xl font-semibold">No rooms available</h3>
-                    <p className="mt-2 text-sm">Try adjusting your search or filters.</p>
+                {
+                  searchLoading ? (
+                    <div className="flex flex-col items-center justify-center min-h-[200px] text-blue-600 bg-white rounded-lg shadow p-6">
+                      <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-2"></div>
+                      <span className="font-semibold">Searching for available rooms...</span>
+                    </div>
+                ) : filteredRooms.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center min-h-[200px] text-gray-600 bg-white rounded-lg shadow p-6">
+                    <span className="font-semibold">No rooms found for your search.</span>
                   </div>
                 ) : (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {filteredRooms.map(room => (
-                      <div key={room.uniqueId} className="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col p-6 min-h-[400px]">
+                <div className="grid lg:grid-cols-3 gap-8" style={{ minWidth: '1320px' }}>
+                  {filteredRooms.map(room => (
+                      <div key={room.uniqueId} className="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col p-6 min-h-[400px] w-[420px]">
                         {(room.image || room.roomImage) && (
                         <div className="h-48 overflow-hidden">
                             <img
                             src={getRoomImageSrc(room)}
                             alt={room.displayName || room.roomName}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover "
                             onError={(e) => {
                                 e.target.src = '/placeholder-room.png';
                             }}

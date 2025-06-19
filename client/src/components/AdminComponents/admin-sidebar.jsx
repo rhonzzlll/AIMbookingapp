@@ -94,22 +94,23 @@ const AdminSidebar = () => {
       text: 'Rooms',
       path: '/admin/rooms',
       children: [
-            {
-              id: 'building',
-              icon: '🏢',
-              text: 'Building',
-              path: '/admin/building',
-            },
-            {
-              id: 'category',
-              icon: '📂',
-              text: 'Category',
-              path: '/admin/category',
-            },
+        {
+          id: 'building',
+          icon: '🏢',
+          text: 'Building',
+          path: '/admin/building',
+        },
+        {
+          id: 'category',
+          icon: '📂',
+          text: 'Category',
+          path: '/admin/category',
+        },
       ],
     },
     { id: 'bookings', icon: '📝', text: 'Bookings', path: '/admin/bookings' },
     { id: 'users', icon: '👥', text: 'Users', path: '/admin/users' },
+    { id: 'audit', icon: '🕵️', text: 'Audit Trail', path: '/admin/audit-trail' },
   ];
 
   return (
