@@ -15,13 +15,14 @@ const departmentColors = {
   'Other Units': 'bg-orange-100 border-orange-400 text-orange-900',
   'External': 'bg-pink-100 border-pink-400 text-pink-900',
   // Departments
-  'SRF': 'bg-cyan-100 border-cyan-400 text-cyan-900',
-  'IMCG': 'bg-teal-100 border-teal-400 text-teal-900',
-  'Marketing': 'bg-lime-100 border-lime-400 text-lime-900',
-  'ICT': 'bg-indigo-100 border-indigo-400 text-indigo-900',
-  'HR': 'bg-red-100 border-red-400 text-red-900',
-  'Finance': 'bg-amber-100 border-amber-400 text-amber-900',
-  'Registrars': 'bg-fuchsia-100 border-fuchsia-400 text-fuchsia-900',
+ 'SRF': 'bg-rose-100 border-rose-400 text-rose-900',
+  'IMCG': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Marketing': 'bg-rose-100 border-rose-400 text-rose-900',
+  'ICT': 'bg-rose-100 border-rose-400 text-rose-900',
+  'HR': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Finance': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Registrars': 'bg-rose-100 border-rose-400 text-rose-900',
+ 
 };
 
 // Helperqwqwqqweweqewget department color dot

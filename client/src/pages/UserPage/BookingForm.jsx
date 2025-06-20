@@ -4,7 +4,7 @@ import axios from 'axios';
 import bg from '../../images/bg.png';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Confirm from "../../components/ui/ConfirmationModal";  
-import { v4 as uuidv4 } from 'uuid'; // <-- Add this at the top
+import { v4 as uuidv4 } from 'uuid';  
 
 const API_BASE_URL = import.meta.env.VITE_API_URI;
 
@@ -14,6 +14,9 @@ const TIME_OPTIONS = [
   '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
   '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
+
+// Add this default interval for 8:00 AM (480) to 10:00 PM (1320)
+const DEFAULT_INTERVALS = [{ start: 480, end: 1320 }];
 
 const convertTo24HourFormat = (time12h) => {
   if (!time12h) return '';
@@ -58,8 +61,10 @@ const toTimeISOString = (time12h) => {
   return new Date(Date.UTC(2025, 0, 1, hours, parseInt(minutes, 10))).toISOString();
 };
  
-const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, selectedRoomId, availableIntervals = []}) => {
-  // ...
+const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, selectedRoomId, availableIntervals}) => {
+  // Use default if not provided or empty
+  const intervals = (availableIntervals && availableIntervals.length > 0) ? availableIntervals : DEFAULT_INTERVALS;
+
   const location = useLocation();
   const bookingData = location.state?.bookingData;
   const navigate = useNavigate(); // Initialize the navigate function
@@ -649,7 +654,7 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
 
   // Only show interval starts as start times
   const getAvailableStartTimes = () => {
-    if (!availableIntervals || availableIntervals.length === 0) return [];
+    if (!intervals || intervals.length === 0) return [];
 
     // Calculate if the booking is for today
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -657,7 +662,7 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     const currentMinutes = getCurrentMinutes();
 
     const times = [];
-    availableIntervals.forEach(({ start, end }) => {
+    intervals.forEach(({ start, end }) => {
       for (let t = start; t + 30 <= end; t += 30) {
         // If it's today, only show times in the future
         if (!isToday || t > currentMinutes) {
@@ -693,7 +698,7 @@ const getFilteredEndTimes = () => {
   };
   const startMinutes = toMinutes(formData.startTime);
 
-  const interval = availableIntervals.find(
+  const interval = intervals.find(
     ({ start, end }) => start <= startMinutes && startMinutes < end
   );
   if (!interval) return [];
@@ -761,14 +766,14 @@ const getFilteredEndTimes = () => {
         isBreakRoom: formData.isBreakRoom,
         bookingCapacity: formData.bookingCapacity,
         status: formData.status,
-        costCenterCharging: formData.costCenterCharging,
+        costCenterCharging: formData.costCenterCharging && formData.costCenterCharging.trim() !== '' ? formData.costCenterCharging : 'n/a',
         // Breakout Room fields
         numberOfPaxBreakRoom: formData.isBreakRoom ? formData.numberOfPaxBreakRoom || null : null,
         startTimeBreakRoom: formData.isBreakRoom ? formData.startTimeBreakRoom || null : null,
         endTimeBreakRoom: formData.isBreakRoom ? formData.endTimeBreakRoom || null : null,
       };
 
-      // Remove undefined fields
+      // Remove undefined fields  
       Object.keys(bookingPayload).forEach(
         (key) => bookingPayload[key] === undefined && delete bookingPayload[key]
       );

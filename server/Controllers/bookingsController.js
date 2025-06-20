@@ -336,9 +336,11 @@ function generateRecurrenceDates(startDate, endDate, pattern) {
 exports.getAllBookings = async (req, res) => {
   try {
     const bookings = await Booking.findAll();
-    res.status(200).json(bookings);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.log("Bookings response:", bookings); // Log the response
+    res.json(bookings);
+  } catch (err) {
+    console.error("Error fetching bookings:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 

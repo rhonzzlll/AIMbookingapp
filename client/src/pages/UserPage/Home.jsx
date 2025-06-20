@@ -76,29 +76,13 @@ function EditBookingModal({ booking, user, onClose, onBookingUpdated }) {
 
   const formatTime = (timeString) => {
     if (!timeString) return '';
-    if (/am|pm/i.test(timeString)) return timeString;
-    if (timeString.includes('T')) {
-      const date = new Date(timeString);
-      if (!isNaN(date)) {
-        let hour = date.getUTCHours();
-        let minute = date.getUTCMinutes();
-        let suffix = 'AM';
-        if (hour === 0) { hour = 12; }
-        else if (hour === 12) { suffix = 'PM'; }
-        else if (hour > 12) { hour -= 12; suffix = 'PM'; }
-        return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
-      }
-    }
-    const match = timeString.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if (match) {
-      let [h, m] = [parseInt(match[1]), match[2]];
-      let suffix = 'AM';
-      if (h === 0) { h = 12; }
-      else if (h === 12) { suffix = 'PM'; }
-      else if (h > 12) { h -= 12; suffix = 'PM'; }
-      return `${h}:${m} ${suffix}`;
-    }
-    return timeString;
+    // Accepts "HH:MM:SS" or "HH:MM"
+    const [h, m] = timeString.split(':');
+    let hour = parseInt(h, 10);
+    const minute = m;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+    return `${hour}:${minute} ${ampm}`;
   };
 
   const getAvailableIntervals = (bookings, businessHours = { start: "08:00", end: "22:00" }) => {
@@ -1242,18 +1226,13 @@ const BookingCard = ({ booking, setShowEditModal, setEditingBooking }) => {
 
   const formatTime = (timeString) => {
     if (!timeString) return '';
-    try {
-      const date = new Date(timeString);
-      if (isNaN(date)) return '';
-      const hours = String(date.getUTCHours()).padStart(2, '0');
-      const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-      const hour12 = ((date.getUTCHours() + 11) % 12) + 1;
-      const ampm = date.getUTCHours() >= 12 ? 'PM' : 'AM';
-      return `${hour12}:${minutes} ${ampm} `;
-    } catch (error) {
-      console.error('Time formatting error:', error);
-      return timeString;
-    }
+    // Accepts "HH:MM:SS" or "HH:MM"
+    const [h, m] = timeString.split(':');
+    let hour = parseInt(h, 10);
+    const minute = m;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+    return `${hour}:${minute} ${ampm}`;
   };
 
   const { day, date, month } = formatBookingDate(booking.date);

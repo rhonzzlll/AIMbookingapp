@@ -169,6 +169,101 @@ const groupRecurringBookings = (bookings) => {
   });
 };
 
+// Add this validation function before Bookings component
+const validateAdminForm = (formData) => {
+  const errors = {};
+  // Title
+  if (!formData.title || formData.title.trim().length < 3) {
+    errors.title = "Booking title is required (min 3 characters).";
+  }
+  // Name
+  if (!formData.firstName || !formData.lastName) {
+    errors.name = "First name and last name are required.";
+  }
+  // Department
+  if (!formData.department) {
+    errors.department = "School/Department is required.";
+  }
+  // Building/Category/Room
+  if (!formData.buildingId) {
+    errors.building = "Building is required.";
+  }
+  if (!formData.categoryId) {
+    errors.category = "Category is required.";
+  }
+  if (!formData.roomId) {
+    errors.room = "Room selection is required.";
+  }
+  // Date
+  if (!formData.date) {
+    errors.date = "Date is required.";
+  }
+  // Time
+  if (!formData.startTime || !formData.endTime) {
+    errors.time = "Start and end times are required.";
+  } else {
+    // Ensure end time is after start time
+    const toMinutes = (timeString) => {
+      if (!timeString) return 0;
+      const [time, period] = timeString.split(" ");
+      let [h, m] = time.split(":").map(Number);
+      if (period === "PM" && h !== 12) h += 12;
+      if (period === "AM" && h === 12) h = 0;
+      return h * 60 + m;
+    };
+    if (toMinutes(formData.endTime) <= toMinutes(formData.startTime)) {
+      errors.time = "End time must be after start time.";
+    }
+  }
+  // Pax
+  if (!formData.bookingCapacity || Number(formData.bookingCapacity) < 1) {
+    errors.bookingCapacity = "Number of pax must be at least 1.";
+  }
+  // Cost Center
+// Cost Center (optional, so no validation)
+  // Break Room
+  if (formData.isBreakRoom) {
+    if (!formData.numberOfPaxBreakRoom || Number(formData.numberOfPaxBreakRoom) < 1) {
+      errors.numberOfPaxBreakRoom = "Breakout room pax is required.";
+    }
+    if (!formData.startTimeBreakRoom) {
+      errors.startTimeBreakRoom = "Breakout room start time is required.";
+    }
+    if (!formData.endTimeBreakRoom) {
+      errors.endTimeBreakRoom = "Breakout room end time is required.";
+    }
+    if (
+      formData.startTimeBreakRoom &&
+      formData.endTimeBreakRoom
+    ) {
+      const toMinutes = (timeString) => {
+        if (!timeString) return 0;
+        const [time, period] = timeString.split(" ");
+        let [h, m] = time.split(":").map(Number);
+        if (period === "PM" && h !== 12) h += 12;
+        if (period === "AM" && h === 12) h = 0;
+        return h * 60 + m;
+      };
+      if (toMinutes(formData.endTimeBreakRoom) <= toMinutes(formData.startTimeBreakRoom)) {
+        errors.endTimeBreakRoom = "Breakout room end time must be after start time.";
+      }
+    }
+  }
+  // Recurring
+  if (formData.isRecurring) {
+    if (!formData.recurring || formData.recurring === "No") {
+      errors.recurring = "Recurrence pattern is required.";
+    }
+    if (!formData.recurrenceEndDate) {
+      errors.recurrenceEndDate = "Recurrence end date is required.";
+    }
+    if (formData.recurrenceEndDate && formData.date && formData.recurrenceEndDate < formData.date) {
+      errors.recurrenceEndDate = "Recurrence end date must be after booking date.";
+    }
+  }
+  return errors;
+};
+
 const Bookings = () => {
   // State for bookings data and filtering
   const [bookings, setBookings] = useState([]);
@@ -210,31 +305,34 @@ const Bookings = () => {
   // Add these states near your other useState hooks
   const [availabilityStatus, setAvailabilityStatus] = useState({ available: true, message: '' });
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [viewBooking, setViewBooking] = useState(null);
-
-  // Define all columns in an array for visibility control
+const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+const [viewBooking, setViewBooking] = useState(null);
+// Define all columns in an array for visibility control
 const ALL_COLUMNS = [
-  { key: 'bookingId', label: 'Booking ID' },
-  { key: 'title', label: 'Booking Title' },
-  { key: 'firstName', label: 'First Name' },
-  { key: 'lastName', label: 'Last Name' },
-  { key: 'department', label: 'Department' },
-  { key: 'category', label: 'Category' },
-  { key: 'roomName', label: 'Room' },
-  { key: 'building', label: 'Building' },
-  { key: 'date', label: 'Date' },
-  { key: 'startTime', label: 'Time' },
-  { key: 'bookingCapacity', label: 'Capacity' },
-  { key: 'costCenterCharging', label: 'Charged To' },
-  { key: 'isMealRoom', label: 'Meal Room' },
-  { key: 'isBreakRoom', label: 'Break Room' },
-  { key: 'status', label: 'Status' },
-  { key: 'recurring', label: 'Recurring' },
+    { key: 'bookingId', label: 'Booking ID' },
+    { key: 'title', label: 'Booking Title' },
+    { key: 'firstName', label: 'First Name' },
+    { key: 'lastName', label: 'Last Name' },
+    { key: 'department', label: 'Department' },
+    { key: 'category', label: 'Category' },
+    { key: 'roomName', label: 'Room' },
+    { key: 'building', label: 'Building' },
+    { key: 'date', label: 'Date' },
+    { key: 'startTime', label: 'Time' },
+    { key: 'bookingCapacity', label: 'Capacity' },
+    { key: 'costCenterCharging', label: 'Charged To' },
+    { key: 'isMealRoom', label: 'Meal Room' },
+    { key: 'isBreakRoom', label: 'Break Room' },
+    { key: 'status', label: 'Status' },
+    { key: 'recurring', label: 'Recurring' },
     { key: 'timeSubmitted', label: 'Time Submitted' },
-  { key: 'notes', label: 'Notes' },         // <-- Added
-  { key: 'remarks', label: 'Remarks' },     // <-- Added
-];
+    { key: 'notes', label: 'Notes' },         // <-- Added
+    { key: 'remarks', label: 'Remarks' },     // <-- Added
+  ];
+
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+    Object.fromEntries(ALL_COLUMNS.map(col => [col.key, true]))
+  );
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -407,6 +505,26 @@ const ALL_COLUMNS = [
 
   // Filter bookings based on active tab
   const filteredBookings = useMemo(() => {
+    // Lowercase search term for case-insensitive search
+    const search = searchTerm.trim().toLowerCase();
+
+    // Check if search is a number (for Booking ID search)
+    const searchIsNumber = !isNaN(search) && search !== '';
+
+    // Helper: get all values for visible columns as a string
+    const getBookingSearchString = (booking) => {
+      return ALL_COLUMNS
+        .filter(col => visibleColumns[col.key])
+        .map(col => {
+          // Special handling for Booking ID (number)
+          if (col.key === 'bookingId') return String(booking[col.key] ?? '');
+          // Fallback: string value
+          return booking[col.key] ? String(booking[col.key]) : '';
+        })
+        .join(' ')
+        .toLowerCase();
+    };
+
     let filtered = bookings;
     if (activeBookingTab !== 'all') {
       filtered = bookings.filter(booking => {
@@ -417,9 +535,22 @@ const ALL_COLUMNS = [
         return true;
       });
     }
+
+    // Apply search to all columns (including bookingId)
+    if (search) {
+      filtered = filtered.filter(booking => {
+        // If search is a number, match Booking ID directly
+        if (searchIsNumber && String(booking.bookingId).includes(search)) {
+          return true;
+        }
+        // Otherwise, do normal string search
+        return getBookingSearchString(booking).includes(search);
+      });
+    }
+
     // Group recurring bookings so only one row per recurrence series is shown
     return groupRecurringBookings(filtered);
-  }, [bookings, activeBookingTab]);
+  }, [bookings, activeBookingTab, searchTerm, visibleColumns]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
@@ -447,25 +578,33 @@ const ALL_COLUMNS = [
   };
     const handleEditClick = (booking) => {
   // Helper to extract time in "HH:mm" from a date/time string
-  const extractTime = (dateTime) => {
-    if (!dateTime) return '';
-    const d = new Date(dateTime);
-    if (isNaN(d)) return '';
-    return d.toTimeString().slice(0, 5); // "HH:mm"
-  };
+ const extractTime = (dateTime) => {
+  if (!dateTime) return '';
+  // If already in AM/PM format, return as-is
+  if (/am|pm/i.test(dateTime)) return dateTime;
+  // If ISO string (contains 'T'), extract time part
+  if (dateTime.includes('T')) {
+    return dateTime.split('T')[1].substring(0, 5); // "HH:mm"
+  }
+  // If "HH:mm:ss" or "HH:mm"
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(dateTime)) {
+    return dateTime.substring(0, 5); // "HH:mm"
+  }
+  return dateTime;
+};
 
-  // Set form data
-  setFormData({
-    ...booking,
-    date: parseISODate(booking.date),
-    startTime: booking.startTime ? convertTo12HourFormat(extractTime(booking.startTime)) : '',
-    endTime: booking.endTime ? convertTo12HourFormat(extractTime(booking.endTime)) : '',
-    isRecurring: booking.isRecurring || booking.recurring === 'Yes',
-    recurring: booking.isRecurring ? (booking.recurrencePattern || 'Daily') : 'No',
-    recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
-    isMealRoom: booking.isMealRoom || false,
-    isBreakRoom: booking.isBreakRoom || false,
-  });
+// Set form data
+setFormData({
+  ...booking,
+  date: parseISODate(booking.date),
+  startTime: booking.startTime ? convertTo12HourFormat(extractTime(booking.startTime)) : '',
+  endTime: booking.endTime ? convertTo12HourFormat(extractTime(booking.endTime)) : '',
+  isRecurring: booking.isRecurring || booking.recurring === 'Yes',
+  recurring: booking.isRecurring ? (booking.recurrencePattern || 'Daily') : 'No',
+  recurrenceEndDate: booking.recurrenceEndDate ? parseISODate(booking.recurrenceEndDate) : '',
+  isMealRoom: booking.isMealRoom || false,
+  isBreakRoom: booking.isBreakRoom || false,
+});
 
   setEditBookingId(booking.bookingId);
 
@@ -806,6 +945,14 @@ const handleNameChange = (e) => {
       return;
     }
 
+    // --- VALIDATION ---
+    const validationErrors = validateAdminForm(formData);
+    if (Object.keys(validationErrors).length > 0) {
+      setFormError(validationErrors);
+      setSubmitLoading(false);
+      return;
+    }
+
     const loggedInUserId = localStorage.getItem('userId') || sessionStorage.getItem('userId');
     if (!loggedInUserId) {
       setError('User not authenticated. Please log in again.');
@@ -814,34 +961,34 @@ const handleNameChange = (e) => {
     }
 
     let hasError = false;
-    const errors = {};
+    const manualErrors = {};
 
      if (!formData.firstName || !formData.lastName) {
-      errors.name = 'First name and last name are required';
+      manualErrors.name = 'First name and last name are required';
       hasError = true;
     }
     if (!formData.startTime || !formData.endTime) {
-      errors.time = 'Start and end times are required';
+      manualErrors.time = 'Start and end times are required';
       hasError = true;
     }
     if (formData.bookingCapacity < 1) {
-      errors.bookingCapacity = 'Pax must be at least 1';
+      manualErrors.bookingCapacity = 'Pax must be at least 1';
       hasError = true;
     }
     if (!formData.roomId) {
-      errors.room = 'Room selection is required';
+      manualErrors.room = 'Room selection is required';
       hasError = true;
     }
     if (!formData.buildingId) {
-      errors.building = 'Building is required';
+      manualErrors.building = 'Building is required';
       hasError = true;
     }
     if (formData.isRecurring && !formData.recurrenceEndDate) {
-      errors.recurrence = 'Recurrence end date is required for recurring bookings';
+      manualErrors.recurrence = 'Recurrence end date is required for recurring bookings';
       hasError = true;
     }
     if (hasError) {
-      setFormError(errors);
+      setFormError(manualErrors);
       setSubmitLoading(false);
       return;
     }
@@ -886,7 +1033,10 @@ const handleNameChange = (e) => {
         bookingCapacity: Number(formData.bookingCapacity) || 1,
         status: (formData.status || 'pending').toLowerCase(),
         recurringGroupId: formData.isRecurring ? recurringGroupId : null,
-        costCenterCharging: formData.costCenterCharging || '', // <-- Add this line
+     costCenterCharging:
+    formData.costCenterCharging && formData.costCenterCharging.trim() !== ""
+      ? formData.costCenterCharging
+      : "N/A",
         numberOfPaxBreakRoom: formData.isBreakRoom ? formData.numberOfPaxBreakRoom || '' : '',
         startTimeBreakRoom: formData.isBreakRoom ? formData.startTimeBreakRoom || '' : '',
         endTimeBreakRoom: formData.isBreakRoom ? formData.endTimeBreakRoom || '' : '',
@@ -971,7 +1121,7 @@ const handleNameChange = (e) => {
       (user.email && user.email.toLowerCase().includes(userSearchQuery.toLowerCase()))
     ).slice(0, 5); // Limit to 5 results
   }, [users, userSearchQuery]);
-
+  
 
 
   
@@ -1045,7 +1195,7 @@ const getAvailableEndTimes = () => {
   }
   return times;
 };
-  
+
 const BookingForm = React.memo(({ isEdit }) => (
   <form onSubmit={handleSubmit} className="space-y-6">
     {/* Error messages */}
@@ -1235,15 +1385,14 @@ const BookingForm = React.memo(({ isEdit }) => (
   <label className="block text-sm font-medium text-gray-700 mb-1">
     Charged To (Cost Center)
   </label>
-  <input
-    type="text"
-    name="costCenterCharging"
-    defaultValue={formData.costCenterCharging} // Use defaultValue for uncontrolled input
-              onBlur={(e) => setFormData((prev) => ({ ...prev, costCenterCharging: e.target.value }))} // Update state on blur
-              required
-    placeholder="Enter cost center or department"
-              className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
-  />
+ <input
+  type="text"
+  name="costCenterCharging"
+  defaultValue={formData.costCenterCharging}
+  onBlur={(e) => setFormData((prev) => ({ ...prev, costCenterCharging: e.target.value }))}
+  placeholder="Enter cost center or department"
+  className={`w-full p-2 border ${formError.name ? 'border-red-500' : 'border-gray-300'} rounded-md focus:ring-blue-500 focus:border-blue-500`}
+/>
 </div>
  
 
@@ -1596,11 +1745,7 @@ const BookingForm = React.memo(({ isEdit }) => (
     }
   };
 
-  const [visibleColumns, setVisibleColumns] = useState(() =>
-  Object.fromEntries(ALL_COLUMNS.map(col => [col.key, true]))
-);
 const [showColumnMenu, setShowColumnMenu] = useState(false);
-
 const handleToggleColumn = (key) => {
   setVisibleColumns(prev => ({
     ...prev,
@@ -1694,11 +1839,6 @@ const handleToggleColumn = (key) => {
             <TableBody>
               {!loading && currentBookings.length > 0 ? (
                 sortedBookings
-                  .filter(booking =>
-                    `${booking.title} ${booking.firstName} ${booking.lastName} ${booking.department} ${booking.category} ${booking.roomName} ${booking.building} ${booking.costCenterCharging || ''}`
-                      .toLowerCase()
-                      .includes(searchTerm.toLowerCase())
-                  )
                   .map((booking) => (
                     <TableRow key={booking._id || booking.id} hover>
                       {ALL_COLUMNS.filter(col => visibleColumns[col.key]).map(col => (
@@ -1723,13 +1863,13 @@ const handleToggleColumn = (key) => {
                     ? (booking.recurring !== 'No' && booking.recurringEndDate
                         ? <div>{formatDate(booking.date)} - {formatDate(booking.recurringEndDate)} ({booking.recurring})</div>
                         : <div>{formatDate(booking.date)}</div>)
-                    : col.key === 'startTime'
-                    ? (
-                      <>
-                        {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-                        {new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </>
-                    )
+                 // ...inside your TableCell rendering for col.key === 'startTime'...
+: col.key === 'startTime'
+? (
+  <>
+    {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+  </>
+)
                     : col.key === 'isMealRoom'
                     ? (
                       <span style={{
@@ -2010,26 +2150,23 @@ if (userId) {
   );
 };
 
-export default Bookings;
-
-// Time formatting function
+ 
+// ...existing code...
 const formatTime = (timeString) => {
   if (!timeString) return '';
 
-  // If AM/PM already, return as-is
+  // If already in AM/PM format, return as-is
   if (/am|pm/i.test(timeString)) return timeString;
 
-  // If it's ISO string with T, extract the time part and convert to AM/PM
+  // If ISO string (contains 'T'), extract time part
   if (timeString.includes('T')) {
     const date = new Date(timeString);
     if (!isNaN(date)) {
-      let hour = date.getUTCHours();
-      let minute = date.getUTCMinutes();
-      let suffix = 'AM';
-      if (hour === 0) { hour = 12; }
-      else if (hour === 12) { suffix = 'PM'; }
-      else if (hour >  12) { hour -= 12; suffix = 'PM'; }
-      return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
+      let hour = date.getHours();
+      let minute = date.getMinutes();
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      hour = hour % 12 || 12;
+      return `${hour}:${minute.toString().padStart(2, '0')} ${ampm}`;
     }
   }
 
@@ -2037,18 +2174,15 @@ const formatTime = (timeString) => {
   const match = timeString.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (match) {
     let [h, m] = [parseInt(match[1]), match[2]];
-    let suffix = 'AM';
-    if (h === 0) h = 12;
-    else if (h === 12) suffix = 'PM';
-    else if (h >  12) h -= 12;
-    return `${h}:${m} ${suffix}`;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ampm}`;
   }
 
   // Fallback
   return timeString;
 };
-
-// New helper function to get available time intervals
+ 
 const getAvailableIntervals = (bookings, businessHours = { start: "08:00", end: "22:00" }) => {
   const buffer = 30; // Buffer time in minutes
   const toMinutes = (time) => {
@@ -2321,3 +2455,5 @@ const BookingDetailsModal = ({
     </div>
   );
 };
+
+export default Bookings;

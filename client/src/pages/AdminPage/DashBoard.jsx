@@ -72,13 +72,13 @@ const departmentColors = {
   'SEELL': 'bg-blue-100 border-blue-400 text-blue-900',
   'Other Units': 'bg-orange-100 border-orange-400 text-orange-900',
   'External': 'bg-pink-100 border-pink-400 text-pink-900',
-  'SRF': 'bg-cyan-100 border-cyan-400 text-cyan-900',
-  'IMCG': 'bg-teal-100 border-teal-400 text-teal-900',
-  'Marketing': 'bg-lime-100 border-lime-400 text-lime-900',
-  'ICT': 'bg-indigo-100 border-indigo-400 text-indigo-900',
-  'HR': 'bg-red-100 border-red-400 text-red-900',
-  'Finance': 'bg-amber-100 border-amber-400 text-amber-900',
-  'Registrars': 'bg-fuchsia-100 border-fuchsia-400 text-fuchsia-900',
+  'SRF': 'bg-rose-100 border-rose-400 text-rose-900',
+  'IMCG': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Marketing': 'bg-rose-100 border-rose-400 text-rose-900',
+  'ICT': 'bg-rose-100 border-rose-400 text-rose-900',
+  'HR': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Finance': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Registrars': 'bg-rose-100 border-rose-400 text-rose-900',
   'Others': 'bg-gray-100 border-gray-400 text-gray-900'
 };
 
@@ -120,6 +120,7 @@ const Dashboard = () => {
       const pendingBookings = bookings.filter(b => b.status === 'pending').length;
       const confirmedBookings = bookings.filter(b => b.status === 'confirmed').length;
       const declinedBookings = bookings.filter(b => b.status === 'declined').length;
+      const cancelledBookings = bookings.filter(b => b.status === 'cancelled').length; // <-- Added
       const totalBookings = bookings.length;
       setDashboardStats({
         totalRooms,
@@ -127,6 +128,7 @@ const Dashboard = () => {
         pendingBookings,
         confirmedBookings,
         declinedBookings,
+        cancelledBookings, // <-- Added
         totalUsers: users.length,
       });
     } catch (error) {
@@ -252,6 +254,7 @@ const Dashboard = () => {
         { label: 'Pending', value: dashboardStats.pendingBookings.toString(), color: 'text-yellow-500' },
         { label: 'Confirmed', value: dashboardStats.confirmedBookings.toString(), color: 'text-green-500' },
         { label: 'Declined', value: dashboardStats.declinedBookings.toString(), color: 'text-red-500' },
+        { label: 'Cancelled', value: dashboardStats.cancelledBookings?.toString() || '0', color: 'text-gray-500' }, // <-- Added
       ],
     },
     { title: 'Total Users', value: dashboardStats.totalUsers.toString(), icon: '👥', color: 'bg-yellow-100' },
