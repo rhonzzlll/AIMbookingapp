@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true 
     },
     buildingImage: {
-      type: DataTypes.TEXT('long'), // Use TEXT type instead of STRING
+      type: DataTypes.TEXT('long'), // Use TEXT type for MySQL
       field: 'buildingImage',
       allowNull: true
     },
@@ -33,24 +33,19 @@ module.exports = (sequelize, DataTypes) => {
     }
   }, {
     tableName: 'building',
-    schema: 'dbo',
     timestamps: true,
-    // Since you have custom column names for timestamps
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   });
 
   // Define associations
   Building.associate = (models) => {
-    // Association with Room model
     if (models.Room) {
       Building.hasMany(models.Room, {
         foreignKey: 'buildingId',
         sourceKey: 'buildingId'
       });
     }
-    
-    // Association with Category model
     if (models.Category) {
       Building.hasMany(models.Category, {
         foreignKey: 'buildingId',

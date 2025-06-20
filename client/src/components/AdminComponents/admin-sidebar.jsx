@@ -110,7 +110,6 @@ const AdminSidebar = () => {
     },
     { id: 'bookings', icon: '📝', text: 'Bookings', path: '/admin/bookings' },
     { id: 'users', icon: '👥', text: 'Users', path: '/admin/users' },
-    { id: 'audit', icon: '🕵️', text: 'Audit Trail', path: '/admin/audit-trail' },
   ];
 
   return (

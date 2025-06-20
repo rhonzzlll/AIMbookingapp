@@ -3,42 +3,24 @@
     "username": "root",
     "password": "root",
     "database": "bookings",
-    "host": "AIMWINOS059\\SQLEXPRESS",
-    "dialect": "mssql",
-    "dialectOptions": {
-      "options": {
-        "trustServerCertificate": true,
-        "enableArithAbort": true,
-        "encrypt": true
-      }
-    }
+    "host": "127.0.0.1",
+    "port": 3306,
+    "dialect": "mysql"
   },
   "test": {
     "username": "root",
     "password": "root",
     "database": "bookings",
-    "host": "AIMWINOS059\\SQLEXPRESS",
-    "dialect": "mssql",
-    "dialectOptions": {
-      "options": {
-        "trustServerCertificate": true,
-        "enableArithAbort": true,
-        "encrypt": true
-      }
-    }
+    "host": "127.0.0.1",
+    "port": 3306,
+    "dialect": "mysql"
   },
   "production": {
     "username": "root",
     "password": "root",
     "database": "bookings",
-    "host": "AIMWINOS059\\SQLEXPRESS",
-    "dialect": "mssql",
-    "dialectOptions": {
-      "options": {
-        "trustServerCertificate": true,
-        "enableArithAbort": true,
-        "encrypt": true
-      }
-    }
+    "host": "127.0.0.1",
+    "port": 3306,
+    "dialect": "mysql"
   }
 }

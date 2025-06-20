@@ -1,7 +1,7 @@
 module.exports = (sequelize, DataTypes) => {
   const Subroom = sequelize.define('Subroom', {
     subroomId: {
-      type: DataTypes.STRING(255), // Change from INTEGER to STRING(255)
+      type: DataTypes.STRING(255),
       primaryKey: true,
       allowNull: false,
       field: 'subroomId'
@@ -47,7 +47,6 @@ module.exports = (sequelize, DataTypes) => {
     }
   }, {
     tableName: 'subroom',
-    schema: 'dbo',
     timestamps: true,
     freezeTableName: true
   });

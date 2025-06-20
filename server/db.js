@@ -5,17 +5,8 @@ require('dotenv').config();
 
 const sequelize = new Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
   host: process.env.DB_HOST,
-  dialect: 'mssql',
-  dialectOptions: {
-    options: {
-      encrypt: true,
-    },
-  },
-  // Add this to completely replace the ILIKE operator with a SQL Server compatible version
-  operatorsAliases: {
-    $iLike: Op.like,
-    $like: Op.like
-  }
+  port: process.env.DB_PORT,
+  dialect: 'mysql',
 });
 
 const db = {};

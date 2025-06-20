@@ -34,14 +34,14 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false
     },
     roomImage: {
-      type: DataTypes.STRING('MAX'), // VARCHAR(MAX) in SQL Server
+      type: DataTypes.TEXT, // Use TEXT for MySQL
       allowNull: true
     },
     roomDescription: {
       type: DataTypes.STRING(500),
       allowNull: true
     },
-    parentRoomId: { // <-- Add this field
+    parentRoomId: {
       type: DataTypes.STRING(255),
       allowNull: true,
       references: {
@@ -59,7 +59,6 @@ module.exports = (sequelize, DataTypes) => {
     }
   }, {
     tableName: 'room',
-    schema: 'dbo',
     timestamps: true,
     freezeTableName: true
   });
@@ -82,7 +81,6 @@ module.exports = (sequelize, DataTypes) => {
       targetKey: 'categoryId'
     });
 
-    // Add self-association for parent/child rooms
     Room.hasMany(models.Room, {
       as: 'childRooms',
       foreignKey: 'parentRoomId'

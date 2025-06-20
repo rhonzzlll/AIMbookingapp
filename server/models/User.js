@@ -41,13 +41,13 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(255),
       allowNull: true
     },
-   role: {
-  type: DataTypes.STRING(255),
-  allowNull: true,
-  validate: {
-    isIn: [['SuperAdmin', 'Admin', 'User']]
-  }
-},
+    role: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      validate: {
+        isIn: [['SuperAdmin', 'Admin', 'User']]
+      }
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       allowNull: true,
@@ -55,7 +55,6 @@ module.exports = (sequelize, DataTypes) => {
     }
   }, {
     tableName: 'users',
-    schema: 'dbo',
     timestamps: false,
     hooks: {
       // Hash password before saving
@@ -84,7 +83,7 @@ module.exports = (sequelize, DataTypes) => {
   // Method to generate JWT token
   User.prototype.generateAuthToken = function () {
     return jwt.sign(
-      { id: this.userId, email: this.email, role: this.role.toLowerCase() },
+      { id: this.userId, email: this.email, role: this.role?.toLowerCase() },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
