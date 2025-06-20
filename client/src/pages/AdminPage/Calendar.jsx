@@ -419,7 +419,7 @@ const BookingCalendar = () => {
 
         {/* Department Legend */}
         <div className="mb-4 p-3 bg-gray-50 border rounded">
-          <h3 className="text-sm font-semibold mb-2 text-gray-700">Department Legend:</h3>
+          <h3 className="text-sm font-semibold mb-2 text-gray-700">School / Department Legend:</h3>
           <div className="flex flex-wrap gap-2 text-xs">
             {Object.entries(departmentColors).map(([dept, colorClasses]) => {
               const bgColor = colorClasses.split(' ')[0];

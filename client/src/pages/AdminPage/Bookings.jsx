@@ -63,7 +63,23 @@ function convertTo12HourFormat(time24) {
 const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 // Predefined options for dropdowns
-const DEPARTMENTS = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
+// ...existing code...
+const DEPARTMENTS = [
+  'ASITE',
+  'WSGSB',
+  'SZGSDM',
+  'SEELL',
+  'Other Units',
+  'External',
+  'SRF',
+  'IMCG',
+  'Marketing',
+  'ICT',
+  'HR',
+  'Finance',
+  'Registrars'
+];
+// ...existing code...
 
 // Initial form state
 const initialFormState = {
@@ -1282,7 +1298,7 @@ const BookingForm = React.memo(({ isEdit }) => (
               required
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="">Select School</option>
+              <option value="">Select School/Department</option>
               {DEPARTMENTS.map(dept => (
                 <option key={dept} value={dept}>{dept}</option>
               ))}
@@ -1724,26 +1740,36 @@ const BookingForm = React.memo(({ isEdit }) => (
     setSelectedStatus(status);
     setIsStatusModalOpen(true);
   };
-
-  const handleSaveRemarks = async (booking, newRemarks) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/bookings/${booking.bookingId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ remarks: newRemarks }),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to save remarks');
-      }
-      await fetchBookings(); // Refresh bookings list
-      setViewBooking({ ...booking, remarks: newRemarks }); // Update modal with new remarks
-    } catch (err) {
-      setError(err.message || 'Failed to save remarks.');
+const handleSaveRemarks = async (booking, newRemarks) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/bookings/${booking.bookingId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ remarks: newRemarks }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to save remarks');
     }
-  };
+    await fetchBookings(); // Refresh bookings list
+
+    // Fetch the updated booking from the backend and update the modal
+    const updatedRes = await fetch(`${API_BASE_URL}/bookings/${booking.bookingId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (updatedRes.ok) {
+      const updatedBooking = await updatedRes.json();
+      setViewBooking(updatedBooking);
+    } else {
+      // fallback: update with local data
+      setViewBooking({ ...booking, remarks: newRemarks });
+    }
+  } catch (err) {
+    setError(err.message || 'Failed to save remarks.');
+  }
+};
 
 const [showColumnMenu, setShowColumnMenu] = useState(false);
 const handleToggleColumn = (key) => {
@@ -1990,7 +2016,7 @@ const handleToggleColumn = (key) => {
     <TableFooter>
       <TableRow>
         <TablePagination
-          rowsPerPageOptions={[10, 25, 50]}
+          rowsPerPageOptions={[10]}
           colSpan={17}
           count={filteredBookings.length}
           rowsPerPage={itemsPerPage}

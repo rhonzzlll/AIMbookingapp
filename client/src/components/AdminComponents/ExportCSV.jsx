@@ -3,6 +3,42 @@ import { Calendar, Download, Filter, X, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
+// Move these OUTSIDE the exportToExcel function, to the top of your component
+const departmentColors = {
+  // Schools
+  'ASITE': 'bg-purple-100 border-purple-400 text-purple-900',
+  'WSGSB': 'bg-green-100 border-green-400 text-green-900',
+  'SZGSDM': 'bg-yellow-100 border-yellow-400 text-yellow-900',
+  'SEELL': 'bg-blue-100 border-blue-400 text-blue-900',
+  'Other Units': 'bg-orange-100 border-orange-400 text-orange-900',
+  'External': 'bg-pink-100 border-pink-400 text-pink-900',
+  // Departments
+  'SRF': 'bg-rose-100 border-rose-400 text-rose-900',
+  'IMCG': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Marketing': 'bg-rose-100 border-rose-400 text-rose-900',
+  'ICT': 'bg-rose-100 border-rose-400 text-rose-900',
+  'HR': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Finance': 'bg-rose-100 border-rose-400 text-rose-900',
+  'Registrars': 'bg-rose-100 border-rose-400 text-rose-900',
+};
+
+// For ExcelJS, map department to ARGB color (fallback to old rowColors)
+const departmentExcelColors = {
+  'ASITE': { argb: 'E9D5FF' },      // purple-100
+  'WSGSB': { argb: 'BBF7D0' },      // green-100
+  'SZGSDM': { argb: 'FEF9C3' },     // yellow-100
+  'SEELL': { argb: 'DBEAFE' },      // blue-100
+  'Other Units': { argb: 'FFEDD5' },// orange-100
+  'External': { argb: 'FBCFE8' },   // pink-100
+  'SRF': { argb: 'FFE4E6' },        // rose-100
+  'IMCG': { argb: 'FFE4E6' },
+  'Marketing': { argb: 'FFE4E6' },
+  'ICT': { argb: 'FFE4E6' },
+  'HR': { argb: 'FFE4E6' },
+  'Finance': { argb: 'FFE4E6' },
+  'Registrars': { argb: 'FFE4E6' },
+};
+
 const ExcelEventBulletinExporter = ({ bookings }) => {
   const [selectedStatuses, setSelectedStatuses] = useState(['confirmed']);
   const [showOptions, setShowOptions] = useState(false);
@@ -15,9 +51,15 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString();
   };
-
-  const formatTime = (dateString) => {
-    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const formatTime = (timeString) => {
+    if (!timeString) return '';
+    // Accepts "HH:MM:SS" or "HH:MM"
+    const [h, m] = timeString.split(':');
+    let hour = parseInt(h, 10);
+    const minute = m;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+    return `${hour}:${minute} ${ampm}`;
   };
 
   // Filter bookings based on selected statuses and date range
@@ -77,6 +119,7 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
       const worksheet = workbook.addWorksheet('Daily Event Bulletin');
       
       // Set column widths
+      // Update worksheet columns to include Actions
       worksheet.columns = [
         { header: 'Daily Event Bulletin ', key: 'person', width: 20 },
         { header: 'Department', key: 'company', width: 20 },
@@ -85,7 +128,8 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
         { header: 'PAX', key: 'pax', width: 8 },
         { header: 'Date', key: 'date', width: 15 },
         { header: 'Notes', key: 'notes', width: 25 },
-        { header: '', key: 'remarks', width: 25 }
+        { header: 'Remarks', key: 'remarks', width: 25 },
+        { header: 'Actions', key: 'actions', width: 18 }
       ];
       
       // Add title row and merge cells
@@ -111,8 +155,9 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
       worksheet.addRow([]);
       
       // Add header row
+      // Add header row (add Actions)
       const headerRow = worksheet.addRow([
-        'Person-In-Charge', 'Department', 'Function Room', 'Time', 'PAX', 'Date', 'Notes', 'Remarks'
+        'Person-In-Charge', 'School/Department', 'Function Room', 'Time', 'PAX', 'Date', 'Notes', 'Remarks', 'Actions'
       ]);
       
       // Style header row
@@ -126,7 +171,7 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
       };
       
       // Add borders to header
-      for (let i = 1; i <= 8; i++) {
+      for (let i = 1; i <= 9; i++) {
         const cell = headerRow.getCell(i);
         cell.border = {
           top: { style: 'thin' },
@@ -136,18 +181,12 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
         };
       }
       
-      // Define background colors for alternating rows
-      const rowColors = [
-        { argb: 'E6F7F5' }, // Teal
-        { argb: 'E6F0F9' }, // Blue
-        { argb: 'F2F2F2' }, // Gray
-        { argb: 'FEF5E5' }  // Amber
-      ];
-      
       // Add data rows
+      // Add data rows (add Actions)
       filteredBookings.forEach((booking, index) => {
         const paxValue = booking.bookingCapacity > 0 ? booking.bookingCapacity : '-';
-        
+        const action = booking.status;
+
         const row = worksheet.addRow([
           booking.changedBy || booking.bookedBy || '-', // Person-In-Charge
           booking.department,
@@ -156,26 +195,34 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
           paxValue,
           formatDate(booking.date),
           booking.notes || '-', // Notes column
-          booking.remarks || '-' // Remarks column
+          booking.remarks || '-', // Remarks column
+          action // Actions column
         ]);
         
-        // Style Person-In-Charge cell with alternating background
+        // Use department color if available, else fallback to alternating
+        const deptColor = departmentExcelColors[booking.department];
+        const rowColors = [
+          { argb: 'E6F7F5' }, // Teal
+          { argb: 'E6F0F9' }, // Blue
+          { argb: 'F2F2F2' }, // Gray
+          { argb: 'FEF5E5' }  // Amber
+        ];
         const colorIndex = index % 4;
         const personCell = row.getCell(1);
         personCell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: rowColors[colorIndex]
+          fgColor: deptColor || rowColors[colorIndex]
         };
         personCell.font = { bold: true };
-        
+
         // Center align all cells except Person-In-Charge
-        for (let i = 2; i <= 8; i++) {
+        for (let i = 2; i <= 9; i++) {
           row.getCell(i).alignment = { horizontal: 'center', vertical: 'middle' };
         }
         
         // Apply borders to all cells in the row
-        for (let i = 1; i <= 8; i++) {
+        for (let i = 1; i <= 9; i++) {
           const cell = row.getCell(i);
           cell.border = {
             top: { style: 'thin' },
@@ -382,16 +429,22 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
                 <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center border-r border-gray-200 w-1/12">PAX</th>
                 <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center border-r border-gray-200 w-1/6">Date</th>
                 <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center border-r border-gray-200 w-1/6">Notes</th>
-                <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center w-1/6">Remarks</th>
+                <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center border-r border-gray-200 w-1/6">Remarks</th>
+                <th className="px-4 py-2 bg-gray-50 text-gray-700 uppercase text-xs font-semibold text-center w-1/6">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredBookings.length > 0 ? (
                 filteredBookings.map((booking, index) => {
-                  const personColor = index % 4 === 0 ? 'bg-teal-100' : 
-                                     index % 4 === 1 ? 'bg-blue-100' :
-                                     index % 4 === 2 ? 'bg-gray-100' : 'bg-amber-100';
-                  
+                  // Use department color if available, else fallback to alternating
+                  const fallbackColors = [
+                    'bg-teal-100',
+                    'bg-blue-100',
+                    'bg-gray-100',
+                    'bg-amber-100'
+                  ];
+                  const personColor = departmentColors[booking.department] || fallbackColors[index % 4];
+
                   return (
                     <tr key={index} className="hover:bg-gray-50">
                       <td className={`${personColor} px-4 py-2 border-r border-gray-200 text-sm font-medium`}>
@@ -418,12 +471,15 @@ const ExcelEventBulletinExporter = ({ bookings }) => {
                       <td className="px-4 py-2 text-sm text-center">
                         {booking.remarks || '-'}
                       </td>
+                      <td className="px-4 py-2 text-sm text-center">
+                        {booking.status}
+                      </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan="8" className="px-4 py-4 text-center text-gray-500">
+                  <td colSpan="9" className="px-4 py-4 text-center text-gray-500">
                     No events match your current filters
                   </td>
                 </tr>
