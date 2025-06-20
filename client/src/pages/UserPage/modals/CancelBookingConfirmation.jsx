@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 
 const CancelBookingConfirmation = ({ booking, onConfirm, onCancel }) => {

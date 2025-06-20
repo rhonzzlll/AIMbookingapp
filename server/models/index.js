@@ -55,4 +55,8 @@ Object.keys(db).forEach(modelName => {
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 
+// Associations
+const { User, AuditLog } = db;
+AuditLog.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
+
 module.exports = db;

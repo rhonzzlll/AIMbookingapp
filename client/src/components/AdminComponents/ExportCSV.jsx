@@ -12,14 +12,14 @@ const departmentColors = {
   'SEELL': 'bg-blue-100 border-blue-400 text-blue-900',
   'Other Units': 'bg-orange-100 border-orange-400 text-orange-900',
   'External': 'bg-pink-100 border-pink-400 text-pink-900',
-  // Departments
-  'SRF': 'bg-rose-100 border-rose-400 text-rose-900',
-  'IMCG': 'bg-rose-100 border-rose-400 text-rose-900',
-  'Marketing': 'bg-rose-100 border-rose-400 text-rose-900',
-  'ICT': 'bg-rose-100 border-rose-400 text-rose-900',
-  'HR': 'bg-rose-100 border-rose-400 text-rose-900',
-  'Finance': 'bg-rose-100 border-rose-400 text-rose-900',
-  'Registrars': 'bg-rose-100 border-rose-400 text-rose-900',
+  // Departments (all gray)
+  'SRF': 'bg-gray-100 border-gray-400 text-gray-900',
+  'IMCG': 'bg-gray-100 border-gray-400 text-gray-900',
+  'Marketing': 'bg-gray-100 border-gray-400 text-gray-900',
+  'ICT': 'bg-gray-100 border-gray-400 text-gray-900',
+  'HR': 'bg-gray-100 border-gray-400 text-gray-900',
+  'Finance': 'bg-gray-100 border-gray-400 text-gray-900',
+  'Registrars': 'bg-gray-100 border-gray-400 text-gray-900',
 };
 
 // For ExcelJS, map department to ARGB color (fallback to old rowColors)
@@ -30,13 +30,14 @@ const departmentExcelColors = {
   'SEELL': { argb: 'DBEAFE' },      // blue-100
   'Other Units': { argb: 'FFEDD5' },// orange-100
   'External': { argb: 'FBCFE8' },   // pink-100
-  'SRF': { argb: 'FFE4E6' },        // rose-100
-  'IMCG': { argb: 'FFE4E6' },
-  'Marketing': { argb: 'FFE4E6' },
-  'ICT': { argb: 'FFE4E6' },
-  'HR': { argb: 'FFE4E6' },
-  'Finance': { argb: 'FFE4E6' },
-  'Registrars': { argb: 'FFE4E6' },
+  // Departments (all gray)
+  'SRF': { argb: 'F3F4F6' },        // gray-100
+  'IMCG': { argb: 'F3F4F6' },
+  'Marketing': { argb: 'F3F4F6' },
+  'ICT': { argb: 'F3F4F6' },
+  'HR': { argb: 'F3F4F6' },
+  'Finance': { argb: 'F3F4F6' },
+  'Registrars': { argb: 'F3F4F6' },
 };
 
 const ExcelEventBulletinExporter = ({ bookings }) => {

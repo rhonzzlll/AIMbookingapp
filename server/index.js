@@ -79,6 +79,7 @@ const bookingsRoutes = require('./routes/bookingsRoutes');
 const buildingRoutes = require('./routes/buildingRoutes');  // capital R if file is named buildingRoutes.js
 
 const categoryRoutes = require('./routes/categoryRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
 
 // Mount routes
 app.use('/api/bookings', bookingsRoutes);
@@ -87,6 +88,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/buildings', buildingRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/audit-trails', auditLogRoutes);
 
 // Error handler for multer errors
 app.use((err, req, res, next) => {

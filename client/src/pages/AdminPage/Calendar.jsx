@@ -15,13 +15,13 @@ const departmentColors = {
   'Other Units': 'bg-orange-100 border-orange-400 text-orange-900',
   'External': 'bg-pink-100 border-pink-400 text-pink-900',
   // Departments
- 'SRF': 'bg-rose-100 border-rose-400 text-rose-900',
-  'IMCG': 'bg-rose-100 border-rose-400 text-rose-900',
-  'Marketing': 'bg-rose-100 border-rose-400 text-rose-900',
-  'ICT': 'bg-rose-100 border-rose-400 text-rose-900',
-  'HR': 'bg-rose-100 border-rose-400 text-rose-900',
-  'Finance': 'bg-rose-100 border-rose-400 text-rose-900',
-  'Registrars': 'bg-rose-100 border-rose-400 text-rose-900',
+'SRF': 'bg-gray-100 border-gray-400 text-gray-900',
+'IMCG': 'bg-gray-100 border-gray-400 text-gray-900',
+'Marketing': 'bg-gray-100 border-gray-400 text-gray-900',
+'ICT': 'bg-gray-100 border-gray-400 text-gray-900',
+'HR': 'bg-gray-100 border-gray-400 text-gray-900',
+'Finance': 'bg-gray-100 border-gray-400 text-gray-900',
+'Registrars': 'bg-gray-100 border-gray-400 text-gray-900',
  
 };
 

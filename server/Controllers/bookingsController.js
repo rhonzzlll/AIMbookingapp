@@ -6,6 +6,7 @@ const { transporter, sendMailWithRetry } = require('../mailer');
 const User = db.User;  
 const Room = db.Room;
 const Building = db.Building;
+const AuditLog = db.AuditLog; // <-- Import AuditLog model
 
 const convertTo24HourFormat = (time) => {
   const [hourMinute, period] = time.split(' ');
@@ -132,17 +133,18 @@ ACC Reservations`;
 Your booking has been successfully cancelled.
 
 Cancelled Booking Details:
- Date: ${bookingDate}
- Time: ${startTime} - ${endTime}
- Room: ${roomDisplay}
- Building: ${buildingDisplay} 
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🚪 Room: ${roomDisplay}
+🏢 Building: ${buildingDisplay}
+
 
 If you cancelled this booking by mistake or need to make a new reservation, please feel free to submit a new booking request.
 
 Thank you for using our booking system!
 
 Best regards,
-Booking Management Team`;
+ACC Reservations`;
         break;
 
       case 'pending':
@@ -288,7 +290,7 @@ Cancelled Booking Details:
 Please update your records if necessary.
 
 Best regards,
-Booking Management System`;
+ACC Reservations`;
 
     for (const admin of admins) {
       if (admin.email) {
@@ -639,6 +641,16 @@ exports.updateBooking = async (req, res) => {
     // Update the booking
     await booking.update(updateData);
 
+    // Log the audit trail for the update
+    await AuditLog.create({
+      bookingId: booking.bookingId,
+      userId: req.user?.userId, // or whoever made the change
+      action: 'UPDATE',
+      oldValue: { status: originalStatus },
+      newValue: { status: booking.status },
+      timestamp: new Date()
+    });
+
     // Get the updated booking
     const updatedBooking = await Booking.findByPk(req.params.id);
 
@@ -854,11 +866,13 @@ async function sendPendingBookingNotifications(booking) {
 A new booking request is pending approval.
 
 Booking Details:
- Date: ${bookingDate}
-Time: ${startTime} - ${endTime}
- Room: ${roomDisplay}
- Building: ${buildingDisplay}
- Requested by: ${userName} (${user.email})
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🏢 Room: ${roomDisplay}
+🏬 Building: ${buildingDisplay}
+👤 Requested by: ${userName} (${user.email})
+
+
 
 Please review and take action in the booking system.`;
 
@@ -895,11 +909,11 @@ Our team is reviewing the details and will notify you once a decision is made.
 Should you have any questions or updates, please don’t hesitate to reach out.
 
 Booking Details:
-Date: ${bookingDate}
-Time: ${startTime} - ${endTime}
-Room: ${roomDisplay}
-Building: ${buildingDisplay}
-Requested by: ${userName} (${user.email})
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🚪 Room: ${roomDisplay}
+🏢 Building: ${buildingDisplay}
+👤 Requested by: ${userName} (${user.email})
 
 Sincerely,
 

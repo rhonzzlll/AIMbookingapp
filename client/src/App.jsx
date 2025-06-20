@@ -5,6 +5,7 @@ import ProtectedAdminRoute from './components/ProtectedAdminRoute';
 import { MsalProvider } from "@azure/msal-react";
 import { PublicClientApplication } from "@azure/msal-browser";
 import { msalConfig } from "./msalConfig";
+import AuditTrail from './pages/AdminPage/AuditTrail'; // <-- Add this import at the top with other Admin Pages
 
 // Admin Pages
 import Bookings from './pages/AdminPage/Bookings';
@@ -64,6 +65,10 @@ const AppContent = () => {
                         <Route path="/admin/users" element={
                             <ProtectedAdminRoute><Users /></ProtectedAdminRoute>
                         } />
+                         <Route path="/admin/audit" element={
+                            <ProtectedAdminRoute><AuditTrail /></ProtectedAdminRoute>
+                        } />
+                     
                      
                         {/* User Routes */}
                         <Route path="/Home" element={<Home />} />
