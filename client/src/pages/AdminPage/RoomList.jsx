@@ -373,7 +373,7 @@ const RoomList = ({ rooms, onEdit, onDelete, buildings = [] }) => {
           <TableFooter>
             <TableRow>
               <TablePagination
-                rowsPerPageOptions={[10, 25, 50]}
+                rowsPerPageOptions={[10]}
                 colSpan={7}
                 count={sortedRooms.length}
                 rowsPerPage={rowsPerPage}

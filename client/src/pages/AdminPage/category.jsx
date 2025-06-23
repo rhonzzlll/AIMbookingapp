@@ -488,7 +488,7 @@ const CategoryManagement = () => {
                   <TableFooter>
                     <TableRow>
                       <TablePagination
-                        rowsPerPageOptions={[10, 25, 50]}
+                        rowsPerPageOptions={[10]}
                         colSpan={3}
                         count={filteredCategories.length}
                         rowsPerPage={rowsPerPage}

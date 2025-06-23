@@ -337,6 +337,17 @@ const formatTime = (timeString) => {
                   />
                   <span className="text-sm">Declined</span>
                 </label>
+
+                {/* Add Cancelled status */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedStatuses.includes('cancelled')} 
+                    onChange={() => handleCheckboxChange('cancelled')}
+                    className="rounded text-teal-600 focus:ring-teal-500"
+                  />
+                  <span className="text-sm">Cancelled</span>
+                </label> 
               </div>
             </div>
 

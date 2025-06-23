@@ -99,10 +99,10 @@ We’re pleased to inform you that your reservation has been APPROVED.
 Should you have any special requests or require further assistance, please don’t hesitate to reach out.
 
 Booking Details:
-Date: ${bookingDate}
- Time: ${startTime} - ${endTime}
- Room: ${roomDisplay}
- Building: ${buildingDisplay}
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🚪 Room: ${roomDisplay}
+🏢 Building: ${buildingDisplay}
 
 Sincerely,
 
@@ -116,11 +116,10 @@ ACC Reservations`;
 Thank you for your reservation request. Unfortunately, we are unable to accommodate your booking at this time due to unavailability or a scheduling conflict.
 
 We encourage you to check the booking calendar for alternative date and/or time.
- Time: ${startTime} - ${endTime}
- Room: ${roomDisplay}
- Building: ${buildingDisplay}
-${declineReason ? `\n Reason: ${declineReason}` : ''}
-
+⏰ Time: ${startTime} - ${endTime}
+🚪 Room: ${roomDisplay}
+🏢 Building: ${buildingDisplay}
+${declineReason ? `\n📝 Reason: ${declineReason}` : ''}
 Sincerely,
 
 ACC Reservations`;
@@ -157,10 +156,10 @@ Our team is reviewing the details and will notify you once a decision is made.
 Should you have any questions or updates, please don’t hesitate to reach out.
 
 Booking Details:
-Date: ${bookingDate}
-Time: ${startTime} - ${endTime}
-Room: ${roomDisplay}
-Building: ${buildingDisplay}
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🚪 Room: ${roomDisplay}
+🏢 Building: ${buildingDisplay}
 
 Sincerely,
 
@@ -224,11 +223,11 @@ Should you have any questions or updates, please don’t hesitate to reach out.
 
 
 Booking Details:
-Date: ${bookingDate}
-Time: ${startTime} - ${endTime}
-Room: ${roomDisplay}
-Building: ${buildingDisplay}
-Requested by: ${userName} (${user && user.email ? user.email : ''})
+📅 Date: ${bookingDate}  
+⏰ Time: ${startTime} - ${endTime}  
+🚪 Room: ${roomDisplay}  
+🏢 Building: ${buildingDisplay}  
+📧 Requested by: ${userName} (${user && user.email ? user.email : ''})  
 
  
 Sincerely,
@@ -281,11 +280,11 @@ async function sendCancelledBookingToAdmins(booking) {
 A booking has been cancelled.
 
 Cancelled Booking Details:
- Date: ${bookingDate}
- Time: ${startTime} - ${endTime}
- Room: ${roomDisplay}
- Building: ${buildingDisplay}
- Cancelled by: ${userName} (${user && user.email ? user.email : ''})
+📅 Date: ${bookingDate}
+⏰ Time: ${startTime} - ${endTime}
+🚪 Room: ${roomDisplay}
+🏢 Building: ${buildingDisplay}
+❌ Cancelled by: ${userName} (${user && user.email ? user.email : ''})
 
 Please update your records if necessary.
 

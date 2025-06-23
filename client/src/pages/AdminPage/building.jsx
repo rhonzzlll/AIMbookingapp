@@ -682,7 +682,7 @@ const BuildingManagement = () => {
                   <TableFooter>
                     <TableRow>
                       <TablePagination
-                        rowsPerPageOptions={[10, 25, 50]}
+                        rowsPerPageOptions={[10]}
                         colSpan={6}
                         count={filteredBuildings.length}
                         rowsPerPage={rowsPerPage}

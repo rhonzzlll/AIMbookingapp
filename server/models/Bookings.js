@@ -190,6 +190,13 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: 'categoryId'
       });
     }
+    // Add this association for AuditLog
+    if (models.AuditLog) {
+      Booking.hasMany(models.AuditLog, {
+        foreignKey: 'bookingId',
+        sourceKey: 'bookingId'
+      });
+    }
   };
 
   return Booking;
