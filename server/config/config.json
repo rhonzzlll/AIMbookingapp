@@ -2,8 +2,8 @@
   "development": {
     "username": "sa",
     "password": "123456",
-    "database": "bookings",
-    "host": "AIMWINOSOJT10\\SQLEXPRESS",
+    "database": "bookings101",
+    "host": "AIMWINOSOJT10",
     "dialect": "mssql",
     "dialectOptions": {
       "options": {
@@ -16,8 +16,8 @@
   "test": {
     "username": "sa",
     "password": "123456",
-    "database": "bookings",
-    "host": "AIMWINOSOJT10\\SQLEXPRESS",
+    "database": "bookings101",
+    "host": "AIMWINOSOJT10",
     "dialect": "mssql",
     "dialectOptions": {
       "options": {
@@ -30,8 +30,8 @@
   "production": {
     "username": "sa",
     "password": "123456",
-    "database": "bookings",
-    "host": "AIMWINOSOJT10\\SQLEXPRESS",
+    "database": "bookings101",
+    "host": "AIMWINOSOJT10",
     "dialect": "mssql",
     "dialectOptions": {
       "options": {
