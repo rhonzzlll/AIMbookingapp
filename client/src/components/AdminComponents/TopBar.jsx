@@ -17,6 +17,10 @@ const TopBar = ({ onSearch }) => {
     localStorage.removeItem('user');
     localStorage.removeItem('_id');
     localStorage.removeItem('token');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('firstName');
+    localStorage.removeItem('lastName');
+    localStorage.removeItem('role');
     navigate('/login');
   };
 

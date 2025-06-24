@@ -71,39 +71,48 @@ const Login = () => {
       setLoading(false);
     }
   };
-
-  const handleMicrosoftLogin = () => {
-    instance.loginPopup({
-      scopes: ["user.read"],
-    }).then(async (response) => {
-      try {
-        console.log("MSAL login response:", response); // <-- Add this
-        const { data: res } = await axios.post(
-          `${import.meta.env.VITE_API_URI}/auth/microsoft`,
-          { idToken: response.idToken }
-        );
-        console.log("Backend response:", res); // <-- Add this
-        setAuth({
-          userId: res.userId,
-          token: res.token,
-          role: res.role,
-        });
-        const userRole = res.role ? res.role.toLowerCase() : '';
-        if (userRole === 'admin' || userRole === 'superadmin') {
-          navigate('/admin/dashboard');
-        } else {
-          navigate('/home');
-        }
-      } catch (err) {
-        setErrorMsg("Microsoft login failed. Please try again.");
-        console.error("Backend error:", err); // <-- Add this
+const handleMicrosoftLogin = () => {
+  instance.loginPopup({
+    scopes: ["user.read"],
+  }).then(async (response) => {
+    try {
+      console.log("MSAL login response:", response);
+      const { data: res } = await axios.post(
+        `${import.meta.env.VITE_API_URI}/auth/microsoft`,
+        { idToken: response.idToken }
+      );
+      console.log("Backend response:", res);
+      
+      // Ensure we're storing the correct user ID format
+      const userId = res.userId || res._id || res.id;
+      
+      // Store in localStorage manually to ensure it's saved
+      localStorage.setItem('userId', userId);
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('role', res.role);
+      
+      // Also set in context
+      setAuth({
+        userId: userId,
+        token: res.token,
+        role: res.role,
+      });
+      
+      const userRole = res.role ? res.role.toLowerCase() : '';
+      if (userRole === 'admin' || userRole === 'superadmin') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/home');
       }
-    }).catch((error) => {
+    } catch (err) {
       setErrorMsg("Microsoft login failed. Please try again.");
-      console.error("MSAL error:", error); // <-- Add this
-    });
-  };
-
+      console.error("Backend error:", err);
+    }
+  }).catch((error) => {
+    setErrorMsg("Microsoft login failed. Please try again.");
+    console.error("MSAL error:", error);
+  });
+};
   return (
     <div className="absolute inset-0 bg-cover bg-center z-0r" style={{ backgroundImage: `url(${AIMlogotest})` }}>
       <div className="flex items-center justify-center min-h-screen bg-black/50">
