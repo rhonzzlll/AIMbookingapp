@@ -1,6 +1,5 @@
 {
   "development": {
-<<<<<<< HEAD
     "username": "sa",
     "password": "123456",
     "database": "bookings101",
@@ -41,29 +40,5 @@
         "encrypt": true
       }
     }
-=======
-    "username": "root",
-    "password": "root",
-    "database": "bookings",
-    "host": "127.0.0.1",
-    "port": 3306,
-    "dialect": "mysql"
-  },
-  "test": {
-    "username": "root",
-    "password": "root",
-    "database": "bookings",
-    "host": "127.0.0.1",
-    "port": 3306,
-    "dialect": "mysql"
-  },
-  "production": {
-    "username": "root",
-    "password": "root",
-    "database": "bookings",
-    "host": "127.0.0.1",
-    "port": 3306,
-    "dialect": "mysql"
->>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
   }
 }

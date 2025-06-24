@@ -105,13 +105,9 @@ const initialFormState = {
   isBreakRoom: false,
   remarks: '',
   bookingId: null,
-<<<<<<< HEAD
   numberOfPaxBreakRoom: '',
   startTimeBreakRoom: '',
   endTimeBreakRoom: '',
-=======
-  costCenterCharging: '', // <-- Add this line
->>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 };
 
 // Time options for dropdowns
