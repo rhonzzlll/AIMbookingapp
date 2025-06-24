@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_URI;
+
 const AdminSidebar = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,7 @@ const AdminSidebar = () => {
           return;
         }
 
-        const response = await axios.get(`http://localhost:5000/api/users/${userId}`, {
+        const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -94,23 +96,31 @@ const AdminSidebar = () => {
       text: 'Rooms',
       path: '/admin/rooms',
       children: [
-            {
-              id: 'building',
-              icon: '🏢',
-              text: 'Building',
-              path: '/admin/building',
-            },
-            {
-              id: 'category',
-              icon: '📂',
-              text: 'Category',
-              path: '/admin/category',
-            },
+        {
+          id: 'building',
+          icon: '🏢',
+          text: 'Building',
+          path: '/admin/building',
+        },
+        {
+          id: 'category',
+          icon: '📂',
+          text: 'Category',
+          path: '/admin/category',
+        },
       ],
     },
     { id: 'bookings', icon: '📝', text: 'Bookings', path: '/admin/bookings' },
     { id: 'users', icon: '👥', text: 'Users', path: '/admin/users' },
+      { id: 'audit', icon: '🕵️', text: 'Audit Trail', path: '/admin/audit' },
+
   ];
+
+  const getFullName = (user) => {
+    if (!user) return '';
+    if (user.full_name) return user.full_name;
+    return [user.firstName, user.lastName].filter(Boolean).join(' ');
+  };
 
   return (
     <div className="fixed top-0 left-0 h-screen w-64 bg-gray-800 text-white flex flex-col shadow-lg">
@@ -198,7 +208,7 @@ const AdminSidebar = () => {
             ) : (
               <>
                 <div className="text-sm font-medium">
-                  {user ? `${user.firstName} ${user.lastName}` : 'User not found'}
+                  {user ? getFullName(user) : 'User not found'}
                 </div>
                 <div className="text-xs text-gray-400">{user?.role || ''}</div>
               </>

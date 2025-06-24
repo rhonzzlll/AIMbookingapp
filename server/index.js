@@ -4,24 +4,23 @@ dotenv.config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const multer = require('multer'); // Added for file uploads
-const path = require('path'); // For path operations
-const fs = require('fs'); // For directory operations
+const multer = require('multer'); 
+const path = require('path');  
+const fs = require('fs');  
 
 const app = express();
 
-// Load Sequelize instance
+ 
 const db = require('./models');
 const sequelize = db.sequelize;
-
-// SET THE DB TO THE APP - THIS IS THE CRITICAL ADDITION
+ 
 app.set('db', db);
 
-// Configure multer storage
+ 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadDir = path.join(__dirname, 'public/uploads');
-    // Create directory if it doesn't exist
+   
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -56,8 +55,16 @@ const upload = multer({
 // Make upload available throughout the app
 app.locals.upload = upload;
 
-// Middleware
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://aimbooking.aim.edu',
+  'http://aimbooking.aim.edu'
+];
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
@@ -72,6 +79,7 @@ const bookingsRoutes = require('./routes/bookingsRoutes');
 const buildingRoutes = require('./routes/buildingRoutes');  // capital R if file is named buildingRoutes.js
 
 const categoryRoutes = require('./routes/categoryRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
 
 // Mount routes
 app.use('/api/bookings', bookingsRoutes);
@@ -80,6 +88,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/buildings', buildingRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/audit-trails', auditLogRoutes);
 
 // Error handler for multer errors
 app.use((err, req, res, next) => {
@@ -130,6 +139,13 @@ sequelize.authenticate()
     console.error('Failed to connect to the database:', err);
   });
 
+// Add a logout endpoint if you don't have one yet:
+app.post('/api/logout', (req, res) => {
+  // If you use cookies for auth, clear them here:
+  res.clearCookie('token'); // Use your cookie name if needed
+  res.status(200).json({ message: 'Logged out' });
+});
+
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

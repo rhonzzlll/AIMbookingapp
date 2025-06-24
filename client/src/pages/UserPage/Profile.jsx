@@ -4,13 +4,20 @@ import { toast } from 'react-toastify';
 import Header from './Header';
 import home from "../../images/home.png";
 import imageCompression from 'browser-image-compression';
+import { FaEye, FaEyeSlash } from "react-icons/fa"; // Add this import at the top
+
+const API_BASE_URL = import.meta.env.VITE_API_URI; // Use env variable
 
 const Profile = () => {
-  const departments = ['ICT', 'HR', 'Finance', 'Marketing', 'Operations'];
+  // Grouped options for toggleable select
+  const departmentGroups = [
+    { label: "Schools", options: ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'] },
+    { label: "Departments", options: ["SRF", "IMCG", "Marketing", "ICT", "HR", "Finance", "Registrars", "Others"] }
+  ];
+
   const userId = localStorage.getItem("userId");
   const token = localStorage.getItem("token");
   const userRole = localStorage.getItem("role");
-  const API_BASE_URL = 'http://localhost:5000/api';
   
   const [user, setUser] = useState({
     firstName: '',
@@ -35,12 +42,16 @@ const Profile = () => {
 
   const [loading, setLoading] = useState(false);
   const [useLocalData, setUseLocalData] = useState(false);
+  const [showPassword, setShowPassword] = useState({
+    old: false,
+    new: false,
+    confirm: false,
+  });
 
   // Fetch user data on component mount
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        console.log(`Fetching user data for userId: ${userId}`);
         const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -52,7 +63,7 @@ const Profile = () => {
           firstName: userData.firstName,
           lastName: userData.lastName,
           department: userData.department || '',
-          birthdate: userData.birthdate || '', // Handle Sequelize DATEONLY format
+          birthdate: userData.birthdate || '',
           email: userData.email,
           profileImage: userData.profileImage || '',
           role: userData.role || userRole || '',
@@ -63,8 +74,6 @@ const Profile = () => {
           setPreviewImage(`${API_BASE_URL}/uploads/${userData.profileImage}`);
         }
       } catch (error) {
-        console.error('Error fetching user data:', error);
-
         setUseLocalData(true);
 
         const firstName = localStorage.getItem('firstName') || '';
@@ -90,7 +99,7 @@ const Profile = () => {
     } else {
       setError('User ID not found. Please log in again.');
     }
-  }, [userId, token, userRole]);
+  }, [userId, token, userRole, API_BASE_URL]);
 
   // Handle input changes for user data
   const handleInputChange = (e) => {
@@ -138,7 +147,6 @@ const Profile = () => {
         };
         reader.readAsDataURL(compressedFile);
       } catch (error) {
-        console.error('Error processing image:', error);
         setError('Failed to process image. Please try a different file.');
       } finally {
         setLoading(false);
@@ -146,21 +154,56 @@ const Profile = () => {
     }
   };
 
-  // Handle form submission - updated for fetch API
+  // Handle form submission - updated for image upload
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
-
-      console.log("Authorization Header:", `Bearer ${token}`);
-
-      // Ensure userId is defined
       if (!userId) {
         toast.error("User ID is missing. Please log in again.");
         setLoading(false);
         return;
+      }
+
+      let uploadedImageName = user.profileImage;
+
+      // 1. If a new image is selected, upload it first
+      if (profileImageFile) {
+        const formData = new FormData();
+        formData.append('profileImage', profileImageFile);
+
+        const uploadRes = await fetch(`${API_BASE_URL}/users/${userId}/upload-profile-image`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const data = await uploadRes.json();
+          uploadedImageName = data.filename;
+        } else {
+          const err = await uploadRes.json().catch(() => null);
+          toast.error(err?.error || "Failed to upload image");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. Now update the user profile with the new image filename
+      const payload = {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        department: user.department,
+        birthdate: user.birthdate,
+        profileImage: uploadedImageName,
+      };
+
+      if (userRole && userRole.toLowerCase() === "admin") {
+        payload.role = user.role;
+        if (user.isActive !== undefined) payload.isActive = user.isActive;
       }
 
       const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
@@ -169,40 +212,34 @@ const Profile = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(user),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         const updatedUser = await response.json();
-        setUser(updatedUser); 
+        setUser(updatedUser);
+        if (uploadedImageName) {
+          setPreviewImage(`${API_BASE_URL}/uploads/${uploadedImageName}`);
+        }
+        // Update localStorage so HomePage can use the latest image
+        localStorage.setItem('profileImage', uploadedImageName || '');
+        localStorage.setItem('firstName', updatedUser.firstName || '');
+        localStorage.setItem('lastName', updatedUser.lastName || '');
+        // Notify HomePage to refresh user info
+        window.dispatchEvent(new Event('userProfileUpdated'));
         toast.success("Profile updated successfully!");
+        setSuccess("Profile updated successfully!");
+
+        // Clear the success message after 3 seconds
+        setTimeout(() => setSuccess(''), 3000);
       } else {
-        const errorData = await response.json().catch(() => null); // Handle empty response
+        const errorData = await response.json().catch(() => null);
         toast.error(errorData?.message || "Failed to update profile");
       }
     } catch (error) {
-      console.error("Error updating profile:", error);
       toast.error("Something went wrong! Please try again.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Helper function to decode JWT tokens
-  const parseJwt = (token) => {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonPayload);
-    } catch (error) {
-      console.error('Error parsing JWT:', error);
-      return null;
     }
   };
 
@@ -233,18 +270,18 @@ const Profile = () => {
 
       if (response.status === 200) {
         toast.success('Password changed successfully');
-        // Reset password fields
+        setSuccess('Password changed successfully!');
         setPasswords({
           oldPassword: '',
           newPassword: '',
           confirmPassword: '',
         });
+        setTimeout(() => setSuccess(''), 3000);
       } else {
         toast.error('Failed to change password. Please try again.');
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to change password');
-      console.error('Error changing password:', error);
     } finally {
       setLoading(false);
     }
@@ -370,19 +407,21 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">School / Department</label>
                     <select
                       name="department"
                       value={user.department}
                       onChange={handleInputChange}
                       className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="" disabled>Select Department</option>
-                      {departments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {dept}
-                        </option>
-                      ))}
+                      <option value="">Select School or Department</option>
+                      {departmentGroups.flatMap(group =>
+                        group.options.map(opt => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 
@@ -413,41 +452,65 @@ const Profile = () => {
           {/* Change Password Section */}
           <div className="bg-white bg-opacity-90 shadow-md rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Change Password</h2>
+            {/* Success message for password change */}
+            {success && (
+              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                {success}
+              </div>
+            )}
             <form onSubmit={handlePasswordSubmit}>
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
                 <input
-                  type="password"
+                  type={showPassword.old ? "text" : "password"}
                   name="oldPassword"
                   value={passwords.oldPassword}
                   onChange={handlePasswordChange}
-                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                   required
                 />
+                <span
+                  className="absolute right-3 top-9 cursor-pointer"
+                  onClick={() => setShowPassword({ ...showPassword, old: !showPassword.old })}
+                >
+                  {showPassword.old ? <FaEyeSlash /> : <FaEye />}
+                </span>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                 <input
-                  type="password"
+                  type={showPassword.new ? "text" : "password"}
                   name="newPassword"
                   value={passwords.newPassword}
                   onChange={handlePasswordChange}
-                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                   required
                 />
+                <span
+                  className="absolute right-3 top-9 cursor-pointer"
+                  onClick={() => setShowPassword({ ...showPassword, new: !showPassword.new })}
+                >
+                  {showPassword.new ? <FaEyeSlash /> : <FaEye />}
+                </span>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
                 <input
-                  type="password"
+                  type={showPassword.confirm ? "text" : "password"}
                   name="confirmPassword"
                   value={passwords.confirmPassword}
                   onChange={handlePasswordChange}
-                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                   required
                 />
+                <span
+                  className="absolute right-3 top-9 cursor-pointer"
+                  onClick={() => setShowPassword({ ...showPassword, confirm: !showPassword.confirm })}
+                >
+                  {showPassword.confirm ? <FaEyeSlash /> : <FaEye />}
+                </span>
               </div>
 
               <button

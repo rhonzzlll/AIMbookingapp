@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import axios from 'axios';
 import bg from '../../images/bg.png';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Confirm from "../../components/ui/ConfirmationModal";  
+import { v4 as uuidv4 } from 'uuid';  
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -13,6 +14,9 @@ const TIME_OPTIONS = [
   '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
   '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM',
 ];
+
+// Add this default interval for 8:00 AM (480) to 10:00 PM (1320)
+const DEFAULT_INTERVALS = [{ start: 480, end: 1320 }];
 
 const convertTo24HourFormat = (time12h) => {
   if (!time12h) return '';
@@ -57,8 +61,15 @@ const toTimeISOString = (time12h) => {
   return new Date(Date.UTC(2025, 0, 1, hours, parseInt(minutes, 10))).toISOString();
 };
  
+<<<<<<< HEAD
 const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, selectedRoomId, availableIntervals = []}) => {
   // ...
+=======
+const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, selectedRoomId, availableIntervals}) => {
+  // Use default if not provided or empty
+  const intervals = (availableIntervals && availableIntervals.length > 0) ? availableIntervals : DEFAULT_INTERVALS;
+
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
   const location = useLocation();
   const bookingData = location.state?.bookingData;
   const navigate = useNavigate(); // Initialize the navigate function
@@ -73,9 +84,9 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     lastName: '',
     email: '',
     buildingId: '',
-    buildingName: '', // Add this field to store the name
+    buildingName: '',
     categoryId: '',
-    categoryName: '', // Add this field to store the name
+    categoryName: '',
     roomId: '',
     date: format(new Date(), 'yyyy-MM-dd'), 
     startTime: '09:00 AM',
@@ -89,7 +100,8 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     isMealRoom: false,
     isBreakRoom: false,
     bookingCapacity: 1,
-    status: 'pending'
+    status: 'pending',
+    costCenterCharging: '', // <-- Add this line
   });
 
   const [rooms, setRooms] = useState([]);
@@ -108,6 +120,8 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [roomMap, setRoomMap] = useState({});
   const [blockedTimes, setBlockedTimes] = useState([]);
+  // Add this state to manage recurring group ID
+  const [recurringGroupId, setRecurringGroupId] = useState('');
 
   const userId = localStorage.getItem('userId');
   const token = localStorage.getItem('token');
@@ -115,6 +129,16 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
 
   // Predefined departments array
   const departments = ['ASITE', 'WSGSB', 'SZGSDM', 'SEELL', 'Other Units', 'External'];
+<<<<<<< HEAD
+=======
+
+  // Recurrence options
+  const RECURRENCE_OPTIONS = [
+    { value: 'Daily', label: 'Daily' },
+    { value: 'Weekly', label: 'Weekly' },
+    { value: 'Monthly', label: 'Monthly' }
+  ];
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
   // Apply booking data from AccRooms if available
   useEffect(() => {
@@ -126,8 +150,11 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
         setFormData((prevFormData) => ({
           ...prevFormData,
           buildingId: room.buildingId || '',
+          buildingName: room.buildingName || '',
           categoryId: room.categoryId || '',
+          categoryName: room.categoryName || '',
           roomId: room.roomId || '',
+          roomName: room.roomName || '',
         }));
       }
 
@@ -143,6 +170,37 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
       }
     }
   }, [bookingData]);
+
+  // Step 1: Set building/category from bookingData as soon as it arrives
+  useEffect(() => {
+    if (bookingData && bookingData.room) {
+      setFormData((prevFormData) => ({
+        ...prevFormData,
+        buildingId: bookingData.room.buildingId || '',
+        buildingName: bookingData.room.buildingName || '',
+        categoryId: bookingData.room.categoryId || '',
+        categoryName: bookingData.room.categoryName || '',
+      }));
+    }
+  }, [bookingData]);
+
+  // Step 2: Once filteredRooms are ready, set roomId
+  useEffect(() => {
+    if (
+      bookingData &&
+      bookingData.room &&
+      formData.buildingId &&
+      formData.categoryId &&
+      filteredRooms.length > 0
+    ) {
+      setFormData((prevFormData) => ({
+        ...prevFormData,
+        roomId: bookingData.room.roomId || '',
+        roomName: bookingData.room.roomName || '',
+      }));
+    }
+    // eslint-disable-next-line
+  }, [filteredRooms, bookingData, formData.buildingId, formData.categoryId]);
 
   // Fetch user data and populate the form
   const fetchUserData = async () => {
@@ -202,23 +260,43 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     const fetchRooms = async () => {
       try {
         const response = await axios.get(`${API_BASE_URL}/rooms`);
-        
-        // Map the API response to include the nested name properties
-        const processedRooms = response.data.map(room => ({
+        let processedRooms = response.data.map(room => ({
           ...room,
-          // Extract name from nested objects
           buildingName: room.Building?.buildingName || room.buildingName || room.buildingId,
           categoryName: room.Category?.categoryName || room.categoryName || room.categoryId
         }));
-        
-        setRooms(processedRooms);
-        console.log("Processed rooms data:", processedRooms);
-        
+
+        // Flatten subrooms into the rooms array
+        const flattenedRooms = [];
+        processedRooms.forEach(room => {
+          // Push the main room
+          flattenedRooms.push(room);
+          // Push subrooms as separate rooms
+          if (room.subRooms && Array.isArray(room.subRooms)) {
+            room.subRooms.forEach(subroom => {
+              flattenedRooms.push({
+                ...subroom,
+                buildingId: room.buildingId,
+                buildingName: room.buildingName,
+                categoryId: room.categoryId,
+                categoryName: room.categoryName,
+                roomId: subroom.subroomId,
+                roomName: `${room.roomName} - ${subroom.subRoomName}`,
+                isSubroom: true,
+                parentRoomId: room.roomId,
+                parentRoomName: room.roomName,
+              });
+            });
+          }
+        });
+
+        setRooms(flattenedRooms);
+
         // Extract unique buildings with names from the nested structure
         const uniqueBuildings = [];
         const buildingsMap = {};
         
-        processedRooms.forEach(room => {
+        flattenedRooms.forEach(room => {
           if (!buildingsMap[room.buildingId]) {
             buildingsMap[room.buildingId] = true;
             uniqueBuildings.push({
@@ -230,21 +308,21 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
         
         // Sort buildings by name
         uniqueBuildings.sort((a, b) => a.name.localeCompare(b.name));
-        console.log("Processed buildings:", uniqueBuildings);
         setBuildings(uniqueBuildings);
         
         // Create a map of room IDs to room data with proper names
         const newRoomMap = {};
-        processedRooms.forEach(room => {
+        flattenedRooms.forEach(room => {
           newRoomMap[room.roomId] = {
             roomName: room.roomName,
             buildingId: room.buildingId,
-            buildingName: room.Building?.buildingName || room.buildingName || room.buildingId,
+            buildingName: room.buildingName,
             categoryId: room.categoryId,
-            categoryName: room.Category?.categoryName || room.categoryName || room.categoryId
+            categoryName: room.categoryName
           };
         });
         setRoomMap(newRoomMap);
+
       } catch (err) {
         console.error('Error fetching rooms:', err);
         setError('Failed to fetch rooms. Please try again.');
@@ -275,7 +353,6 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
       
       // Sort categories by name
       uniqueCategories.sort((a, b) => a.name.localeCompare(b.name));
-      console.log("Categories for building:", uniqueCategories);
       setCategories(uniqueCategories);
     } else {
       setCategories([]);
@@ -341,11 +418,12 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     setUnavailableTimeSlots([]);
   
     // Filter bookings for the selected building and room
-    const relevantBookings = bookings.filter(booking =>
-      booking.buildingId === formData.buildingId &&
-      new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
-      booking.status?.toLowerCase() === 'confirmed'
-    );
+  const relevantBookings = bookings.filter(
+  booking =>
+    booking.roomId === formData.roomId &&
+    new Date(booking.startTime).toDateString() === new Date(`${formData.date}T00:00:00`).toDateString() &&
+    ['confirmed', 'pending'].includes(booking.status?.toLowerCase())
+);
   
     const unavailable = [];
   
@@ -363,6 +441,7 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
       };
   
       TIME_OPTIONS.forEach(timeOption => {
+        
         const timeOption24 = convertTo24HourFormat(timeOption);
         const timeOptionDate = new Date(`${formData.date}T${timeOption24}:00`);
   
@@ -478,6 +557,16 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     }
   };
 
+  // Generate recurringGroupId when user checks "isRecurring"
+  useEffect(() => {
+    if (formData.isRecurring && !recurringGroupId) {
+      setRecurringGroupId(uuidv4());
+    }
+    if (!formData.isRecurring && recurringGroupId) {
+      setRecurringGroupId('');
+    }
+  }, [formData.isRecurring]);
+
   const checkTimeAvailability = async (data) => {
     if (!data.date || !data.startTime || !data.endTime || !data.roomId || !data.categoryId) {
       setAvailabilityStatus({
@@ -573,7 +662,11 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
 
   // Only show interval starts as start times
   const getAvailableStartTimes = () => {
+<<<<<<< HEAD
     if (!availableIntervals || availableIntervals.length === 0) return [];
+=======
+    if (!intervals || intervals.length === 0) return [];
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
     // Calculate if the booking is for today
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -581,7 +674,11 @@ const BookingForm = ({onBookingSubmit, setSelectedRoomId, setSelectedRoomName, s
     const currentMinutes = getCurrentMinutes();
 
     const times = [];
+<<<<<<< HEAD
     availableIntervals.forEach(({ start, end }) => {
+=======
+    intervals.forEach(({ start, end }) => {
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
       for (let t = start; t + 30 <= end; t += 30) {
         // If it's today, only show times in the future
         if (!isToday || t > currentMinutes) {
@@ -617,7 +714,11 @@ const getFilteredEndTimes = () => {
   };
   const startMinutes = toMinutes(formData.startTime);
 
+<<<<<<< HEAD
   const interval = availableIntervals.find(
+=======
+  const interval = intervals.find(
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
     ({ start, end }) => start <= startMinutes && startMinutes < end
   );
   if (!interval) return [];
@@ -630,12 +731,33 @@ const getFilteredEndTimes = () => {
   return times;
 };
 
+<<<<<<< HEAD
+=======
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasSubmitted = useRef(false);
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return; // Prevent double submit
+    setIsSubmitting(true);
 
     if (!formData.startTime || !formData.endTime || !formData.roomId || !formData.buildingId || !userId) {
       setError('All fields (startTime, endTime, roomId, buildingId, and userId) are required.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (formData.isRecurring && (!formData.recurrenceType || !formData.recurrenceEndDate)) {
+      setError('Please select recurrence type and end date for recurring bookings.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (formData.isRecurring && formData.recurrenceEndDate < formData.date) {
+      setError('Recurrence end date must be after the booking start date.');
+      setIsSubmitting(false);
       return;
     }
 
@@ -643,17 +765,8 @@ const getFilteredEndTimes = () => {
     setError('');
 
     try {
-      // Convert times to proper format for SQL (HH:mm:ss)
       const startTimeSQL = convertTo24HourFormat(formData.startTime);
       const endTimeSQL = convertTo24HourFormat(formData.endTime);
-
-      // Log the converted times for debugging
-      console.log('Converted Start Time:', startTimeSQL);
-      console.log('Converted End Time:', endTimeSQL);
-
-      // Format timeSubmitted in a SQL Server-friendly format without timezone
-      const now = new Date();
-      const timeSubmitted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
       const bookingPayload = {
         userId,
@@ -668,40 +781,49 @@ const getFilteredEndTimes = () => {
         endTime: endTimeSQL,
         department: formData.department,
         isRecurring: formData.isRecurring,
-        recurrenceEndDate: formData.recurrenceEndDate === '' ? null : formData.recurrenceEndDate,
+        recurrencePattern: formData.isRecurring ? formData.recurrenceType : undefined,
+        recurrenceEndDate: formData.isRecurring ? formData.recurrenceEndDate : undefined,
+        recurringGroupId: formData.isRecurring ? recurringGroupId : undefined,
         notes: formData.notes === '' ? null : formData.notes,
         isMealRoom: formData.isMealRoom,
         isBreakRoom: formData.isBreakRoom,
         bookingCapacity: formData.bookingCapacity,
         status: formData.status,
-        // Do NOT send timeSubmitted
+        costCenterCharging: formData.costCenterCharging && formData.costCenterCharging.trim() !== '' ? formData.costCenterCharging : 'n/a',
+        // Breakout Room fields
+        numberOfPaxBreakRoom: formData.isBreakRoom ? formData.numberOfPaxBreakRoom || null : null,
+        startTimeBreakRoom: formData.isBreakRoom ? formData.startTimeBreakRoom || null : null,
+        endTimeBreakRoom: formData.isBreakRoom ? formData.endTimeBreakRoom || null : null,
       };
 
-      console.log('Booking Payload:', bookingPayload); // <-- Only this line
+      // Remove undefined fields  
+      Object.keys(bookingPayload).forEach(
+        (key) => bookingPayload[key] === undefined && delete bookingPayload[key]
+      );
 
-      const response = await fetch(`${API_BASE_URL}/bookings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(bookingPayload),
-      });
+      // POST to server
+      const response = await axios.post(
+        `${API_BASE_URL}/bookings`,
+        bookingPayload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create booking.');
+      // Optionally handle response
+      if (response.status === 201 || response.status === 200) {
+        // Success: maybe redirect or show a message
       }
 
-      const data = await response.json();
-      onBookingSubmit(data);
+      // Optionally call the callback
+      if (onBookingSubmit) onBookingSubmit(bookingPayload);
+
     } catch (err) {
       setError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+      setIsSubmitting(false);
+      hasSubmitted.current = false;
     }
   };
-
   return (
     <div className="font-sans">
       <div className="px-4 pb-8">
@@ -831,6 +953,7 @@ const getFilteredEndTimes = () => {
               />
             </div>
 
+<<<<<<< HEAD
              {/* Date*/}
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
@@ -847,6 +970,48 @@ const getFilteredEndTimes = () => {
                   required
                 />
               </div>
+=======
+            {/* Cost Center Charging */}
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-2">
+                Cost Center Charging <span className="text-xs text-gray-500">(Charge to)</span>
+              </label>
+              <input
+                type="text"
+                name="costCenterCharging"
+                value={formData.costCenterCharging || ''}
+                onChange={handleChange}
+                placeholder="for meeting, Leave it blank"
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-s text-gray-500 mt-1">Enter Cost Center/Department/Program to be charged</p>
+            </div>
+
+            {/* Date*/}
+            <div>
+              <label className="block text-gray-700 font-medium mb-2">
+                Date of Booking <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                name="date"
+                value={formData.date}
+                min={format(new Date(), 'yyyy-MM-dd')}
+                max={format(new Date(new Date().setMonth(new Date().getMonth() + 3)), 'yyyy-MM-dd')}
+                onChange={handleChange}
+                style={{
+                  textAlign: 'center',
+                  width: '100%',
+                  padding: '1rem',
+                  border: '1px solid #ccc',
+                  borderRadius: '0.5rem',
+                  outline: 'none'
+                }}
+                className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
             {/* Time */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-6">
@@ -906,7 +1071,11 @@ const getFilteredEndTimes = () => {
                   className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <label htmlFor="isMealRoom" className="ml-2 text-gray-700 font-medium">
+<<<<<<< HEAD
                   Request a Meal Room
+=======
+                   Meal Venue Required 
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
                 </label>
               </div>
               
@@ -920,7 +1089,11 @@ const getFilteredEndTimes = () => {
                     className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <label htmlFor="isBreakRoom" className="ml-2 text-gray-700 font-medium">
+<<<<<<< HEAD
                     Request a Breakout Room
+=======
+                  Breakout Room Required 
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
                   </label>
               </div>
             </div>
@@ -975,8 +1148,12 @@ const getFilteredEndTimes = () => {
                     disabled={!formData.startTimeBreakRoom}
                   >
                     <option value="">Select End Time</option>
+<<<<<<< HEAD
                     {/* You can use a filter here if you want to only allow times after start time */}
                     {TIME_OPTIONS
+=======
+                     {TIME_OPTIONS
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
                       .filter(
                         (time) =>
                           !formData.startTimeBreakRoom ||
@@ -992,7 +1169,11 @@ const getFilteredEndTimes = () => {
 
             {/* Recurring Booking Options */}
             <div className="mb-6">
+<<<<<<< HEAD
               <div className="flex items-center justify-center mb-2">
+=======
+              <div className="flex items-center mb-2 flex-wrap justify-center">
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
                 <input
                   type="checkbox"
                   id="isRecurring"
@@ -1020,9 +1201,9 @@ const getFilteredEndTimes = () => {
                       required={formData.isRecurring}
                     >
                       <option value="">Select Type</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
+                      {RECURRENCE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
                     </select>
                   </div>
                   
@@ -1037,7 +1218,7 @@ const getFilteredEndTimes = () => {
                       onChange={handleChange}
                       min={formData.date}
                       className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required={formData.isRecurring} // Only required if "isRecurring" is true
+                      required={formData.isRecurring}
                     />
                   </div>
                 </div>
@@ -1088,7 +1269,7 @@ const getFilteredEndTimes = () => {
                 className={`px-6 py-3 ${
                   availabilityStatus?.available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'
                 } text-white rounded-lg`}
-                disabled={loading || isCheckingAvailability || !availabilityStatus?.available}
+                disabled={loading || isCheckingAvailability || !availabilityStatus?.available || isSubmitting}
               >
                 {loading ? 'Submitting...' : isCheckingAvailability ? 'Checking Availability...' : 'Submit Booking'}
               </button>

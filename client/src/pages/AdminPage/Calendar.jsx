@@ -1,19 +1,45 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { FaSearch } from "react-icons/fa"; // Add this import at the top with other imports
 
 // API base URL configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
-// Department colors for visual differentiation
+// Department colors for visual differentiation (lighter backgrounds, clear borders)
 const departmentColors = {
+<<<<<<< HEAD
   'ASITE': 'bg-purple-200',
   'WSGSB': 'bg-green-200',
   'SZGSDM': 'bg-yellow-200',
   'SEELL': 'bg-blue-200',
   'Other Units': 'bg-orange-200',
   'External': 'bg-pink-200'
+=======
+  // Schools
+  'ASITE': 'bg-purple-100 border-purple-400 text-purple-900',
+  'WSGSB': 'bg-green-100 border-green-400 text-green-900',
+  'SZGSDM': 'bg-yellow-100 border-yellow-400 text-yellow-900',
+  'SEELL': 'bg-blue-100 border-blue-400 text-blue-900',
+  'Other Units': 'bg-orange-100 border-orange-400 text-orange-900',
+  'External': 'bg-pink-100 border-pink-400 text-pink-900',
+  // Departments
+'SRF': 'bg-gray-100 border-gray-400 text-gray-900',
+'IMCG': 'bg-gray-100 border-gray-400 text-gray-900',
+'Marketing': 'bg-gray-100 border-gray-400 text-gray-900',
+'ICT': 'bg-gray-100 border-gray-400 text-gray-900',
+'HR': 'bg-gray-100 border-gray-400 text-gray-900',
+'Finance': 'bg-gray-100 border-gray-400 text-gray-900',
+'Registrars': 'bg-gray-100 border-gray-400 text-gray-900',
+ 
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 };
 
+// Helperqwqwqqweweqewget department color dot
+const getDepartmentColorDot = (department) => {
+  const colorClass = departmentColors[department];
+  if (!colorClass) return 'bg-gray-400';
+  return colorClass.split(' ')[0]; // Extract just the background color class
+};
 
 const BookingCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -22,6 +48,7 @@ const BookingCalendar = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState(""); // <-- Add search state
 
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
@@ -34,7 +61,10 @@ const BookingCalendar = () => {
   ];
 
   // Fetch bookings from the API
+<<<<<<< HEAD
   
+=======
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
   const fetchBookings = async () => {
     try {
       setLoading(true);
@@ -55,11 +85,20 @@ const BookingCalendar = () => {
       const buildingMap = {};
       rooms.forEach(room => {
         roomMap[room.roomId] = room.roomName;
+<<<<<<< HEAD
         buildingMap[room.buildingId] = room.building || room.Building?.buildingName || '';
         if (room.subRooms) {
           room.subRooms.forEach((sub, idx) => {
             roomMap[`${room.roomName}-sub-${idx}`] = sub.roomName;
             buildingMap[`${room.buildingName}-sub-${idx}`] = room.buildingName || '';
+=======
+        // Fix: Use roomId as key for buildingMap
+        buildingMap[room.roomId] = room.buildingName || room.building || room.Building?.buildingName || '';
+        if (room.subRooms) {
+          room.subRooms.forEach((sub, idx) => {
+            roomMap[`${room.roomName}-sub-${idx}`] = sub.roomName;
+            buildingMap[`${room.roomName}-sub-${idx}`] = room.buildingName || room.building || room.Building?.buildingName || '';
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
           });
         }
       });
@@ -68,6 +107,7 @@ const BookingCalendar = () => {
         ? bookingsRes.data
         : bookingsRes.data.bookings || [];
 
+<<<<<<< HEAD
         const formatted = bookings.map(b => {
           const roomKey = b.roomId;
           return {
@@ -80,6 +120,20 @@ const BookingCalendar = () => {
             buildingName: buildingMap[roomKey] || b.building || '',
           };
         });
+=======
+      const formatted = bookings.map(b => {
+        const roomKey = b.roomId;
+        return {
+          ...b,
+          date: b.date,
+          time: new Date(b.startTime).toLocaleTimeString([], {
+            hour: 'numeric', minute: '2-digit', hour12: true
+          }),
+          roomName: roomMap[roomKey] || b.roomName || roomKey,
+          buildingName: buildingMap[roomKey] || b.building || '',
+        };
+      });
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
       setBookings(formatted);
     } catch (err) {
@@ -91,6 +145,7 @@ const BookingCalendar = () => {
     }
   };
 
+<<<<<<< HEAD
   
 useEffect(() => {
   fetchBookings();
@@ -142,6 +197,83 @@ const processedBookings = useMemo(() => {
   });
   return expandedBookings;
 }, [bookings, currentMonth, currentYear]);
+=======
+  useEffect(() => {
+    fetchBookings();
+    // eslint-disable-next-line
+  }, [currentMonth, currentYear]);
+
+  // Process bookings to account for recurring events
+  const processedBookings = useMemo(() => {
+    const expandedBookings = [];
+    const processedRecurringGroups = new Set();
+
+    // Only include confirmed bookings
+    const confirmedBookings = bookings.filter(b => b.status === 'confirmed');
+
+    confirmedBookings.forEach(booking => {
+      // Handle non-recurring bookings or bookings without recurrence pattern
+      if (!booking.isRecurring || !booking.recurrencePattern || booking.recurrencePattern === 'No') {
+        expandedBookings.push(booking);
+        return;
+      }
+
+      // Handle recurring bookings - only process each recurringGroupId once
+      if (booking.recurringGroupId && processedRecurringGroups.has(booking.recurringGroupId)) {
+        return;
+      }
+
+      if (booking.recurringGroupId) {
+        processedRecurringGroups.add(booking.recurringGroupId);
+      }
+
+      const startDate = new Date(booking.date);
+      const endDate = booking.recurrenceEndDate 
+        ? new Date(booking.recurrenceEndDate) 
+        : new Date(currentYear, currentMonth + 1, 0);
+
+      // Check if recurring booking overlaps with current month
+      if (startDate > new Date(currentYear, currentMonth + 1, 0) || 
+          endDate < new Date(currentYear, currentMonth, 1)) {
+        return;
+      }
+
+      // Generate recurring occurrences
+      let currentOccurrence = new Date(Math.max(
+        startDate,
+        new Date(currentYear, currentMonth, 1)
+      ));
+
+      while (currentOccurrence <= endDate && 
+             currentOccurrence <= new Date(currentYear, currentMonth + 1, 0)) {
+        const occurrenceDate = currentOccurrence.toISOString().split('T')[0];
+        
+        expandedBookings.push({
+          ...booking,
+          date: occurrenceDate,
+          isRecurringInstance: true,
+          originalDate: booking.date,
+          roomName: booking.roomName,
+          buildingName: booking.buildingName,
+        });
+
+        // Move to next occurrence based on recurrence pattern
+        if (booking.recurrencePattern === 'Daily') {
+          currentOccurrence.setDate(currentOccurrence.getDate() + 1);
+        } else if (booking.recurrencePattern === 'Weekly') {
+          currentOccurrence.setDate(currentOccurrence.getDate() + 7);
+        } else if (booking.recurrencePattern === 'Monthly') {
+          currentOccurrence.setMonth(currentOccurrence.getMonth() + 1);
+        } else {
+          // Unknown pattern, break to avoid infinite loop
+          break;
+        }
+      }
+    });
+
+    return expandedBookings;
+  }, [bookings, currentMonth, currentYear]);
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
   useEffect(() => {
     console.log("✅ Processed bookings:", processedBookings);
@@ -150,7 +282,6 @@ const processedBookings = useMemo(() => {
   useEffect(() => {
     console.log("✅ Raw API bookings:", bookings);
   }, [bookings]);
-
 
   const groupBookingsByDate = (bookings) => {
     const grouped = {};
@@ -189,6 +320,7 @@ const processedBookings = useMemo(() => {
   const backToCalendar = () => setView('month');
 
   // Format time for display
+<<<<<<< HEAD
 const formatTime = (timeString) => {
   if (!timeString) return '';
   
@@ -224,6 +356,43 @@ const formatTime = (timeString) => {
   // Fallback
   return timeString;
 };
+=======
+  const formatTime = (timeString) => {
+    if (!timeString) return '';
+    
+    // If AM/PM already, return as-is
+    if (/am|pm/i.test(timeString)) return timeString;
+
+    // If it's ISO string with T, extract the time part and convert to AM/PM
+    if (timeString.includes('T')) {
+      // Parse as UTC so time doesn't get offset
+      const date = new Date(timeString);
+      if (!isNaN(date)) {
+        let hour = date.getUTCHours();
+        let minute = date.getUTCMinutes();
+        let suffix = 'AM';
+        if (hour === 0) { hour = 12; }
+        else if (hour === 12) { suffix = 'PM'; }
+        else if (hour > 12) { hour -= 12; suffix = 'PM'; }
+        return `${hour}:${minute.toString().padStart(2, '0')} ${suffix}`;
+      }
+    }
+
+    // If it's "HH:mm:ss" or "HH:mm"
+    const match = timeString.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      let [h, m] = [parseInt(match[1]), match[2]];
+      let suffix = 'AM';
+      if (h === 0) { h = 12; }
+      else if (h === 12) { suffix = 'PM'; }
+      else if (h > 12) { h -= 12; suffix = 'PM'; }
+      return `${h}:${m} ${suffix}`;
+    }
+
+    // Fallback
+    return timeString;
+  };
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
   const calculateRecurringDates = (startDate, recurrenceType, endDate) => {
     const dates = [];
@@ -284,29 +453,34 @@ const formatTime = (timeString) => {
                 {dayBookings.length} {dayBookings.length === 1 ? 'booking' : 'bookings'}
               </span>
             )}
-
           </div>
 
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 overflow-hidden">
             {dayBookings.slice(0, 3).map((booking, idx) => (
               <div
-                key={idx}
-                className={`text-xs p-1 rounded ${departmentColors[booking.department] || 'bg-gray-200'} truncate`}
-                title={`${booking.title} (${booking.time}) - ${booking.firstName} ${booking.lastName}`}
+                key={`${booking.recurringGroupId || booking.bookingId}-${idx}`}
+                className={`text-xs p-1.5 rounded-md flex flex-col gap-0.5 border-l-4 ${departmentColors[booking.department] || 'bg-gray-100 border-gray-400 text-gray-900'}`}
+                title={`${booking.title} (${booking.time}) - ${booking.firstName} ${booking.lastName} - ${booking.department || 'No Department'}${booking.isRecurringInstance ? ' (Recurring)' : ''}`}
               >
-                <div className="flex items-center">
-                  {booking.status === 'confirmed' && <div className="w-2 h-2 rounded-full bg-green-500 mr-1"></div>}
-                  {booking.status === 'declined' && <div className="w-2 h-2 rounded-full bg-red-500 mr-1"></div>}
-                  <span className="truncate">{booking.title}</span>
+                <div className="flex items-center gap-1">
+                  <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${getDepartmentColorDot(booking.department)}`}></span>
+                  <span className="font-medium truncate flex-1">{booking.title}</span>
+                  {booking.isRecurringInstance && (
+                    <span className="text-[9px] text-gray-600 flex-shrink-0">↻</span>
+                  )}
                 </div>
-                {booking.isRecurring && (
-                  <div className="text-[10px] text-gray-500">↻ {booking.recurring}</div>
-                )}
+                <div className="flex items-center justify-between text-[10px] text-gray-700">
+                  <span className="font-medium">{booking.department || 'No Dept'}</span>
+                  <span className="text-[9px]">{formatTime(booking.startTime)}</span>
+                </div>
               </div>
             ))}
+            {dayBookings.length > 3 && (
+              <div className="text-[10px] text-gray-500 text-center py-0.5">
+                +{dayBookings.length - 3} more
+              </div>
+            )}
           </div>
-
-
         </div>
       );
     }
@@ -324,7 +498,6 @@ const formatTime = (timeString) => {
     return days;
   };
 
-
   // Month view rendering
   const renderMonthView = () => {
     if (loading) {
@@ -339,9 +512,9 @@ const formatTime = (timeString) => {
       <div className="h-full flex flex-col">
         <div className="flex justify-between items-center mb-4 px-4 py-2 bg-gray-50 border rounded">
           <div className="flex items-center space-x-2">
-          <button onClick={goToPreviousMonth} className="p-2 bg-gray-100 rounded hover:bg-gray-200">
-            ←
-          </button>
+            <button onClick={goToPreviousMonth} className="p-2 bg-gray-100 rounded hover:bg-gray-200">
+              ←
+            </button>
             <div className="flex items-center space-x-2">
               <select
                 value={monthNames[currentMonth]}
@@ -366,24 +539,30 @@ const formatTime = (timeString) => {
               →
             </button>
           </div>
-          <div className="flex items-center">
-            {/* Removed status indicators */}
-          </div>
-          <div className="flex items-center space-x-4">
-            {/* Department color legend */}
-            <div className="flex flex-wrap gap-2 text-sm">
-              {Object.entries(departmentColors).map(([dept, color]) => (
-                <span key={dept} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full ${color} bg-opacity-30 text-gray-800`}>
-                  <span className={`w-2 h-2 rounded-full ${color.replace('bg-', 'bg-opacity-100 bg-')}`}></span>
-                  {dept}
-                </span>
-              ))}
-            </div>
+          
+          <button onClick={goToToday} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            Today
+          </button>
+        </div>
 
-            
-            
+        {/* Department Legend */}
+        <div className="mb-4 p-3 bg-gray-50 border rounded">
+          <h3 className="text-sm font-semibold mb-2 text-gray-700">School / Department Legend:</h3>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {Object.entries(departmentColors).map(([dept, colorClasses]) => {
+              const bgColor = colorClasses.split(' ')[0];
+              const borderColor = colorClasses.split(' ')[1];
+              const textColor = colorClasses.split(' ')[2] || 'text-gray-900';
+              return (
+                <span key={dept} className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border ${bgColor} ${borderColor} ${textColor}`}>
+                  <span className={`w-2 h-2 rounded-full ${bgColor} border ${borderColor}`}></span>
+                  <span className="font-medium">{dept}</span>
+                </span>
+              );
+            })}
           </div>
         </div>
+
         <div className="grid grid-cols-7 text-center py-2 border-b font-medium text-gray-600">
           <div>Sun</div>
           <div>Mon</div>
@@ -399,9 +578,26 @@ const formatTime = (timeString) => {
       </div>
     );
   };
-  
+
+  // Filtered bookings for the selected day based on search
+  const getFilteredDayBookings = (date) => {
+    const formattedDate = date
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      : null;
+    const dayBookings = processedBookings.filter(booking => booking.date === formattedDate);
+
+    if (!searchTerm.trim()) return dayBookings;
+
+    const lowerSearch = searchTerm.trim().toLowerCase();
+    return dayBookings.filter(booking =>
+      Object.values(booking)
+        .filter(val => typeof val === "string" || typeof val === "number")
+        .some(val => String(val).toLowerCase().includes(lowerSearch))
+    );
+  };
 
   // Day view rendering with vertical time slots
+<<<<<<< HEAD
 const renderDayView = () => {
   if (!selectedDate) return null;
 
@@ -530,6 +726,139 @@ const renderDayView = () => {
 };
 
   
+=======
+  const renderDayView = () => {
+    if (!selectedDate) return null;
+
+    const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const formattedDate = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+    const dayBookings = getFilteredDayBookings(selectedDate);
+
+    const uniqueTimeSlots = [...new Set(dayBookings.map(
+      booking => `${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}`
+    ))].sort((a, b) => {
+      // Sort by real time
+      const getStart = s => {
+        const [start] = s.split(' - ');
+        const [h, m, suffix] = start.match(/(\d+):(\d+)\s?(AM|PM)/i).slice(1);
+        return (parseInt(h) % 12 + (suffix.toUpperCase() === "PM" ? 12 : 0)) * 60 + parseInt(m);
+      };
+      return getStart(a) - getStart(b);
+    });
+
+    return (
+      <div className="h-full flex flex-col">
+        <div className="flex justify-between items-center mb-4 px-4 py-2 bg-gray-100 border rounded">
+          <div>
+            <h2 className="text-lg font-bold">{`${dayOfWeek[selectedDate.getDay()]}, ${formattedDate}`}</h2>
+            <p className="text-sm text-gray-600">{dayBookings.length} bookings</p>
+          </div>
+          <div className="flex space-x-2">
+            <button onClick={goToPreviousDay} className="p-2 bg-gray-200 rounded hover:bg-gray-300">← Previous</button>
+            <button onClick={goToNextDay} className="p-2 bg-gray-200 rounded hover:bg-gray-300">Next →</button>
+            <button onClick={backToCalendar} className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Back to Calendar</button>
+          </div>
+        </div>
+
+        {/* Search input for filtering bookings */}
+        <div className="mb-4 px-4">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search bookings for this day..."
+              className="w-full p-2 pl-10 border rounded"
+            />
+            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+              <FaSearch />
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-grow overflow-y-auto">
+          {dayBookings.length > 0 && (
+            <h3 className="font-semibold mb-4">Daily Schedule</h3>
+          )}
+
+          {dayBookings.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center text-gray-500 italic">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-24 h-24 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 12a9.75 9.75 0 11-19.5 0 9.75 9.75 0 0119.5 0zM9 10h6m-6 4h3" />
+              </svg>
+              <h4 className="text-2xl font-semibold mb-1">No bookings for this day</h4>
+            </div>
+          )}
+
+          <div className="border rounded">
+            {uniqueTimeSlots.map((slot, idx) => {
+              const [start, end] = slot.split(' - ');
+              const slotBookings = dayBookings.filter(
+                b => formatTime(b.startTime) === start && formatTime(b.endTime) === end
+              );
+              return (
+                <div key={slot} className="flex border-b bg-white">
+                  <div className="w-40 border-r text-sm font-medium px-1 flex items-center justify-center min-h-[90px]">
+                    <span className="whitespace-nowrap">
+                      ⏰{slot}
+                    </span>
+                  </div>
+                  <div className="flex-grow p-2">
+                    {slotBookings.map((booking, bidx) => (
+                      <div
+                        key={`${booking.recurringGroupId || booking.bookingId}_${booking.roomId}_${booking.startTime}_${bidx}`}
+                        className={`relative p-4 mb-2 rounded-md text-base shadow-sm border-l-8 ${departmentColors[booking.department] || 'bg-blue-100 border-blue-400 text-blue-900'}`}
+                      >
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="font-semibold text-lg">{booking.roomName}</span>
+                          <div className="flex items-center space-x-2">
+                            <span
+                              className={`text-sm px-2 py-1 rounded-full text-white ${
+                                booking.status === 'confirmed' ? 'bg-green-500' : 
+                                booking.status === 'pending' ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}
+                            >
+                              {booking.status}
+                            </span>
+                            {booking.isRecurringInstance && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-blue-500 text-white">
+                                ↻ {booking.recurrencePattern}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-base font-semibold">{booking.title}</p>
+                          <p className="text-base font-semibold">{booking.firstName} {booking.lastName}</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3 h-3 rounded-full ${getDepartmentColorDot(booking.department)}`}></span>
+                            <span className="text-sm font-medium text-gray-800">
+                              Department: {booking.department || 'Not specified'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-800">Building: {booking.buildingName}</p>
+                          <p className="text-sm italic text-gray-700">
+                            ⏰{formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+                          </p>
+                          {booking.isRecurringInstance && (
+                            <p className="text-sm italic text-gray-500">
+                              Recurring from {booking.originalDate} until {booking.recurrenceEndDate}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
   return (
     <div className="fixed top-0 left-60 right-0 bottom-0 overflow-hidden">
       <div className="h-full w-full px-0 flex">
@@ -539,8 +868,6 @@ const renderDayView = () => {
       </div>
     </div>
   );
-  
-  
 };
 
 export default BookingCalendar;

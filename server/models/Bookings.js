@@ -11,124 +11,160 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     roomId: {
-      type: DataTypes.STRING(255), // Changed to STRING to match nvarchar(255)
+      type: DataTypes.STRING(255),
       field: 'roomId',
       allowNull: true
     },
     userId: {
-      type: DataTypes.INTEGER, // BIGINT in DB is mapped to INTEGER in Sequelize
+      type: DataTypes.INTEGER,
       allowNull: true,
       references: {
-        model: 'Users',
+        model: 'users',
         key: 'userId'
       }
     },
     firstName: {
-      type: DataTypes.STRING(100), // Matches nvarchar(100)
+      type: DataTypes.STRING(100),
       field: 'firstName',
       allowNull: false
     },
     lastName: {
-      type: DataTypes.STRING(100), // Matches nvarchar(100)
+      type: DataTypes.STRING(100),
       field: 'lastName',
       allowNull: false
     },
     department: {
-      type: DataTypes.STRING(100), // Matches nvarchar(100)
+      type: DataTypes.STRING(100),
       field: 'department', 
       allowNull: true
     },
+    costCenterCharging: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Cost center or department charged',
+    },
     title: {
-      type: DataTypes.STRING(255), // Matches nvarchar(255)
+      type: DataTypes.STRING(255),
       field: 'title',
       allowNull: true
     },
+    declineReason: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    numberOfPaxBreakRoom: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    startTimeBreakRoom: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    endTimeBreakRoom: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     categoryId: {
-      type: DataTypes.INTEGER, // Matches int
+      type: DataTypes.INTEGER,
       field: 'categoryId',
-      allowNull: true
+      allowNull: true     
     },
     buildingId: {
-      type: DataTypes.STRING(255), // Changed to STRING to match nvarchar(255)
+      type: DataTypes.STRING(255),
       field: 'buildingId',
       allowNull: true
     },
     bookingCapacity: {
-      type: DataTypes.INTEGER, // Matches int
+      type: DataTypes.INTEGER,
       field: 'bookingCapacity',
       allowNull: true,
       defaultValue: 1
     },
     date: {
-      type: DataTypes.DATEONLY, // Matches date
+      type: DataTypes.DATEONLY,
       field: 'date',
       allowNull: false
     },
     startTime: {
-      type: DataTypes.TIME, // Matches time(7)
+      type: DataTypes.TIME,
       allowNull: false
     },
     endTime: {
-      type: DataTypes.TIME, // Matches time(7)
+      type: DataTypes.TIME,
       allowNull: false
     },
     notes: {
-      type: DataTypes.STRING(255), // Matches nvarchar(255)
+      type: DataTypes.STRING(255),
       field: 'notes',
       allowNull: true
     },
     isRecurring: {
-      type: DataTypes.BOOLEAN, // Matches bit
+      type: DataTypes.BOOLEAN,
       field: 'isRecurring',
       allowNull: true,
       defaultValue: false
     },
     isMealRoom: {
-      type: DataTypes.BOOLEAN, // Matches bit
+      type: DataTypes.BOOLEAN,
       field: 'isMealRoom',
       allowNull: true,
       defaultValue: false
     },
     isBreakRoom: {
-      type: DataTypes.BOOLEAN, // Matches bit
+      type: DataTypes.BOOLEAN,
       field: 'isBreakRoom',
       allowNull: true,
       defaultValue: false
     },
     recurrenceEndDate: {
-      type: DataTypes.DATEONLY, // Matches date
+      type: DataTypes.DATEONLY,
       field: 'recurrenceEndDate',
       allowNull: true
     },
     status: {
-      type: DataTypes.ENUM('pending', 'confirmed', 'declined'),
+      type: DataTypes.ENUM('pending', 'confirmed', 'declined', 'cancelled'),
       field: 'status',
       allowNull: false,
       defaultValue: 'pending',
       validate: {
-        isIn: [['pending', 'confirmed', 'declined']]
+        isIn: [['pending', 'confirmed', 'declined', 'cancelled']]
       }
     },
     timeSubmitted: {
       type: DataTypes.DATE,
       allowNull: false,
+<<<<<<< HEAD
       defaultValue: Sequelize.fn('GETUTCDATE'),
+=======
+      defaultValue: Sequelize.literal('UTC_TIMESTAMP()'),
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
     },
     remarks: {
-      type: DataTypes.STRING(255), // Matches nvarchar(255)
+      type: DataTypes.STRING(255),
       field: 'remarks',
       allowNull: true
-      
     },
     changedBy: {
-      type: DataTypes.STRING(255), // Matches nvarchar(255)
+      type: DataTypes.STRING(255),
       field: 'changedBy',
       allowNull: true
-      
+    },
+    cancelReason: {
+      type: DataTypes.STRING, 
+      allowNull: true,
+    },
+    recurrencePattern: {
+      type: DataTypes.ENUM('Daily', 'Weekly', 'Monthly'),
+      field: 'recurrencePattern',
+      allowNull: true
+    },
+    recurringGroupId: {
+      type: DataTypes.STRING(64),
+      field: 'recurringGroupId',
+      allowNull: true
     }
   }, {
     tableName: 'bookings',
-    schema: 'dbo',
     timestamps: false
   });
 
@@ -140,25 +176,29 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: 'roomId'
       });
     }
-    
     if (models.User) {
       Booking.belongsTo(models.User, {
         foreignKey: 'userId',
         targetKey: 'userId'
       });
     }
-
     if (models.Building) {
       Booking.belongsTo(models.Building, {
         foreignKey: 'buildingId',
         targetKey: 'buildingId'
       });
     }
-
     if (models.Category) {
       Booking.belongsTo(models.Category, {
         foreignKey: 'categoryId',
         targetKey: 'categoryId'
+      });
+    }
+    // Add this association for AuditLog
+    if (models.AuditLog) {
+      Booking.hasMany(models.AuditLog, {
+        foreignKey: 'bookingId',
+        sourceKey: 'bookingId'
       });
     }
   };

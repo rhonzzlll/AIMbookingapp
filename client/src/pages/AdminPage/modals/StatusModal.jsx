@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_URI;
+
 const StatusModal = ({ isOpen, currentStatus, onClose, onConfirm, bookingId }) => {
   const [userName, setUserName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [declineReason, setDeclineReason] = useState(''); // New state for decline reason
-  const API_BASE_URL = 'http://localhost:5000/api';
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -13,22 +14,28 @@ const StatusModal = ({ isOpen, currentStatus, onClose, onConfirm, bookingId }) =
         setIsLoading(true);
         const token = localStorage.getItem('token');
         const userId = localStorage.getItem('userId');
+        const firstName = localStorage.getItem('firstName');
+        const lastName = localStorage.getItem('lastName');
 
         if (!token || !userId) {
-          console.log("No token or userId found");
+          setUserName(`${firstName || ''} ${lastName || ''}`.trim());
           return;
         }
 
-        const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        if (response.data) {
-          const name = `${response.data.firstName} ${response.data.lastName}`;
-          setUserName(name);
+        try {
+          const response = await axios.get(`${API_BASE_URL}/users/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (response.data) {
+            const name = `${response.data.firstName} ${response.data.lastName}`;
+            setUserName(name);
+          }
+        } catch (error) {
+          // Fallback to localStorage if API fails
+          setUserName(`${firstName || ''} ${lastName || ''}`.trim());
         }
       } catch (error) {
-        console.error("Error fetching user info:", error);
+        setUserName('');
       } finally {
         setIsLoading(false);
       }
@@ -57,13 +64,32 @@ const StatusModal = ({ isOpen, currentStatus, onClose, onConfirm, bookingId }) =
         <div className="text-xl font-semibold mb-4">Update Booking Status</div>
 
         <p className="mb-4">
-          Are you sure you want to {currentStatus === 'confirmed' ? 'confirm' : 'decline'} this booking?
+          Are you sure you want to {currentStatus === 'confirmed'
+            ? 'confirm'
+            : currentStatus === 'declined'
+              ? 'decline'
+              : currentStatus === 'cancelled'
+                ? 'cancel'
+                : currentStatus
+          } this booking?
         </p>
 
         <div className={`p-4 mb-4 rounded-md ${
-          currentStatus === 'confirmed' ? 'bg-green-100' : 'bg-red-100'
+          currentStatus === 'confirmed'
+            ? 'bg-green-100'
+            : currentStatus === 'cancelled'
+              ? 'bg-gray-200'
+              : 'bg-red-100'
         }`}>
-          <p><strong>New status will be:</strong> {currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}</p>
+          <p>
+            <strong>New status will be:</strong>
+            {currentStatus === 'declined'
+              ? ' Cancelled'
+              : currentStatus === 'cancelled'
+                ? ' Cancelled'
+                : ` ${currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}`
+            }
+          </p>
           <p><strong>Changed by:</strong> {isLoading ? "Loading..." : userName || "You"}</p>
         </div>
 
@@ -94,13 +120,20 @@ const StatusModal = ({ isOpen, currentStatus, onClose, onConfirm, bookingId }) =
           <button
             onClick={handleConfirm}
             className={`px-4 py-2 text-white rounded ${
-              currentStatus === 'confirmed' 
-                ? 'bg-green-600 hover:bg-green-700' 
-                : 'bg-red-600 hover:bg-red-700'
+              currentStatus === 'confirmed'
+                ? 'bg-green-600 hover:bg-green-700'
+                : currentStatus === 'cancelled'
+                  ? 'bg-gray-600 hover:bg-gray-700'
+                  : 'bg-red-600 hover:bg-red-700'
             }`}
             disabled={currentStatus === 'declined' && !declineReason.trim()}
           >
-            Confirm
+            {currentStatus === 'confirmed'
+              ? 'Confirm'
+              : currentStatus === 'cancelled'
+                ? 'Cancel'
+                : 'Decline'
+            }
           </button>
         </div>
       </div>

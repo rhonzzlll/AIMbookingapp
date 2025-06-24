@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Header from './Header';
 import bg from '../../images/bg.png';
 
-const API_BASE_URL = 'http://localhost:5000';
+// Use environment variable for API base URL
+const API_BASE_URL = import.meta.env.VITE_API_URI;
 
 const TIME_OPTIONS = [
   '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -16,6 +17,8 @@ const TIME_OPTIONS = [
 const BuildingDetails = () => {
   const { buildingId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const bookNowMode = location.state?.searchAllBuildings === true;
 
   const [building, setBuilding] = useState(null);
   const [rooms, setRooms] = useState([]);
@@ -26,12 +29,13 @@ const BuildingDetails = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchParams, setSearchParams] = useState({
-    fromDate: format(new Date(), 'yyyy-MM-dd'),
-    fromTime: '',
-    toDate: format(new Date(), 'yyyy-MM-dd'),
-    toTime: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    startTime: '',
+    endTime: '',
     isRecurring: false,
   });
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchAllBuildings, setSearchAllBuildings] = useState(bookNowMode);
 
   function format(date, formatStr) {
     const year = date.getFullYear();
@@ -42,13 +46,96 @@ const BuildingDetails = () => {
 
   useEffect(() => {
     fetchBuildingDetails();
-  }, [buildingId]);
+    // eslint-disable-next-line
+  }, [buildingId, searchAllBuildings]);
+
+  // Apply filters whenever rooms, currentCategory, or searchTerm changes
+  useEffect(() => {
+    applyFilters();
+  }, [rooms, currentCategory, searchTerm]);
+
+  // This effect handles the initial setting of searchAllBuildings from location state
+  useEffect(() => {
+    if (location.state?.searchAllBuildings) {
+      setSearchAllBuildings(true);
+      // Optionally clear the state (if using React Router v6+)
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
+  // Helper function to flatten rooms and subrooms into a single array
+  const flattenRoomsWithSubrooms = (roomsData, bookingsData) => {
+    const flattenedRooms = [];
+
+    roomsData.forEach(room => {
+      // Add the main room
+      const mainRoom = {
+        ...room,
+        bookings: bookingsData.filter(booking => booking.room === room._id),
+        category: room.Category?.categoryName || room.category || '',
+        categoryDetails: room.Category || null,
+        isSubroom: false,
+        parentRoomId: null,
+        parentRoomName: null,
+        displayName: room.roomName,
+        uniqueId: room._id || room.roomId,
+        capacity: room.roomCapacity,
+        description: room.roomDescription,
+        image: room.roomImage,
+        imageUrl: room.roomImageUrl,
+      };
+      flattenedRooms.push(mainRoom);
+
+      // Add each subroom as a separate room
+      if (room.subRooms && room.subRooms.length > 0) {
+        room.subRooms.forEach(subroom => {
+          const subroomAsRoom = {
+            ...subroom,
+            // Use subroom's own ID for bookings
+            bookings: bookingsData.filter(booking => booking.room === subroom.subroomId),
+            category: room.Category?.categoryName || room.category || '',
+            categoryDetails: room.Category || null,
+            isSubroom: true,
+            parentRoomId: room._id || room.roomId,
+            parentRoomName: room.roomName,
+            displayName: `${room.roomName} - ${subroom.subRoomName}`,
+            uniqueId: subroom.subroomId,
+            roomName: `${room.roomName} - ${subroom.subRoomName}`,
+            capacity: subroom.subRoomCapacity,
+            roomCapacity: subroom.subRoomCapacity,
+            description: subroom.subRoomDescription,
+            roomDescription: subroom.subRoomDescription,
+            image: subroom.subRoomImage,
+            roomImage: subroom.subRoomImage,
+            imageUrl: subroom.subRoomImageUrl,
+            roomImageUrl: subroom.subRoomImageUrl,
+            // Keep original IDs for reservation
+            _id: subroom.subroomId,
+            roomId: subroom.subroomId,
+            originalParentRoom: room,
+          };
+          flattenedRooms.push(subroomAsRoom);
+        });
+      }
+    });
+
+    console.log("🛏️ Flattened Rooms:", flattenedRooms);
+    flattenedRooms.forEach(room => {
+      console.log(`📦 Room: ${room.displayName || room.roomName}`);
+      room.bookings.forEach(bk => {
+        console.log("  🧾 Booking:", bk);
+      });
+    });
+
+    return flattenedRooms;
+  };
 
   const fetchBuildingDetails = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
+<<<<<<< HEAD
       
       // Fetch building details
       const buildingResponse = await axios.get(`${API_BASE_URL}/api/buildings/${buildingId}`, { headers });
@@ -95,6 +182,38 @@ const BuildingDetails = () => {
       
       setRooms(roomsWithDetails);
       setFilteredRooms(roomsWithDetails);
+=======
+
+      // Fetch building details (always fetch for sidebar info)
+      const buildingResponse = await axios.get(`${API_BASE_URL}/buildings/${buildingId}`, { headers });
+      setBuilding(buildingResponse.data);
+
+      // Fetch rooms: use buildingId only if not searching all buildings
+      let roomsUrl = `${API_BASE_URL}/rooms`;
+      if (!searchAllBuildings) {
+        roomsUrl += `?buildingId=${buildingId}`;
+      }
+      const roomsResponse = await axios.get(roomsUrl, { headers });
+      const roomsData = roomsResponse.data;
+
+      // Fetch bookings for these rooms
+      const bookingsResponse = await axios.get(`${API_BASE_URL}/bookings`, { headers });
+      const bookingsData = bookingsResponse.data;
+
+      // Flatten rooms and subrooms
+      const flattenedRooms = flattenRoomsWithSubrooms(roomsData, bookingsData);
+
+      // Extract unique categories
+      const uniqueCategories = [
+        ...new Set(
+          flattenedRooms
+            .map(room => (room.category || '').trim())
+            .filter(Boolean)
+        ),
+      ];
+
+      setRooms(flattenedRooms);
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
       setRoomCategories(uniqueCategories);
       setLoading(false);
     } catch (err) {
@@ -104,11 +223,11 @@ const BuildingDetails = () => {
     }
   };
 
-  const handleCategoryChange = (category) => {
-    setCurrentCategory(category);
-    filterRooms(category, searchTerm);
-  };
+  // Separate function to apply filters (called by useEffect)
+  const applyFilters = () => {
+    let filtered = [...rooms];
 
+<<<<<<< HEAD
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
@@ -155,6 +274,23 @@ const filterRooms = (categoryName, search) => {
       filtered = filtered.filter(room =>
         room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase()))
+=======
+    // Apply category filter
+    if (currentCategory) {
+      filtered = filtered.filter(room =>
+        room.category &&
+        room.category.toString().toLowerCase() === currentCategory.toString().toLowerCase()
+      );
+    }
+
+    // Apply search term filter
+    if (searchTerm) {
+      filtered = filtered.filter(room =>
+        (room.displayName && room.displayName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (room.roomName && room.roomName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (room.roomDescription && room.roomDescription.toLowerCase().includes(searchTerm.toLowerCase()))
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
       );
     }
     
@@ -184,24 +320,129 @@ const filterRooms = (categoryName, search) => {
     setFilteredRooms(filtered);
   };
 
+<<<<<<< HEAD
   const convertTo24HourFormat = (timeStr) => {
     if (!timeStr) return '';
     
     const [time, modifier] = timeStr.split(' ');
     let [hours, minutes] = time.split(':').map(Number);
   
+=======
+  const handleCategoryChange = (category) => {
+    setCurrentCategory(category);
+    // The useEffect will handle the filtering
+  };
+
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    // The useEffect will handle the filtering
+  };
+
+  const handleDateTimeChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setSearchParams((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+  };
+
+  function buildISODate(dateString, timeString) {
+    // Ensure date is provided
+    if (!dateString || !timeString) return null;
+    // Convert time to 24-hour and add seconds if missing
+    let time24 = timeString;
+    if (typeof time24 !== "string") return null;
+    if (time24.match(/am|pm/i)) {
+      time24 = convertTo24HourFormat(time24);
+    }
+    if (/^\d{2}:\d{2}$/.test(time24)) {
+      time24 = time24 + ':00';
+    }
+    // If after all that, still not valid, bail out
+    if (!/^\d{2}:\d{2}:\d{2}$/.test(time24)) return null;
+    return `${dateString}T${time24}`;
+  }
+
+  const handleSearch = async () => {
+    setSearchLoading(true);
+    const { date, startTime, endTime } = searchParams;
+
+    if (!startTime || !endTime) {
+      setSearchLoading(false);
+      return;
+    }
+
+    // Use the currently filtered rooms (by category/search)
+    // Always start from all rooms, then apply category and search term filters
+let base = [...rooms];
+if (currentCategory) {
+  base = base.filter(room =>
+    room.category &&
+    room.category.toString().toLowerCase() === currentCategory.toString().toLowerCase()
+  );
+}
+if (searchTerm) {
+  base = base.filter(room =>
+    (room.displayName && room.displayName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (room.roomName && room.roomName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (room.description && room.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (room.roomDescription && room.roomDescription.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+}
+    // Prepare all availability checks in parallel
+    const availabilityPromises = base.map(async (room) => {
+      try {
+        const res = await axios.post(
+          `${API_BASE_URL}/bookings/check-availability`, // <-- use dash, not camelCase
+          {
+            date,
+            startTime: convertTo24HourFormat(startTime) + ':00',
+            endTime: convertTo24HourFormat(endTime) + ':00',
+            roomId: room.uniqueId,
+            buildingId: room.buildingId || buildingId,
+            categoryId: room.categoryDetails?._id || room.categoryId || undefined,
+          }
+        );
+        return res.data.available ? room : null;
+      } catch (err) {
+        // If error, treat as unavailable
+        return null;
+      }
+    });
+
+    // Wait for all checks to finish
+    const availableRooms = (await Promise.all(availabilityPromises)).filter(Boolean);
+
+    setFilteredRooms(availableRooms);
+    setSearchLoading(false);
+  };
+
+  // --- Helper functions and the rest ---
+
+  const convertTo24HourFormat = (timeStr) => {
+    if (!timeStr) return '';
+
+    const [time, modifier] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
     if (modifier === 'PM' && hours !== 12) {
       hours += 12;
     }
     if (modifier === 'AM' && hours === 12) {
       hours = 0;
     }
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   };
 
   const isFutureTime = (time, compareTime = null) => {
     if (!time) return false;
+<<<<<<< HEAD
     
     const todayDate = new Date();
     const selectedDate = new Date(searchParams.fromDate);
@@ -213,6 +454,18 @@ const filterRooms = (categoryName, search) => {
     const optionDateTime = new Date(`${selectedFormatted}T${time24}:00`);
   
     // If user is searching today → compare to NOW
+=======
+
+    const todayDate = new Date();
+    const selectedDate = new Date(searchParams.date);
+
+    const todayFormatted = format(todayDate, 'yyyy-MM-dd');
+    const selectedFormatted = format(selectedDate, 'yyyy-MM-dd');
+
+    const time24 = convertTo24HourFormat(time);
+    const optionDateTime = new Date(`${selectedFormatted}T${time24}:00`);
+
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
     if (todayFormatted === selectedFormatted) {
       if (compareTime) {
         const compareDateTime = new Date(`${todayFormatted}T${convertTo24HourFormat(compareTime)}:00`);
@@ -220,18 +473,28 @@ const filterRooms = (categoryName, search) => {
       }
       return optionDateTime > todayDate;
     }
+<<<<<<< HEAD
   
     // If user is searching future day → check against compare time if provided
+=======
+
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
     if (compareTime) {
       const compareDateTime = new Date(`${selectedFormatted}T${convertTo24HourFormat(compareTime)}:00`);
       return optionDateTime > compareDateTime;
     }
+<<<<<<< HEAD
     
     return true; // All times allowed if different date
+=======
+
+    return true;
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
   };
 
   const isTimeSlotTaken = (timeStr) => {
     if (!rooms || rooms.length === 0 || !timeStr) return false;
+<<<<<<< HEAD
     
     const fromDate = searchParams.fromDate;
     const time24 = convertTo24HourFormat(timeStr);
@@ -242,27 +505,70 @@ const filterRooms = (categoryName, search) => {
       room.bookings.some(booking => {
         const bookingStart = new Date(`${booking.fromDate}T${booking.fromTime}`);
         const bookingEnd = new Date(`${booking.toDate}T${booking.toTime}`);
+=======
+
+    const date = searchParams.date;
+    const time24 = convertTo24HourFormat(timeStr);
+    const selectedTime = new Date(`${date}T${time24}:00`);
+
+    return rooms.some(room => 
+      room.bookings &&
+      room.bookings.some(booking => {
+        const bookingStart = new Date(`${booking.date}T${booking.startTime}`);
+        const bookingEnd = new Date(`${booking.date}T${booking.endTime}`);
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
         return selectedTime >= bookingStart && selectedTime < bookingEnd;
       })
     );
   };
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
   const handleReserve = (room) => {
+    // Use defaults only if empty
     const validatedSearchParams = {
       ...searchParams,
-      fromDate: searchParams.fromDate || format(new Date(), 'yyyy-MM-dd'),
-      fromTime: searchParams.fromTime || '09:00 AM',
-      toDate: searchParams.toDate || format(new Date(), 'yyyy-MM-dd'),
-      toTime: searchParams.toTime || '10:00 AM',
+      date: searchParams.date || format(new Date(), 'yyyy-MM-dd'),
+      startTime: searchParams.startTime || '09:00 AM',
+      endTime: searchParams.endTime || '10:00 AM',
     };
 
-    const bookingData = { room, searchParams: validatedSearchParams };
+    let roomForReservation = { ...room };
+
+    // If it's a subroom, cascade parent room's details
+    if (room.isSubroom && room.originalParentRoom) {
+      roomForReservation = {
+        ...room,
+        buildingId: room.originalParentRoom.buildingId,
+        buildingName: room.originalParentRoom.buildingName,
+        categoryId: room.originalParentRoom.categoryId,
+        categoryName: room.originalParentRoom.categoryName,
+        roomId: room.uniqueId,
+        roomName: room.displayName || room.roomName,
+      };
+    } else {
+      // For main rooms, ensure all fields are present
+      roomForReservation = {
+        ...room,
+        buildingId: room.buildingId,
+        buildingName: room.buildingName,
+        categoryId: room.categoryId,
+        categoryName: room.categoryName,
+        roomId: room.uniqueId,
+        roomName: room.displayName || room.roomName,
+      };
+    }
+
+    const bookingData = { room: roomForReservation, searchParams: validatedSearchParams };
 
     navigate('/forms', {
       state: { bookingData },
     });
   };
 
+<<<<<<< HEAD
   const futureStartTimes = useMemo(() => {
     return TIME_OPTIONS.filter(time => 
       isFutureTime(time) && 
@@ -277,6 +583,29 @@ const filterRooms = (categoryName, search) => {
       !isTimeSlotTaken(time)
     );
   }, [searchParams.fromDate, searchParams.fromTime, rooms]);
+=======
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+  // Only filter by present/future time if date is today, else show all times
+  const availableStartTimes = useMemo(() => {
+    if (searchParams.date === todayStr) {
+      const now = new Date();
+      return TIME_OPTIONS.filter(time => {
+        const [hour, minute] = convertTo24HourFormat(time).split(':').map(Number);
+        const nowHour = now.getHours();
+        const nowMinute = now.getMinutes();
+        return hour > nowHour || (hour === nowHour && minute > nowMinute);
+      });
+    }
+    return TIME_OPTIONS;
+  }, [searchParams.date]);
+
+  const availableEndTimes = useMemo(() => {
+    // End time must be after start time
+    const startIdx = searchParams.startTime ? TIME_OPTIONS.indexOf(searchParams.startTime) + 1 : 0;
+    return TIME_OPTIONS.slice(startIdx);
+  }, [searchParams.startTime]);
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
   if (loading) return (
     <div className="flex items-center justify-center">
@@ -295,6 +624,7 @@ const filterRooms = (categoryName, search) => {
   );
   
   const getRoomImageSrc = (room) => {
+<<<<<<< HEAD
   if (room.roomImageUrl) return room.roomImageUrl;
   if (room.roomImage && !room.roomImage.startsWith('roomImage-')) {
     return `data:image/jpeg;base64,${room.roomImage}`;
@@ -304,6 +634,21 @@ const filterRooms = (categoryName, search) => {
   }
   return null;
 };
+=======
+    // Handle both room and subroom images
+    const imageUrl = room.imageUrl || room.roomImageUrl;
+    const image = room.image || room.roomImage;
+    
+    if (imageUrl) return imageUrl;
+    if (image && !image.startsWith('roomImage-')) {
+      return `data:image/jpeg;base64,${image}`;
+    }
+    if (image) {
+      return `${API_BASE_URL}/api/uploads/${image}`;
+    }
+    return null;
+  };
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
 
   return (
     <div className="font-sans">
@@ -331,10 +676,16 @@ const filterRooms = (categoryName, search) => {
         {building && (
           <div>
             {/* Sidebar */}
+<<<<<<< HEAD
             <div className="fixed top-21 left-20 bottom-5 w-80 overflow-y-auto p-6 z-20">
               <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-200 space-y-6">
                 <h2 className="text-xl font-semibold text-gray-800">Find a Room</h2>
                 
+=======
+              <div className="fixed left-20 bottom-5 w-[420px] overflow-y-auto p-6 z-20">
+                <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-200 space-y-6">
+                <h2 className="text-xl font-semibold text-gray-800">Find a Room</h2>
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
                 {/* Search input */}
                 <div className="relative w-full">
                   <input
@@ -361,7 +712,7 @@ const filterRooms = (categoryName, search) => {
                 {/* Room Categories */}
                 <div>
                   <h2 className="text-lg font-semibold text-gray-800 mt-2">Room Types</h2>
-                  <ul className="space-y-3 mt-2">
+                  <ul className="space-y-3 mt-2 px-3 py-2">
                     <li className="flex items-center">
                       <input
                         className="mr-2"
@@ -372,21 +723,101 @@ const filterRooms = (categoryName, search) => {
                       />
                       <label htmlFor="allRooms" className="text-gray-700">All Rooms</label>
                     </li>
-                    {roomCategories.map((category, index) => (
-                      <li key={index} className="flex items-center">
-                        <input
-                          className="mr-2"
-                          type="radio"
-                          id={`category-${index}`}
-                          checked={currentCategory === category}
-                          onChange={() => handleCategoryChange(category)}
-                        />
-                        <label htmlFor={`category-${index}`} className="text-gray-700">
-                          {category}
-                        </label>
-                      </li>
-                    ))}
+                    {[...roomCategories]
+                      .map(cat => (cat || '').trim())
+                      .filter(Boolean)
+                      .sort((a, b) => a.localeCompare(b))
+                      .map((category, index) => (
+                        <li key={index} className="flex items-center">
+                          <input
+                            className="mr-2"
+                            type="radio"
+                            id={`category-${index}`}
+                            checked={currentCategory === category}
+                            onChange={() => handleCategoryChange(category)}
+                          />
+                          <label htmlFor={`category-${index}`} className="text-gray-700">
+                            {category}
+                          </label>
+                        </li>
+                      ))}
                   </ul>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-md w-full max-w-md mx-auto">
+                  <h2 className="text-lg font-semibold text-gray-800 mb-4">Search Available</h2>
+                  
+                  {/* Date */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input
+                      type="date"
+                      name="date"
+                      value={searchParams.date}
+                      onChange={handleDateTimeChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  
+                  {/* From Time */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
+                    <select
+                      name="startTime"
+                      value={searchParams.startTime}
+                      onChange={handleDateTimeChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                    >
+                      <option value="">Select Start Time</option>
+                      {availableStartTimes.map((time) => (
+                        <option key={time} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* To Time */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                    <select
+                      name="endTime"
+                      value={searchParams.endTime}
+                      onChange={handleDateTimeChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                    >
+                      <option value="">Select End Time</option>
+                      {availableEndTimes.map((time) => (
+                        <option key={time} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Search All Buildings Toggle - moved above the button */}
+                  {!bookNowMode && (
+                    <div className="flex items-center mb-6">
+                      <input
+                        type="checkbox"
+                        id="searchAllBuildings"
+                        checked={searchAllBuildings}
+                        onChange={(e) => setSearchAllBuildings(e.target.checked)}
+                        className="w-6 h-6 mr-2"
+                      />
+                      <label htmlFor="searchAllBuildings" className="text-lg font-bold text-blue-700">
+                        Search all buildings
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Search Button */}
+                  <button
+                    onClick={handleSearch}
+                    className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition-all duration-300 font-medium"
+                  >
+                    Search Available Rooms
+                  </button>
                 </div>
               </div>
             </div>
@@ -397,6 +828,7 @@ const filterRooms = (categoryName, search) => {
                   {currentCategory ? currentCategory + ' Rooms' : 'Available Rooms'}
                 </h2>
                 
+<<<<<<< HEAD
                 {filteredRooms.length === 0 ? (
                   <div className="flex flex-col items-center justify-center min-h-[200px] text-black-600 bg-white rounded-lg shadow p-6">
                     <h3 className="text-xl font-semibold">No rooms available</h3>
@@ -412,6 +844,28 @@ const filterRooms = (categoryName, search) => {
                             src={getRoomImageSrc(room)}
                             alt={room.roomName}
                             className="w-full h-full object-cover"
+=======
+                {
+                  searchLoading ? (
+                    <div className="flex flex-col items-center justify-center min-h-[200px] text-blue-600 bg-white rounded-lg shadow p-6">
+                      <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-2"></div>
+                      <span className="font-semibold">Searching for available rooms...</span>
+                    </div>
+                ) : filteredRooms.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center min-h-[200px] text-gray-600 bg-white rounded-lg shadow p-6">
+                    <span className="font-semibold">No rooms found for your search.</span>
+                  </div>
+                ) : (
+                <div className="grid lg:grid-cols-3 gap-8" style={{ minWidth: '1320px' }}>
+                  {filteredRooms.map(room => (
+                      <div key={room.uniqueId} className="bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col p-6 min-h-[400px] w-[420px]">
+                        {(room.image || room.roomImage) && (
+                        <div className="h-48 overflow-hidden">
+                            <img
+                            src={getRoomImageSrc(room)}
+                            alt={room.displayName || room.roomName}
+                            className="w-full h-full object-cover "
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
                             onError={(e) => {
                                 e.target.src = '/placeholder-room.png';
                             }}
@@ -421,12 +875,30 @@ const filterRooms = (categoryName, search) => {
                         
                         <div className="p-6 flex-1 flex flex-col">
                           <div className="flex-1">
+<<<<<<< HEAD
                             <h3 className="text-xl font-bold text-gray-800 mb-2">{room.roomName}</h3>
                             <p className="text-gray-600 mb-4">{room.roomDescription || "No description available"}</p>
                             
                             {room.capacity && (
                               <p className="text-sm text-gray-500 mb-2">
                                 Capacity: {room.capacity} people
+=======
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">
+                              {room.displayName || room.roomName}
+                            </h3>
+                            {room.isSubroom && (
+                              <p className="text-sm text-blue-600 mb-2">
+                                Subroom of: {room.parentRoomName}
+                              </p>
+                            )}
+                            <p className="text-gray-600 mb-4">
+                              {room.description || room.roomDescription || "No description available"}
+                            </p>
+                            
+                            {(room.capacity || room.roomCapacity) && (
+                              <p className="text-sm text-gray-500 mb-2">
+                                Capacity: {room.capacity || room.roomCapacity} people
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
                               </p>
                             )}
                             
@@ -441,9 +913,22 @@ const filterRooms = (categoryName, search) => {
                             )}
                             
                             {room.category && (
+<<<<<<< HEAD
                               <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs">
                                 {room.category}
                               </span>
+=======
+                              <div className="flex flex-wrap gap-2 mb-4">
+                                <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs">
+                                  {room.category}
+                                </span>
+                                {room.isSubroom && (
+                                  <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">
+                                    Subroom
+                                  </span>
+                                )}
+                              </div>
+>>>>>>> cb6fb508c924946d1dbcaee6e648276bab703c7c
                             )}
                           </div>
                           

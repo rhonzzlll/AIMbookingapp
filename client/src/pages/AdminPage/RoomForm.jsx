@@ -23,7 +23,8 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
   const [touchedFields, setTouchedFields] = useState({});
   const [loading, setLoading] = useState(false);
   const [availableCategories, setAvailableCategories] = useState([]);
-  const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URI;
+
 
   const [localBuildings, setLocalBuildings] = useState([]);
   const [localCategories, setLocalCategories] = useState([]);
@@ -249,7 +250,7 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
       case 'roomDescription':
         if (!value.trim()) {
           fieldErrors.roomDescription = 'Description is required';
-        } else if (value.length > 255) {
+        } else if (value.length > 255) { // <-- Changed back to 255
           fieldErrors.roomDescription = 'Description must be less than 255 characters';
         } else {
           delete fieldErrors.roomDescription;
@@ -290,7 +291,7 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
       isValid = false;
     }
 
-    if (formData.roomDescription && formData.roomDescription.length > 255) {
+    if (formData.roomDescription && formData.roomDescription.length > 255) { // <-- Changed back to 255
       formErrors.roomDescription = 'Description must be less than 255 characters';
       isValid = false;
     }
@@ -406,16 +407,16 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
         
         formDataToSubmit.append('roomData', JSON.stringify(roomData));
         
-        // Image handling is separate from roomData because files cannot be JSON serialized
+        // Append room image if present
         if (imageFile) {
           formDataToSubmit.append('roomImage', imageFile);
         }
-        
-        // Only add subroom images if this is a quadrant room
-        if (formData.isQuadrant) {
-          formData.subRooms.forEach((subroom) => {
+
+        // Append subroom images if present
+        if (formData.isQuadrant && Array.isArray(formData.subRooms)) {
+          formData.subRooms.forEach(subroom => {
             if (subroom.image) {
-              formDataToSubmit.append(`subroomImage_${subroom.subroomId}`, subroom.image);
+              formDataToSubmit.append(`subroomImage_${subroom.subroomId || subroom.subRoomId}`, subroom.image);
             }
           });
         }
@@ -554,7 +555,7 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Room Description* <span className="text-xs text-gray-500">(Max 255 characters)</span>
+                    Room Description* 
                   </label>
                   <textarea
                     name="roomDescription"
@@ -565,7 +566,7 @@ const RoomForm = ({ room, onSubmit, onCancel, buildings: propBuildings, categori
                     }`}
                     rows="3"
                     placeholder="Enter room description"
-                    maxLength="255" // Enforce limit in UI
+                    maxLength="255" // <-- Changed back to 255
                   ></textarea>
                   <div className="flex justify-between">
                     {errors.roomDescription && touchedFields.roomDescription ? (

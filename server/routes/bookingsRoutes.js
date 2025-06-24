@@ -51,4 +51,10 @@ router.delete('/:id', bookingsController.deleteBooking);
  */
 router.post('/check-availability', bookingsController.checkAvailability);
 
+router.get('/recurring-bookings/:recurringGroupId', bookingsController.getRecurringGroup);
+// Get a single booking in a recurring group
+router.get('/recurring-bookings/:recurringGroupId/:bookingId', bookingsController.getRecurringGroupBookingById);
+
+
+router.patch('/:bookingId/cancel', bookingsController.cancelBooking);   
 module.exports = router;

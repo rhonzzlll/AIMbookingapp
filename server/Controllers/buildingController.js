@@ -291,8 +291,8 @@ const getBuildingById = async (req, res) => {
 
 // Process uploads and handle the request - for create
 const processBuildingCreate = (req, res) => {
-  uploadBuildingImage(req, res, function(err) {
-    if (err instanceof multer.MulterError) {
+  uploadBuildingImage(req, res, function(err) {                 
+    if (err instanceof multer.MulterError) {  
       return res.status(400).json({ message: `Multer error with building image: ${err.message}` });
     } else if (err) {
       return res.status(400).json({ message: `Error processing building image: ${err.message}` });

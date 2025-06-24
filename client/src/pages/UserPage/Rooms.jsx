@@ -414,15 +414,17 @@ const AccRooms = () => {
                       >
                         {/* Room Image */}
                         <div className="h-64 bg-gray-100">
-                          <img
-                            src={
-                              room.roomImage
-                                ? `data:image/jpeg;base64,${room.roomImage}`
-                                : '/placeholder.jpg'
-                            }
-                            alt={`${room.roomName} room`}
-                            className="w-full h-full object-cover"
-                          />
+                          {room.roomImage ? (
+                            <img
+                              src={`data:image/jpeg;base64,${room.roomImage}`}
+                              alt={`${room.roomName} room`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              No Image
+                            </div>
+                          )}
                         </div>
 
                         {/* Room Info */}
