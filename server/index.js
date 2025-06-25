@@ -55,14 +55,9 @@ const upload = multer({
 // Make upload available throughout the app
 app.locals.upload = upload;
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://aimbooking.aim.edu',
-  'http://aimbooking.aim.edu'
-];
-
+// Allow CORS from all origins
 app.use(cors({
-  origin: allowedOrigins,
+  origin: true,
   credentials: true,
 }));
 app.use(bodyParser.json({ limit: '10mb' }));
