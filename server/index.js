@@ -1,0 +1,146 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const multer = require('multer'); 
+const path = require('path');  
+const fs = require('fs');  
+
+const app = express();
+
+ 
+const db = require('./models');
+const sequelize = db.sequelize;
+ 
+app.set('db', db);
+
+ 
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, 'public/uploads');
+   
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate unique filename with original extension
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileExt = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + fileExt);
+  }
+});
+
+// File filter to only allow images
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed!'), false);
+  }
+};
+
+// Configure multer upload
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: fileFilter
+});
+
+// Make upload available throughout the app
+app.locals.upload = upload;
+
+// Allow CORS from all origins
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+
+// Serve static files from the uploads directory
+app.use('/api/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
+// Import routes
+const { router: authRoutes } = require('./routes/auth');
+const userRoutes = require('./routes/users');
+const roomRoutes = require('./routes/roomRoutes');
+const bookingsRoutes = require('./routes/bookingsRoutes');
+const buildingRoutes = require('./routes/buildingRoutes');  // capital R if file is named buildingRoutes.js
+
+const categoryRoutes = require('./routes/categoryRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
+
+// Mount routes
+app.use('/api/bookings', bookingsRoutes);
+app.use('/api/rooms', roomRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/buildings', buildingRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/audit-trails', auditLogRoutes);
+
+// Error handler for multer errors
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    // A Multer error occurred when uploading
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ 
+        error: 'File too large. Maximum file size is 5MB.' 
+      });
+    }
+    return res.status(400).json({ 
+      error: `Upload error: ${err.message}` 
+    });
+  } else if (err) {
+    // An unknown error occurred
+    console.error('Server error:', err);
+    return res.status(500).json({ 
+      error: 'Internal server error during file upload' 
+    });
+  }
+  next();
+});
+
+// Test route for DB
+app.get('/', async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    res.status(200).send({
+      message: 'Welcome to Booking App',
+      database: 'Connected to SQL',
+      upload: 'Multer file upload configured'
+    });
+  } catch (error) {
+    console.error('Error checking database connection:', error);
+    res.status(500).send({
+      message: 'Welcome to Booking App',
+      database: 'Error checking database connection',
+    });
+  }
+});
+
+// Authenticate DB at startup
+sequelize.authenticate()
+  .then(() => {
+    console.log('Connected to the database successfully.');
+  })
+  .catch((err) => {
+    console.error('Failed to connect to the database:', err);
+  });
+
+// Add a logout endpoint if you don't have one yet:
+app.post('/api/logout', (req, res) => {
+  // If you use cookies for auth, clear them here:
+  res.clearCookie('token'); // Use your cookie name if needed
+  res.status(200).json({ message: 'Logged out' });
+});
+
+// Start server
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
